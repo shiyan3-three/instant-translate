@@ -16,6 +16,8 @@ class ApplicationContext:
     hotkeys: HotkeyMap = field(default_factory=HotkeyMap)
     active_group_count: int = 0
     edit_mode_enabled: bool = False
+    default_source_language: str = "English"
+    default_target_language: str = "中文"
     status_message: str = "\u684c\u9762\u58f3\u5df2\u5c31\u7eea\uff0c\u7b49\u5f85\u521b\u5efa\u9009\u533a\u3002"
 
     def note_create_selection_requested(self) -> None:

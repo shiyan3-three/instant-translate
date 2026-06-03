@@ -7,9 +7,27 @@ name = "instant-translate"
 version = "0.1.0"
 description = "Windows desktop overlay translator for fixed screen regions."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "PySide6>=6.9,<7",
+    "Pillow>=11",
+    "httpx>=0.28,<1",
+]
+
+[project.optional-dependencies]
+ocr-paddle = [
+    "numpy>=1.26,<2",
+    "paddlepaddle==2.6.2",
+    "paddleocr==2.7.3",
+]
+ocr-tesseract = [
+    "pytesseract>=0.3.13,<1",
+]
+dev = [
+    "numpy>=1.26,<2",
+    "paddlepaddle==2.6.2",
+    "paddleocr==2.7.3",
+    "pytesseract>=0.3.13,<1",
 ]
 
 [project.scripts]

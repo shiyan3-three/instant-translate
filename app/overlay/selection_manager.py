@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+import time
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
+
+from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from app.app_context import ApplicationContext
 from app.capture.change_detector import RegionChangeDetector
 from app.capture.screen_capture import ScreenCaptureService
+from app.logger import get_logger, get_debug_logger
+from app.ocr.engine import OcrEngine
+from app.ocr.postprocess import is_duplicate_ocr_text, normalize_ocr_text
 from app.overlay.edit_mode_controller import EditModeController
 from app.overlay.selection_box import SelectionBoxModel, SelectionBoxWidget
 from app.overlay.selection_overlay import RegionSelectionOverlay
 from app.overlay.translation_window import TranslationWindowModel, TranslationWindowWidget
 from app.state.group_state import ScreenRegion
 from app.state.runtime_store import RuntimeStore
+from app.translation.service import TranslationService
 
 GROUP_COLORS = {
     1: "#2F80ED",
@@ -21,8 +30,10 @@ GROUP_COLORS = {
 }
 
 
-class SelectionWorkflowController:
+class SelectionWorkflowController(QObject):
     """Coordinate selection boxes with their linked translation windows."""
+
+    _translation_ready = Signal(int, str)
 
     def __init__(
         self,
@@ -31,17 +42,32 @@ class SelectionWorkflowController:
         runtime_store: RuntimeStore,
         edit_mode_controller: EditModeController,
         on_state_changed,
+        capture_service: ScreenCaptureService | None = None,
+        change_detector: RegionChangeDetector | None = None,
     ) -> None:
+        super().__init__()
         self._app = app
         self._context = context
         self._runtime_store = runtime_store
         self._edit_mode_controller = edit_mode_controller
         self._on_state_changed = on_state_changed
-        self._capture_service = ScreenCaptureService()
-        self._change_detector = RegionChangeDetector()
+        self._capture_service = capture_service or ScreenCaptureService()
+        self._change_detector = change_detector or RegionChangeDetector()
         self._pending_group_id: int | None = None
         self._selection_boxes: dict[int, SelectionBoxWidget] = {}
         self._translation_windows: dict[int, TranslationWindowWidget] = {}
+
+        # --- polling pipeline ------------------------------------------------
+        self._ocr_engine: OcrEngine | None = None
+        self._translation_service: TranslationService | None = None
+        self._poll_executor = ThreadPoolExecutor(max_workers=2)
+        self._last_logged_ocr: dict[int, str] = {}
+        self._processing_groups: set[int] = set()
+        self._processing_lock = Lock()
+        self._poll_timer = QTimer()
+        self._poll_timer.setInterval(500)
+        self._poll_timer.timeout.connect(self._tick)
+        self._translation_ready.connect(self._on_translation_ready)
 
         self.selection_overlay = RegionSelectionOverlay(app)
         self.selection_overlay.selection_completed.connect(self.finalize_selection)
@@ -112,8 +138,16 @@ class SelectionWorkflowController:
         self._runtime_store.clear_translation_window_position(group_id)
         self._change_detector.reset_group(group_id)
 
+        # Apply default language pair
+        config = self._runtime_store.configs[group_id]
+        config.source_language = self._context.default_source_language
+        config.target_language = self._context.default_target_language
+
         self._upsert_selection_box(group_id, region)
         self._upsert_translation_window(group_id, region)
+
+        if not self._poll_timer.isActive():
+            self._poll_timer.start()
 
         self._context.status_message = f"\u5df2\u521b\u5efa\u7b2c {group_id} \u7ec4\u9009\u62e9\u6846\u3002"
         self._notify_state_changed()
@@ -125,6 +159,25 @@ class SelectionWorkflowController:
         self._pending_group_id = None
         self._context.status_message = "\u5df2\u53d6\u6d88\u6846\u9009\u3002"
         self._notify_state_changed()
+
+    def resize_group(self, group_id: int, x: int, y: int, w: int, h: int) -> bool:
+        """Persist a resized selection box and refresh linked overlays."""
+
+        region = self._runtime_store.regions.get(group_id)
+        if region is None:
+            return False
+
+        updated_region = ScreenRegion(x=x, y=y, width=w, height=h)
+        self._runtime_store.save_region(group_id, updated_region)
+        self._change_detector.reset_group(group_id)
+
+        self._upsert_selection_box(group_id, updated_region)
+        if group_id not in self._runtime_store.translation_window_positions:
+            self._upsert_translation_window(group_id, updated_region)
+
+        self._context.status_message = f"\u5df2\u8c03\u6574\u7b2c {group_id} \u7ec4\u5927\u5c0f\u3002"
+        self._notify_state_changed()
+        return True
 
     def move_group(self, group_id: int, x: int, y: int) -> bool:
         """Persist a moved selection box and refresh linked overlays."""
@@ -189,9 +242,9 @@ class SelectionWorkflowController:
         self._upsert_selection_box(group_id, region)
         self._upsert_translation_window(group_id, region)
 
+        label = "\u6682\u505c" if config.paused else "\u7ee7\u7eed"
         self._context.status_message = (
-            f"\u7b2c {group_id} \u7ec4\u5df2"
-            f"{'\u6682\u505c' if config.paused else '\u7ee7\u7eed'}\u3002"
+            f"\u7b2c {group_id} \u7ec4\u5df2{label}\u3002"
         )
         self._notify_state_changed()
         return config.paused
@@ -204,6 +257,10 @@ class SelectionWorkflowController:
 
         self._runtime_store.remove_group(group_id)
         self._change_detector.reset_group(group_id)
+        self._clear_processing(group_id)
+        if self._translation_service is not None:
+            self._translation_service.reset_group(group_id)
+        self._last_logged_ocr.pop(group_id, None)
 
         box = self._selection_boxes.pop(group_id, None)
         if box is not None:
@@ -249,8 +306,208 @@ class SelectionWorkflowController:
 
         return self._translation_windows.get(group_id)
 
+    # ------------------------------------------------------------------
+    # polling pipeline
+    # ------------------------------------------------------------------
+
+    def _is_processing(self, group_id: int) -> bool:
+        """Return whether this group already has an OCR task in flight."""
+
+        with self._processing_lock:
+            return group_id in self._processing_groups
+
+    def _try_mark_processing(self, group_id: int) -> bool:
+        """Mark a group as processing, unless it is already busy."""
+
+        with self._processing_lock:
+            if group_id in self._processing_groups:
+                return False
+            self._processing_groups.add(group_id)
+            return True
+
+    def _clear_processing(self, group_id: int) -> None:
+        """Release the in-flight OCR marker for one group."""
+
+        with self._processing_lock:
+            self._processing_groups.discard(group_id)
+
+    def _tick(self) -> None:
+        """Called by QTimer every 500 ms — scan active groups for changes."""
+
+        t0 = time.perf_counter()
+
+        for group_id in self._runtime_store.active_group_ids():
+            config = self._runtime_store.configs.get(group_id)
+            if config is None or config.paused:
+                continue
+            if self._is_processing(group_id):
+                continue
+
+            region = self._runtime_store.regions[group_id]
+            screen = self._app.primaryScreen()
+
+            t_cap = time.perf_counter()
+            try:
+                box = self._selection_boxes.get(group_id)
+                if box is None:
+                    frame = self._capture_service.capture(screen, region)
+                else:
+                    frame = box.capture_with_chrome_hidden(
+                        lambda: self._capture_service.capture(screen, region)
+                    )
+            except ValueError:
+                continue
+            cap_ms = (time.perf_counter() - t_cap) * 1000
+
+            t_chg = time.perf_counter()
+            changed = self._change_detector.should_process(group_id, frame)
+            chg_ms = (time.perf_counter() - t_chg) * 1000
+
+            if not changed:
+                continue
+
+            tick_ms = (time.perf_counter() - t0) * 1000
+            get_debug_logger().debug(
+                "[G%d] tick: capture=%.1fms change=%.1fms total=%.1fms",
+                group_id, cap_ms, chg_ms, tick_ms,
+            )
+            if not self._try_mark_processing(group_id):
+                continue
+            try:
+                self._poll_executor.submit(self._process_frame, group_id, frame)
+            except Exception:
+                self._clear_processing(group_id)
+                raise
+
+    def _process_frame(self, group_id: int, frame) -> None:
+        """Run OCR and translation, then release this group's in-flight marker."""
+
+        try:
+            self._process_frame_inner(group_id, frame)
+        finally:
+            self._clear_processing(group_id)
+
+    def _process_frame_inner(self, group_id: int, frame) -> None:
+        """Run OCR and request translation — executes on a background thread."""
+
+        log = get_logger()
+        t0 = time.perf_counter()
+
+        engine = self._ensure_ocr()
+        config = self._runtime_store.configs.get(group_id)
+        source_lang = config.source_language if config else "English"
+
+        try:
+            result = engine.recognise(frame, source_lang)
+        except RuntimeError:
+            log.warning("[G%d] OCR engine init failed", group_id)
+            return
+
+        ocr_ms = (time.perf_counter() - t0) * 1000
+
+        if result.is_empty:
+            get_debug_logger().debug("[G%d] OCR empty (%.0fms)", group_id, ocr_ms)
+            self._translation_ready.emit(group_id, "\u672a\u8bc6\u522b\u5230\u6587\u672c")
+            return
+
+        pair = f"{source_lang}→{config.target_language}"
+
+        clean_text = normalize_ocr_text(result.raw_text)
+        if not clean_text:
+            return
+
+        last = self._last_logged_ocr.get(group_id, "")
+        if clean_text == last or is_duplicate_ocr_text(clean_text, last):
+            get_debug_logger().debug("[G%d] OCR dup skipped: %r", group_id, clean_text[:60])
+            return
+        self._last_logged_ocr[group_id] = clean_text
+
+        log.info("[G%d] %s | OCR: %r (%.0fms)", group_id, pair, clean_text[:80], ocr_ms)
+        get_debug_logger().debug("[G%d] OCR: %.0fms  text=%r", group_id, ocr_ms, clean_text[:80])
+
+        state = self._runtime_store.runtime_states[group_id]
+        state.latest_ocr_text = clean_text
+
+        service = self._ensure_translation()
+        t_req = time.perf_counter()
+        service.request_translation(
+            group_id=group_id,
+            ocr_text=clean_text,
+            source_language=source_lang,
+            target_language=config.target_language,
+            on_result=lambda r, p=pair: self._on_translation_result(group_id, r, t_req, p),
+        )
+
+    def _on_translation_result(self, group_id: int, result, t_start: float, pair: str = "") -> None:
+        api_ms = (time.perf_counter() - t_start) * 1000
+        log = get_logger()
+
+        if result.text:
+            log.info("[G%d] %s | API: %r (%.0fms)", group_id, pair, result.text[:80], api_ms)
+        else:
+            log.warning("[G%d] %s | API 失败: %s (%.0fms)", group_id, pair, result.error, api_ms)
+
+        self._translation_ready.emit(
+            group_id,
+            (result.text or f"\u7ffb\u8bd1\u5931\u8d25\uff1a{result.error}"),
+        )
+
+    def _on_translation_ready(self, group_id: int, text: str) -> None:
+        """Update the translation window — always runs on the Qt main thread."""
+
+        region = self._runtime_store.regions.get(group_id)
+        if region is None:
+            return
+
+        state = self._runtime_store.runtime_states.get(group_id)
+        if state is not None:
+            state.latest_translation_text = text
+
+        self._upsert_translation_window(group_id, region)
+
+    def _ensure_ocr(self) -> OcrEngine:
+        if self._ocr_engine is None:
+            self._ocr_engine = OcrEngine()
+        return self._ocr_engine
+
+    def _ensure_translation(self) -> TranslationService:
+        if self._translation_service is None:
+            self._translation_service = TranslationService(self._context.settings)
+        return self._translation_service
+
+    def set_source_language(self, group_id: int, language: str) -> None:
+        """Handle source-language change from the toolbar combo."""
+
+        config = self._runtime_store.configs.get(group_id)
+        if config is None:
+            return
+
+        config.source_language = language
+        region = self._runtime_store.regions[group_id]
+        self._upsert_translation_window(group_id, region)
+        self._context.status_message = f"\u7b2c {group_id} \u7ec4\u6e90\u8bed\u8a00\u5df2\u5207\u6362\u5230 {language}\u3002"
+        self._notify_state_changed()
+
+    def set_target_language(self, group_id: int, language: str) -> None:
+        """Handle target-language change from the toolbar combo."""
+
+        config = self._runtime_store.configs.get(group_id)
+        if config is None:
+            return
+
+        config.target_language = language
+        region = self._runtime_store.regions[group_id]
+        self._upsert_translation_window(group_id, region)
+        self._context.status_message = f"\u7b2c {group_id} \u7ec4\u76ee\u6807\u8bed\u8a00\u5df2\u5207\u6362\u5230 {language}\u3002"
+        self._notify_state_changed()
+
     def close(self) -> None:
         """Close all overlay widgets managed by this controller."""
+
+        self._poll_timer.stop()
+        self._poll_executor.shutdown(wait=False)
+        if self._translation_service is not None:
+            self._translation_service.shutdown()
 
         self.selection_overlay.close()
         for box in self._selection_boxes.values():
@@ -268,6 +525,8 @@ class SelectionWorkflowController:
             height=region.height,
             accent_color=GROUP_COLORS[group_id],
             paused=config.paused,
+            source_language=config.source_language,
+            target_language=config.target_language,
         )
 
         box = self._selection_boxes.get(group_id)
@@ -276,7 +535,10 @@ class SelectionWorkflowController:
             box.reselect_requested.connect(self.request_reselect)
             box.delete_requested.connect(self.delete_group)
             box.pause_toggled.connect(self.toggle_group_pause)
+            box.source_language_changed.connect(self.set_source_language)
+            box.target_language_changed.connect(self.set_target_language)
             box.moved.connect(self.move_group)
+            box.resized.connect(self.resize_group)
             self._selection_boxes[group_id] = box
         else:
             box.apply_model(model)

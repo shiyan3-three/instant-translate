@@ -8,6 +8,7 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from app.overlay.window_interaction import set_window_click_through
 from app.state.group_state import ScreenRegion
 
 WINDOW_MARGIN = 12
@@ -50,6 +51,7 @@ class TranslationWindowWidget(QWidget):
         self._dragging = False
         self._drag_origin_global = QPoint()
         self._drag_origin_top_left = QPoint()
+        self._input_passthrough_enabled = False
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
@@ -104,6 +106,7 @@ class TranslationWindowWidget(QWidget):
 
         self.apply_model(model)
         self.apply_edit_mode(False)
+        self.setMinimumSize(160, 60)
 
     @staticmethod
     def compute_geometry(region: ScreenRegion, screen: QRect, preferred_dock: str) -> QRect:
@@ -174,8 +177,15 @@ class TranslationWindowWidget(QWidget):
         self._editable = enabled
         self.language_pair_label.setHidden(not enabled)
         self.dock_controls_widget.setHidden(not enabled)
+        set_window_click_through(self, not enabled)
         self._apply_styles()
         self.update()
+
+    @property
+    def input_passthrough_enabled(self) -> bool:
+        """Expose click-through state for tests and diagnostics."""
+
+        return bool(getattr(self, "_input_passthrough_enabled", False))
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if (
@@ -208,14 +218,18 @@ class TranslationWindowWidget(QWidget):
             return
         super().mouseReleaseEvent(event)
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        set_window_click_through(self, not self._editable)
+
     def paintEvent(self, event: QPaintEvent) -> None:
         super().paintEvent(event)
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         rect = self.rect().adjusted(1, 1, -1, -1)
-        fill_alpha = 44 if self._editable else 20
-        painter.setBrush(QColor(15, 23, 42, fill_alpha))
+        fill_alpha = 235 if self._editable else 225
+        painter.setBrush(QColor(255, 255, 255, fill_alpha))
         border_color = QColor(self.model.accent_color if self._editable else "#94A3B8")
         border_color.setAlpha(245 if self._editable else 180)
         painter.setPen(QPen(border_color, 2 if self._editable else 1))
@@ -223,8 +237,8 @@ class TranslationWindowWidget(QWidget):
         painter.end()
 
     def _apply_styles(self) -> None:
-        pair_color = "#E2E8F0"
-        badge_background = "rgba(15, 23, 42, 0.76)"
+        pair_color = "#475569"
+        badge_background = "rgba(71, 85, 105, 0.85)"
         self.setStyleSheet(
             f"""
             QLabel#translationGroupBadge {{
@@ -240,15 +254,15 @@ class TranslationWindowWidget(QWidget):
             QLabel#translationLanguagePair {{
                 color: {pair_color};
                 border: none;
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 600;
                 background: transparent;
             }}
             QLabel#translationBody {{
-                color: white;
+                color: #1e293b;
                 border: none;
-                font-size: 14px;
-                line-height: 1.45;
+                font-size: 18px;
+                line-height: 1.5;
                 background: transparent;
             }}
             QPushButton#dockButton {{

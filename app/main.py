@@ -14,6 +14,7 @@ from app.gui.tray_icon import TrayIconController
 from app.hotkeys import GlobalHotkeyService
 from app.overlay.edit_mode_controller import EditModeController
 from app.overlay.selection_manager import SelectionWorkflowController
+from app.settings import AppSettings
 from app.state.runtime_store import RuntimeStore
 
 
@@ -32,9 +33,10 @@ class DesktopShell:
 
 
 def build_application_context() -> ApplicationContext:
-    """Create the top-level application context."""
+    """Create the top-level application context with persisted settings."""
 
-    return ApplicationContext()
+    settings = AppSettings.load()
+    return ApplicationContext(settings=settings)
 
 
 def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
@@ -47,7 +49,7 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
     context = build_application_context()
     runtime_store = RuntimeStore()
     settings_window = SettingsWindow(context.settings)
-    main_window = MainWindow(context)
+    main_window = MainWindow(context, runtime_store=runtime_store)
     tray_icon = TrayIconController(app, main_window, settings_window, main_window)
     hotkeys = GlobalHotkeyService(app, context.hotkeys, main_window)
     selection_workflow = SelectionWorkflowController(
@@ -58,7 +60,9 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
         on_state_changed=main_window.refresh_runtime_state,
     )
 
-    main_window.settings_requested.connect(settings_window.show_window)
+    main_window.default_language_changed.connect(
+        lambda src, tgt: setattr(context, "default_source_language", src) or setattr(context, "default_target_language", tgt)
+    )
     hotkeys.create_selection_triggered.connect(selection_workflow.request_new_selection)
     hotkeys.toggle_edit_mode_triggered.connect(selection_workflow.toggle_edit_mode)
 
