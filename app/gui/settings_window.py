@@ -215,11 +215,16 @@ class SettingsWindow(QDialog):
                 references.append(PromptKnowledgeReference(path=item.text()))
         return references
 
+    def _knowledge_reference_dir(self) -> Path:
+        """Return the project-local folder used for reference-layer markdown."""
+
+        return self._prompt_storage.ensure_reference_dir()
+
     def _on_add_knowledge(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "\u9009\u62e9\u77e5\u8bc6\u6587\u6863",
-            str(Path.home()),
+            str(self._knowledge_reference_dir()),
             "Markdown \u6587\u4ef6 (*.md);;\u6240\u6709\u6587\u4ef6 (*)",
         )
         if file_path:

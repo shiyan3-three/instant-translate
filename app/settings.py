@@ -94,7 +94,9 @@ class AppSettings:
                     ),
                 ),
             )
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as exc:
+            from app.logger import get_logger
+            get_logger().error("\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5931\u8d25\uff0c\u4f7f\u7528\u9ed8\u8ba4\u503c: %s", exc)
             return cls()
 
     def save(self, path: str | Path | None = None) -> None:

@@ -53,6 +53,17 @@ class SettingsWindowTests(unittest.TestCase):
         self.assertEqual(window.knowledge_reference_list.count(), 1)
 
 
+    def test_knowledge_reference_dir_uses_prompt_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            window = SettingsWindow(AppSettings())
+            window._prompt_storage = PromptStorage(config_dir=Path(tmp))
+
+            reference_dir = window._knowledge_reference_dir()
+
+            self.assertEqual(reference_dir, Path(tmp) / "prompts" / "references")
+            self.assertTrue(reference_dir.exists())
+
+
 class PromptPageTests(unittest.TestCase):
     """Verify the main-window prompt page enables compiled prompts."""
 
@@ -88,6 +99,20 @@ class PromptPageTests(unittest.TestCase):
             self.assertEqual(settings.prompt.constraints_text, "Keep database terms literal.")
             self.assertEqual(settings.prompt.compiled_prompt_path, "prompts/compiled-prompt.md")
             self.assertEqual(page._compiled_path.text(), "prompts/compiled-prompt.md")
+
+
+    def test_knowledge_reference_dir_uses_prompt_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            page = PromptPage(
+                prompt_storage=PromptStorage(config_dir=Path(tmp)),
+                confirm_compiled_prompt=lambda content: True,
+                save_settings=lambda: None,
+            )
+
+            reference_dir = page._knowledge_reference_dir()
+
+            self.assertEqual(reference_dir, Path(tmp) / "prompts" / "references")
+            self.assertTrue(reference_dir.exists())
 
 
 class FakePromptOptimizer:

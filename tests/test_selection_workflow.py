@@ -52,6 +52,19 @@ class FakeOcrEngine:
         return OcrResult(raw_text=self.text)
 
 
+class SequenceOcrEngine:
+    """OCR test double returning one text per recognise call."""
+
+    def __init__(self, texts: list[str]) -> None:
+        self.texts = texts
+        self.calls = 0
+
+    def recognise(self, frame: CapturedRegionFrame, source_language: str = "English") -> OcrResult:
+        text = self.texts[min(self.calls, len(self.texts) - 1)]
+        self.calls += 1
+        return OcrResult(raw_text=text)
+
+
 class FakeTranslationService:
     """Translation test double recording requests without network calls."""
 
@@ -154,6 +167,16 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         self.assertTrue(translation_window.language_pair_label.isHidden())
         self.assertFalse(translation_window.translation_label.isHidden())
 
+    def test_selection_toolbar_exposes_ocr_view_button(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 50, 260, 90))
+
+        box = self.controller.get_selection_box(1)
+
+        self.assertIsNotNone(box)
+        assert box is not None
+        self.assertEqual(box.toolbar_panel.ocr_button.text(), "OCR")
+
     def test_edit_mode_keeps_toolbar_and_size_visible_and_toolbar_stays_above_box(self) -> None:
         self.controller.request_new_selection()
         self.controller.finalize_selection(ScreenRegion(40, 120, 260, 90))
@@ -217,6 +240,7 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
     def test_delete_group_removes_box_and_linked_translation_window(self) -> None:
         self.controller.request_new_selection()
         self.controller.finalize_selection(ScreenRegion(40, 50, 260, 90))
+        self.controller.toggle_ocr_window(1)
 
         deleted = self.controller.delete_group(1)
 
@@ -224,6 +248,7 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         self.assertEqual(self.runtime_store.active_group_ids(), [])
         self.assertEqual(self.controller.selection_box_count, 0)
         self.assertEqual(self.controller.translation_window_count, 0)
+        self.assertEqual(self.controller.ocr_window_count, 0)
         self.assertEqual(self.context.status_message, "已删除第 1 组。")
 
     def test_request_new_selection_rejects_fourth_group(self) -> None:
@@ -263,6 +288,7 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
     def test_process_frame_sends_clean_ocr_text_to_translation(self) -> None:
         self.controller.request_new_selection()
         self.controller.finalize_selection(ScreenRegion(40, 120, 260, 90))
+        self.controller.toggle_ocr_window(1)
         self.controller._ocr_engine = FakeOcrEngine("260 x 90\n重选 暂停 删除\nHello   world")
         fake_translation = FakeTranslationService()
         self.controller._translation_service = fake_translation
@@ -271,9 +297,58 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
             1,
             CapturedRegionFrame(width=4, height=4, pixel_bytes=b"\x00" * 16),
         )
+        self.controller._process_frame(
+            1,
+            CapturedRegionFrame(width=4, height=4, pixel_bytes=b"\x00" * 16),
+        )
 
         self.assertEqual(self.runtime_store.runtime_states[1].latest_ocr_text, "Hello world")
         self.assertEqual(fake_translation.requests[0]["ocr_text"], "Hello world")
+        ocr_window = self.controller.get_ocr_window(1)
+        self.assertIsNotNone(ocr_window)
+        assert ocr_window is not None
+        self.assertEqual(ocr_window.ocr_label.text(), "Hello world")
+
+    def test_toggle_ocr_window_shows_latest_text(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 120, 260, 90))
+        self.runtime_store.runtime_states[1].latest_ocr_text = "Hello OCR"
+
+        opened = self.controller.toggle_ocr_window(1)
+
+        self.assertTrue(opened)
+        self.assertEqual(self.controller.ocr_window_count, 1)
+        ocr_window = self.controller.get_ocr_window(1)
+        self.assertIsNotNone(ocr_window)
+        assert ocr_window is not None
+        self.assertEqual(ocr_window.ocr_label.text(), "Hello OCR")
+
+    def test_process_frame_waits_for_stable_ocr_before_translation(self) -> None:
+        self.context.default_source_language = "中文"
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 120, 260, 90))
+        self.controller._ocr_engine = SequenceOcrEngine(
+            [
+                "如果要优化数据库的性能的话,\n我们来探讨一下添加索引的方案吧",
+                "如果要优化数据库的性能的话,\n我们来探讨一下添加索引1的595x37",
+                "如果要优化数据库的性能的话,\n我们来探讨一下添加索引的方案吧",
+                "如果要优化数据库的性能的话,\n我们来探讨一下添加索引的方案吧",
+            ]
+        )
+        fake_translation = FakeTranslationService()
+        self.controller._translation_service = fake_translation
+
+        for _ in range(4):
+            self.controller._process_frame(
+                1,
+                CapturedRegionFrame(width=4, height=4, pixel_bytes=b"\x00" * 16),
+            )
+
+        self.assertEqual(len(fake_translation.requests), 1)
+        self.assertEqual(
+            fake_translation.requests[0]["ocr_text"],
+            "如果要优化数据库的性能的话,\n我们来探讨一下添加索引的方案吧",
+        )
 
     def test_process_frame_skips_duplicate_after_ocr_normalization(self) -> None:
         self.controller.request_new_selection()
@@ -303,6 +378,29 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
 
         self.assertEqual(len(executor.submitted), 1)
         self.assertEqual(self.capture_service.capture_calls, 1)
+
+    def test_tick_confirms_pending_ocr_even_when_region_is_static(self) -> None:
+        self.change_detector.changed = True
+        self.controller._poll_executor.shutdown(wait=False)
+        executor = FakeDeferredExecutor()
+        self.controller._poll_executor = executor
+        self.controller._ocr_engine = FakeOcrEngine("Hello world")
+        fake_translation = FakeTranslationService()
+        self.controller._translation_service = fake_translation
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 120, 260, 90))
+
+        self.controller._tick()
+        executor.run_next()
+
+        self.assertEqual(fake_translation.requests, [])
+
+        self.change_detector.changed = False
+        self.controller._tick()
+
+        self.assertEqual(len(executor.submitted), 1)
+        executor.run_next()
+        self.assertEqual(fake_translation.requests[0]["ocr_text"], "Hello world")
 
     def test_group_can_process_again_after_ocr_worker_finishes(self) -> None:
         self.change_detector.changed = True

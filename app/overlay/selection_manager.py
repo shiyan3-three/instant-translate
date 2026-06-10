@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from threading import Lock
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -14,8 +15,14 @@ from app.capture.change_detector import RegionChangeDetector
 from app.capture.screen_capture import ScreenCaptureService
 from app.logger import get_logger, get_debug_logger
 from app.ocr.engine import OcrEngine
-from app.ocr.postprocess import is_duplicate_ocr_text, normalize_ocr_text
+from app.ocr.postprocess import (
+    is_duplicate_ocr_text,
+    is_stable_ocr_text,
+    is_suspicious_ocr_text,
+    normalize_ocr_text,
+)
 from app.overlay.edit_mode_controller import EditModeController
+from app.overlay.ocr_text_window import OcrTextWindowModel, OcrTextWindowWidget
 from app.overlay.selection_box import SelectionBoxModel, SelectionBoxWidget
 from app.overlay.selection_overlay import RegionSelectionOverlay
 from app.overlay.translation_window import TranslationWindowModel, TranslationWindowWidget
@@ -30,9 +37,18 @@ GROUP_COLORS = {
 }
 
 
+@dataclass
+class OcrCandidate:
+    """Per-group OCR text waiting for one more stable read."""
+
+    text: str
+    seen_count: int = 1
+
+
 class SelectionWorkflowController(QObject):
     """Coordinate selection boxes with their linked translation windows."""
 
+    _ocr_text_ready = Signal(int, str)
     _translation_ready = Signal(int, str)
 
     def __init__(
@@ -56,22 +72,31 @@ class SelectionWorkflowController(QObject):
         self._pending_group_id: int | None = None
         self._selection_boxes: dict[int, SelectionBoxWidget] = {}
         self._translation_windows: dict[int, TranslationWindowWidget] = {}
+        self._ocr_windows: dict[int, OcrTextWindowWidget] = {}
 
         # --- polling pipeline ------------------------------------------------
-        self._ocr_engine: OcrEngine | None = None
+        # _ocr_engine is created eagerly below, after the executor is ready.
         self._translation_service: TranslationService | None = None
         self._poll_executor = ThreadPoolExecutor(max_workers=2)
         self._last_logged_ocr: dict[int, str] = {}
+        self._pending_ocr_candidates: dict[int, OcrCandidate] = {}
         self._processing_groups: set[int] = set()
         self._processing_lock = Lock()
         self._poll_timer = QTimer()
         self._poll_timer.setInterval(500)
         self._poll_timer.timeout.connect(self._tick)
+        self._ocr_text_ready.connect(self._on_ocr_text_ready)
         self._translation_ready.connect(self._on_translation_ready)
 
         self.selection_overlay = RegionSelectionOverlay(app)
         self.selection_overlay.selection_completed.connect(self.finalize_selection)
         self.selection_overlay.selection_cancelled.connect(self.cancel_selection)
+
+        # Eagerly create the OCR engine and warm it up in the background
+        # so the first real recognition avoids a multi-second cold start.
+        self._ocr_engine = OcrEngine()
+        default_src = getattr(context, 'default_source_language', 'English')
+        self._poll_executor.submit(self._ocr_engine.warm_up, default_src)
 
     @property
     def selection_box_count(self) -> int:
@@ -84,6 +109,12 @@ class SelectionWorkflowController(QObject):
         """Expose the number of live translation windows for tests and diagnostics."""
 
         return len(self._translation_windows)
+
+    @property
+    def ocr_window_count(self) -> int:
+        """Expose the number of live OCR viewer windows for tests and diagnostics."""
+
+        return len(self._ocr_windows)
 
     def request_new_selection(self) -> bool:
         """Open the full-screen selector for the next available group."""
@@ -137,6 +168,7 @@ class SelectionWorkflowController(QObject):
         self._runtime_store.save_region(group_id, region)
         self._runtime_store.clear_translation_window_position(group_id)
         self._change_detector.reset_group(group_id)
+        self._reset_ocr_tracking(group_id)
 
         # Apply default language pair
         config = self._runtime_store.configs[group_id]
@@ -149,6 +181,7 @@ class SelectionWorkflowController(QObject):
         if not self._poll_timer.isActive():
             self._poll_timer.start()
 
+        get_logger().info("[G%d] \u5df2\u521b\u5efa\u9009\u62e9\u6846 (%dx%d @ %d,%d)", group_id, region.width, region.height, region.x, region.y)
         self._context.status_message = f"\u5df2\u521b\u5efa\u7b2c {group_id} \u7ec4\u9009\u62e9\u6846\u3002"
         self._notify_state_changed()
         return True
@@ -170,10 +203,13 @@ class SelectionWorkflowController(QObject):
         updated_region = ScreenRegion(x=x, y=y, width=w, height=h)
         self._runtime_store.save_region(group_id, updated_region)
         self._change_detector.reset_group(group_id)
+        self._reset_ocr_tracking(group_id)
 
         self._upsert_selection_box(group_id, updated_region)
         if group_id not in self._runtime_store.translation_window_positions:
             self._upsert_translation_window(group_id, updated_region)
+        if group_id in self._ocr_windows:
+            self._upsert_ocr_window(group_id, updated_region)
 
         self._context.status_message = f"\u5df2\u8c03\u6574\u7b2c {group_id} \u7ec4\u5927\u5c0f\u3002"
         self._notify_state_changed()
@@ -188,10 +224,14 @@ class SelectionWorkflowController(QObject):
 
         updated_region = ScreenRegion(x=x, y=y, width=region.width, height=region.height)
         self._runtime_store.save_region(group_id, updated_region)
+        self._change_detector.reset_group(group_id)
+        self._reset_ocr_tracking(group_id)
         self._upsert_selection_box(group_id, updated_region)
 
         if group_id not in self._runtime_store.translation_window_positions:
             self._upsert_translation_window(group_id, updated_region)
+        if group_id in self._ocr_windows:
+            self._upsert_ocr_window(group_id, updated_region)
 
         self._context.status_message = f"\u5df2\u79fb\u52a8\u7b2c {group_id} \u7ec4\u3002"
         self._notify_state_changed()
@@ -243,6 +283,7 @@ class SelectionWorkflowController(QObject):
         self._upsert_translation_window(group_id, region)
 
         label = "\u6682\u505c" if config.paused else "\u7ee7\u7eed"
+        get_logger().info("[G%d] \u5df2%s", group_id, label)
         self._context.status_message = (
             f"\u7b2c {group_id} \u7ec4\u5df2{label}\u3002"
         )
@@ -260,7 +301,7 @@ class SelectionWorkflowController(QObject):
         self._clear_processing(group_id)
         if self._translation_service is not None:
             self._translation_service.reset_group(group_id)
-        self._last_logged_ocr.pop(group_id, None)
+        self._reset_ocr_tracking(group_id)
 
         box = self._selection_boxes.pop(group_id, None)
         if box is not None:
@@ -270,6 +311,11 @@ class SelectionWorkflowController(QObject):
         if translation_window is not None:
             translation_window.close()
 
+        ocr_window = self._ocr_windows.pop(group_id, None)
+        if ocr_window is not None:
+            ocr_window.close()
+
+        get_logger().info("[G%d] \u5df2\u5220\u9664\u9009\u62e9\u6846", group_id)
         self._context.status_message = f"\u5df2\u5220\u9664\u7b2c {group_id} \u7ec4\u3002"
         self._notify_state_changed()
         return True
@@ -306,6 +352,30 @@ class SelectionWorkflowController(QObject):
 
         return self._translation_windows.get(group_id)
 
+    def get_ocr_window(self, group_id: int) -> OcrTextWindowWidget | None:
+        """Return one linked OCR viewer window by group id."""
+
+        return self._ocr_windows.get(group_id)
+
+    def toggle_ocr_window(self, group_id: int) -> bool:
+        """Open or close the OCR text viewer for one group."""
+
+        region = self._runtime_store.regions.get(group_id)
+        if region is None:
+            return False
+
+        existing = self._ocr_windows.pop(group_id, None)
+        if existing is not None:
+            existing.close()
+            self._context.status_message = f"\u5df2\u5173\u95ed\u7b2c {group_id} \u7ec4 OCR \u6587\u672c\u7a97\u3002"
+            self._notify_state_changed()
+            return False
+
+        self._upsert_ocr_window(group_id, region)
+        self._context.status_message = f"\u5df2\u6253\u5f00\u7b2c {group_id} \u7ec4 OCR \u6587\u672c\u7a97\u3002"
+        self._notify_state_changed()
+        return True
+
     # ------------------------------------------------------------------
     # polling pipeline
     # ------------------------------------------------------------------
@@ -330,6 +400,12 @@ class SelectionWorkflowController(QObject):
 
         with self._processing_lock:
             self._processing_groups.discard(group_id)
+
+    def _reset_ocr_tracking(self, group_id: int) -> None:
+        """Clear accepted and pending OCR text for one group."""
+
+        self._last_logged_ocr.pop(group_id, None)
+        self._pending_ocr_candidates.pop(group_id, None)
 
     def _tick(self) -> None:
         """Called by QTimer every 500 ms — scan active groups for changes."""
@@ -363,7 +439,8 @@ class SelectionWorkflowController(QObject):
             changed = self._change_detector.should_process(group_id, frame)
             chg_ms = (time.perf_counter() - t_chg) * 1000
 
-            if not changed:
+            has_pending_ocr = group_id in self._pending_ocr_candidates
+            if not changed and not has_pending_ocr:
                 continue
 
             tick_ms = (time.perf_counter() - t0) * 1000
@@ -414,12 +491,28 @@ class SelectionWorkflowController(QObject):
 
         clean_text = normalize_ocr_text(result.raw_text)
         if not clean_text:
+            self._pending_ocr_candidates.pop(group_id, None)
+            return
+        if is_suspicious_ocr_text(clean_text, source_lang):
+            self._pending_ocr_candidates.pop(group_id, None)
+            get_debug_logger().debug("[G%d] OCR suspicious skipped: %r", group_id, clean_text[:60])
             return
 
         last = self._last_logged_ocr.get(group_id, "")
         if clean_text == last or is_duplicate_ocr_text(clean_text, last):
             get_debug_logger().debug("[G%d] OCR dup skipped: %r", group_id, clean_text[:60])
             return
+
+        pending = self._pending_ocr_candidates.get(group_id)
+        if pending is None or not is_stable_ocr_text(clean_text, pending.text):
+            self._pending_ocr_candidates[group_id] = OcrCandidate(clean_text)
+            get_debug_logger().debug("[G%d] OCR waiting for stable read: %r", group_id, clean_text[:60])
+            return
+
+        pending.seen_count += 1
+        if pending.seen_count < 2:
+            return
+        self._pending_ocr_candidates.pop(group_id, None)
         self._last_logged_ocr[group_id] = clean_text
 
         log.info("[G%d] %s | OCR: %r (%.0fms)", group_id, pair, clean_text[:80], ocr_ms)
@@ -427,6 +520,7 @@ class SelectionWorkflowController(QObject):
 
         state = self._runtime_store.runtime_states[group_id]
         state.latest_ocr_text = clean_text
+        self._ocr_text_ready.emit(group_id, clean_text)
 
         service = self._ensure_translation()
         t_req = time.perf_counter()
@@ -465,6 +559,20 @@ class SelectionWorkflowController(QObject):
 
         self._upsert_translation_window(group_id, region)
 
+    def _on_ocr_text_ready(self, group_id: int, text: str) -> None:
+        """Update the OCR viewer window on the Qt main thread."""
+
+        region = self._runtime_store.regions.get(group_id)
+        if region is None:
+            return
+
+        state = self._runtime_store.runtime_states.get(group_id)
+        if state is not None:
+            state.latest_ocr_text = text
+
+        if group_id in self._ocr_windows:
+            self._upsert_ocr_window(group_id, region)
+
     def _ensure_ocr(self) -> OcrEngine:
         if self._ocr_engine is None:
             self._ocr_engine = OcrEngine()
@@ -483,8 +591,12 @@ class SelectionWorkflowController(QObject):
             return
 
         config.source_language = language
+        self._reset_ocr_tracking(group_id)
+        if self._translation_service is not None:
+            self._translation_service.reset_group(group_id)
         region = self._runtime_store.regions[group_id]
         self._upsert_translation_window(group_id, region)
+        get_logger().info("[G%d] \u6e90\u8bed\u8a00\u5207\u6362\u4e3a %s", group_id, language)
         self._context.status_message = f"\u7b2c {group_id} \u7ec4\u6e90\u8bed\u8a00\u5df2\u5207\u6362\u5230 {language}\u3002"
         self._notify_state_changed()
 
@@ -496,8 +608,12 @@ class SelectionWorkflowController(QObject):
             return
 
         config.target_language = language
+        self._reset_ocr_tracking(group_id)
+        if self._translation_service is not None:
+            self._translation_service.reset_group(group_id)
         region = self._runtime_store.regions[group_id]
         self._upsert_translation_window(group_id, region)
+        get_logger().info("[G%d] \u76ee\u6807\u8bed\u8a00\u5207\u6362\u4e3a %s", group_id, language)
         self._context.status_message = f"\u7b2c {group_id} \u7ec4\u76ee\u6807\u8bed\u8a00\u5df2\u5207\u6362\u5230 {language}\u3002"
         self._notify_state_changed()
 
@@ -514,6 +630,8 @@ class SelectionWorkflowController(QObject):
             box.close()
         for translation_window in self._translation_windows.values():
             translation_window.close()
+        for ocr_window in self._ocr_windows.values():
+            ocr_window.close()
 
     def _upsert_selection_box(self, group_id: int, region: ScreenRegion) -> None:
         config = self._runtime_store.configs[group_id]
@@ -533,6 +651,7 @@ class SelectionWorkflowController(QObject):
         if box is None:
             box = SelectionBoxWidget(model)
             box.reselect_requested.connect(self.request_reselect)
+            box.ocr_view_requested.connect(self.toggle_ocr_window)
             box.delete_requested.connect(self.delete_group)
             box.pause_toggled.connect(self.toggle_group_pause)
             box.source_language_changed.connect(self.set_source_language)
@@ -582,6 +701,35 @@ class SelectionWorkflowController(QObject):
 
         translation_window.apply_edit_mode(self._edit_mode_controller.enabled)
         translation_window.show()
+
+    def _upsert_ocr_window(self, group_id: int, region: ScreenRegion) -> None:
+        runtime_state = self._runtime_store.runtime_states[group_id]
+        screen = self._app.primaryScreen().virtualGeometry()
+        computed_geometry = OcrTextWindowWidget.compute_geometry(region, screen)
+        ocr_window = self._ocr_windows.get(group_id)
+        x, y = (
+            (ocr_window.x(), ocr_window.y())
+            if ocr_window is not None
+            else (computed_geometry.x(), computed_geometry.y())
+        )
+        text = runtime_state.latest_ocr_text or "\u7b49\u5f85 OCR \u6587\u672c..."
+        model = OcrTextWindowModel(
+            group_id=group_id,
+            x=x,
+            y=y,
+            width=computed_geometry.width(),
+            height=computed_geometry.height(),
+            text=text,
+            accent_color=GROUP_COLORS[group_id],
+        )
+
+        if ocr_window is None:
+            ocr_window = OcrTextWindowWidget(model)
+            self._ocr_windows[group_id] = ocr_window
+        else:
+            ocr_window.apply_model(model)
+
+        ocr_window.show()
 
     def _notify_state_changed(self) -> None:
         self._context.active_group_count = len(self._runtime_store.active_group_ids())

@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock, patch
 
-from app.translation.client import ClientConfig, OpenAICompatibleClient
+from app.translation.client import ClientConfig, OpenAICompatibleClient, TranslationError
 
 
 class OpenAICompatibleClientTests(unittest.TestCase):
@@ -34,6 +34,32 @@ class OpenAICompatibleClientTests(unittest.TestCase):
         self.assertEqual(payload["messages"][0], {"role": "system", "content": "system"})
         self.assertEqual(payload["messages"][1], {"role": "user", "content": "user"})
         self.assertGreaterEqual(post.call_args.kwargs["timeout"], 30.0)
+
+    def test_complete_rejects_reasoning_content_without_final_answer(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "",
+                        "reasoning_content": "Thinking about the translation...",
+                    }
+                }
+            ]
+        }
+
+        with patch("app.translation.client.httpx.post", return_value=response):
+            client = OpenAICompatibleClient(
+                ClientConfig(
+                    base_url="https://api.deepseek.test/v1",
+                    api_key="key",
+                    model="deepseek-v4-reasoner",
+                )
+            )
+
+            with self.assertRaisesRegex(TranslationError, "empty translation"):
+                client.complete("system", "user")
 
 
 if __name__ == "__main__":

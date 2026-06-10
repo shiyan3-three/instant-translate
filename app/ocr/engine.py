@@ -81,6 +81,17 @@ class OcrEngine:
     # public API
     # ------------------------------------------------------------------
 
+    def warm_up(self, source_language: str = "English") -> None:
+        """Pre-initialise the OCR backend so the first real call is fast.
+
+        Safe to call from a background thread.  If the backend is
+        already initialised for this language, this is a no-op.
+        """
+        try:
+            self._ensure_engine(source_language)
+        except RuntimeError:
+            pass  # no backend available — logged inside _ensure_engine
+
     def recognise(
         self,
         frame: CapturedRegionFrame,
@@ -140,6 +151,8 @@ class OcrEngine:
         except NotImplementedError:
             # PaddlePaddle oneDNN / PIR attribute bug on some platforms
             # → fall through to Tesseract
+            from app.logger import get_logger
+            get_logger().warning("PaddleOCR 运行时异常 (NotImplementedError)，降级到 Tesseract")
             self._backend = "tesseract"
             self._engines.pop(lang_code, None)
             return self._run_tesseract(image, source_language)
@@ -175,11 +188,15 @@ class OcrEngine:
         try:
             import pytesseract
         except ImportError:
+            from app.logger import get_debug_logger
+            get_debug_logger().debug("pytesseract 未安装，Tesseract OCR 不可用")
             return OcrResult()
 
         try:
             text = pytesseract.image_to_string(image, lang=tesseract_lang)
-        except Exception:
+        except Exception as exc:
+            from app.logger import get_debug_logger
+            get_debug_logger().warning("Tesseract OCR 识别失败: %s", exc)
             return OcrResult()
 
         clean = text.strip()
@@ -211,8 +228,12 @@ class OcrEngine:
                 )
                 self._engines[lang_code] = engine
                 self._backend = "paddle"
+                from app.logger import get_logger
+                get_logger().info("OCR 后端已初始化: PaddleOCR (lang=%s)", lang_code)
                 return
-            except Exception:
+            except Exception as exc:
+                from app.logger import get_debug_logger
+                get_debug_logger().warning("PaddleOCR 初始化失败 (lang=%s): %s", lang_code, exc)
                 pass
 
         # 2) try Tesseract -------------------------------------------------
@@ -222,6 +243,8 @@ class OcrEngine:
             pass
         else:
             self._backend = "tesseract"
+            from app.logger import get_logger
+            get_logger().info("OCR 后端已初始化: Tesseract")
             return
 
         raise RuntimeError(

@@ -220,11 +220,11 @@ class TranslationService:
             if configured_prompt_path
             else ""
         )
-        base_prompt = (
-            f"{DEFAULT_BASE_PROMPT}\n\n{compiled}"
-            if compiled
-            else DEFAULT_BASE_PROMPT
-        )
+        if compiled:
+            base_prompt = self._compact_compiled_prompt(compiled)
+        else:
+            base_prompt = DEFAULT_BASE_PROMPT
+
         try:
             from app.logger import get_debug_logger
 
@@ -240,6 +240,37 @@ class TranslationService:
             f"{base_prompt}\n\n"
             f"Translate from {source} to {target}."
         )
+
+    @staticmethod
+    def _compact_compiled_prompt(raw: str) -> str:
+        """Extract essential translation rules from the compiled prompt markdown.
+
+        Strips the verbose human-readable structure and keeps only the
+        directives that matter to the translator model.
+        """
+
+        lines: list[str] = []
+        capture = False
+        for line in raw.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # Skip pure-header lines
+            if stripped.startswith("# Instant Translate"):
+                capture = True
+                continue
+            if stripped.startswith("## Runtime Direction"):
+                break
+            if stripped.startswith("##"):
+                capture = True
+                continue
+            if stripped.startswith("This layer"):
+                continue
+            if capture:
+                lines.append(stripped)
+
+        compact = " ".join(lines).strip()
+        return compact if compact else DEFAULT_BASE_PROMPT
 
     def _ensure_group(self, group_id: int) -> GroupContext:
         if group_id not in self._groups:

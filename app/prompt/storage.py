@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 DEFAULT_COMPILED_PROMPT_PATH = "prompts/compiled-prompt.md"
+DEFAULT_REFERENCE_DIR = "prompts/references"
 
 
 def _project_root() -> Path:
@@ -50,6 +51,18 @@ class PromptStorage:
             return raw_path.as_posix()
         return (Path("prompts") / raw_path).as_posix()
 
+    def reference_dir(self) -> Path:
+        """Return the install/project-local directory for knowledge references."""
+
+        return self._base_dir() / DEFAULT_REFERENCE_DIR
+
+    def ensure_reference_dir(self) -> Path:
+        """Create and return the knowledge-reference directory."""
+
+        path = self.reference_dir()
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def save_compiled_prompt(self, content: str, path: str | Path) -> Path:
         """Write the confirmed compiled prompt and return its absolute path."""
 
@@ -64,7 +77,9 @@ class PromptStorage:
         prompt_path = self.existing_compiled_prompt_path(path)
         try:
             return prompt_path.read_text(encoding="utf-8").strip()
-        except OSError:
+        except OSError as exc:
+            from app.logger import get_debug_logger
+            get_debug_logger().warning("Compiled prompt \u52a0\u8f7d\u5931\u8d25 (%s): %s", prompt_path, exc)
             return ""
 
     def existing_compiled_prompt_path(self, path: str | Path) -> Path:

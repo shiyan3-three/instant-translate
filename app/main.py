@@ -81,18 +81,25 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
 def main() -> int:
     """Bootstrap the desktop application and enter the event loop."""
 
+    from app.logger import get_logger
+
+    log = get_logger()
     shell = build_desktop_shell()
     shell.main_window.show()
     shell.tray_icon.show()
     try:
         shell.hotkeys.start()
+        log.info("快捷键服务已启动")
     except RuntimeError as exc:
+        log.error("快捷键服务启动失败：%s", exc)
         shell.context.status_message = f"快捷键服务启动失败：{exc}"
         shell.main_window.refresh_runtime_state()
 
+    log.info("应用就绪，进入事件循环")
     try:
         return shell.app.exec()
     finally:
+        log.info("应用退出，正在清理资源")
         shell.hotkeys.stop()
         shell.selection_workflow.close()
 

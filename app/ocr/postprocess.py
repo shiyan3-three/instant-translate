@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from difflib import SequenceMatcher
 
-_SIZE_BADGE_RE = re.compile(r"\b\d{2,5}\s*[xX×]\s*\d{2,5}\b")
 _TOOLBAR_WORDS = ("重选", "暂停", "继续", "删除")
 _WHITESPACE_RE = re.compile(r"[ \t\f\v]+")
+_SIZE_BADGE_RE = re.compile(r"\d{2,5}\s*[xX\u00d7\u8133]\s*\d{1,5}|\d{1,5}\s*[xX\u00d7\u8133]\s*\d{2,5}")
+_CONTENT_RE = re.compile(r"[A-Za-z0-9\u3040-\u30ff\u3400-\u9fff]")
+_LATIN_RE = re.compile(r"[A-Za-z]")
+_CJK_RE = re.compile(r"[\u3400-\u9fff]")
+_KANA_RE = re.compile(r"[\u3040-\u30ff]")
+_PUNCT_OR_SYMBOL_RE = re.compile(r"[\W_]+", re.UNICODE)
 
 
 def normalize_ocr_text(raw_text: str) -> str:
@@ -38,6 +44,54 @@ def is_duplicate_ocr_text(current: str, previous: str) -> bool:
     current_norm = _comparison_key(normalize_ocr_text(current))
     previous_norm = _comparison_key(normalize_ocr_text(previous))
     return bool(current_norm and previous_norm and current_norm == previous_norm)
+
+
+def is_suspicious_ocr_text(text: str, source_language: str = "") -> bool:
+    """Return True when OCR text is likely overlay noise or a broken frame."""
+
+    clean = normalize_ocr_text(text)
+    key = _comparison_key(clean)
+    compact = re.sub(r"\s+", "", key)
+    if not compact:
+        return True
+    if not _CONTENT_RE.search(compact):
+        return True
+    if _PUNCT_OR_SYMBOL_RE.sub("", compact) == "":
+        return True
+
+    cjk_count = len(_CJK_RE.findall(compact))
+    kana_count = len(_KANA_RE.findall(compact))
+    latin_count = len(_LATIN_RE.findall(compact))
+    lang = source_language.lower()
+
+    if ("中文" in source_language or "chinese" in lang) and kana_count and len(compact) <= 12:
+        return True
+    if ("english" in lang or source_language == "English") and (cjk_count + kana_count) > max(latin_count, 1):
+        return True
+
+    return False
+
+
+def is_stable_ocr_text(current: str, previous: str) -> bool:
+    """Return True when two OCR readings are close enough to trust."""
+
+    current_key = _comparison_key(normalize_ocr_text(current))
+    previous_key = _comparison_key(normalize_ocr_text(previous))
+    if not current_key or not previous_key:
+        return False
+    if current_key == previous_key:
+        return True
+
+    current_len = len(current_key)
+    previous_len = len(previous_key)
+    if min(current_len, previous_len) < 8:
+        return False
+
+    length_ratio = min(current_len, previous_len) / max(current_len, previous_len)
+    if length_ratio < 0.9:
+        return False
+
+    return SequenceMatcher(None, current_key, previous_key).ratio() >= 0.97
 
 
 def _comparison_key(text: str) -> str:

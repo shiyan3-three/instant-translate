@@ -45,6 +45,24 @@ class PromptCompilerTests(unittest.TestCase):
 class PromptStorageTests(unittest.TestCase):
     """Verify compiled prompt persistence under the install/project directory."""
 
+    def test_reference_dir_resolves_under_prompt_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = PromptStorage(config_dir=Path(tmp))
+
+            path = storage.reference_dir()
+
+        self.assertEqual(path, Path(tmp) / "prompts" / "references")
+
+    def test_ensure_reference_dir_creates_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = PromptStorage(config_dir=Path(tmp))
+
+            path = storage.ensure_reference_dir()
+
+            self.assertTrue(path.exists())
+            self.assertTrue(path.is_dir())
+            self.assertEqual(path, Path(tmp) / "prompts" / "references")
+
     def test_prefixed_compiled_prompt_path_does_not_duplicate_prompt_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             storage = PromptStorage(config_dir=Path(tmp))

@@ -39,6 +39,7 @@ class SelectionToolbarWidget(QWidget):
     """Floating toolbar shown while one selection box is in edit mode."""
 
     reselect_requested = Signal()
+    ocr_view_requested = Signal()
     delete_requested = Signal()
     pause_toggled = Signal()
     source_language_changed = Signal(str)
@@ -72,18 +73,20 @@ class SelectionToolbarWidget(QWidget):
         self.target_combo.setObjectName("toolbarCombo")
 
         self.reselect_button = QPushButton("重选")
+        self.ocr_button = QPushButton("OCR")
         self.pause_button = QPushButton("暂停")
         self.delete_button = QPushButton("删除")
 
         layout.addWidget(self.source_combo)
         layout.addWidget(self.target_combo)
 
-        for button in (self.reselect_button, self.pause_button, self.delete_button):
+        for button in (self.reselect_button, self.ocr_button, self.pause_button, self.delete_button):
             button.setObjectName("toolbarButton")
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             layout.addWidget(button)
 
         self.reselect_button.clicked.connect(self.reselect_requested.emit)
+        self.ocr_button.clicked.connect(self.ocr_view_requested.emit)
         self.pause_button.clicked.connect(self.pause_toggled.emit)
         self.delete_button.clicked.connect(self.delete_requested.emit)
         self.source_combo.currentTextChanged.connect(self.source_language_changed.emit)
@@ -141,6 +144,7 @@ class SelectionToolbarWidget(QWidget):
             }
         """
         self.reselect_button.setStyleSheet(normal_button_style)
+        self.ocr_button.setStyleSheet(normal_button_style)
         self.pause_button.setStyleSheet(normal_button_style)
         self.delete_button.setStyleSheet(danger_button_style)
         self.setStyleSheet(
@@ -185,6 +189,7 @@ class SelectionBoxWidget(QWidget):
     reselect_requested = Signal(int)
     delete_requested = Signal(int)
     pause_toggled = Signal(int)
+    ocr_view_requested = Signal(int)
     source_language_changed = Signal(int, str)
     target_language_changed = Signal(int, str)
     moved = Signal(int, int, int)
@@ -219,6 +224,7 @@ class SelectionBoxWidget(QWidget):
 
         self.toolbar_panel = SelectionToolbarWidget()
         self.toolbar_panel.reselect_requested.connect(lambda: self.reselect_requested.emit(self.model.group_id))
+        self.toolbar_panel.ocr_view_requested.connect(lambda: self.ocr_view_requested.emit(self.model.group_id))
         self.toolbar_panel.pause_toggled.connect(lambda: self.pause_toggled.emit(self.model.group_id))
         self.toolbar_panel.delete_requested.connect(lambda: self.delete_requested.emit(self.model.group_id))
         self.toolbar_panel.source_language_changed.connect(lambda lang: self.source_language_changed.emit(self.model.group_id, lang))

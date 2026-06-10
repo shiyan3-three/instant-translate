@@ -23,9 +23,10 @@ class TranslationServicePromptTests(unittest.TestCase):
     """Verify runtime translation prompts prefer confirmed compiled prompts."""
 
     def test_current_prompt_uses_compiled_prompt_file_when_available(self) -> None:
+        compiled_content = f"{DEFAULT_BASE_PROMPT}\n\nCONFIRMED USER CONSTRAINT"
         with tempfile.TemporaryDirectory() as tmp:
             prompt_path = Path(tmp) / "compiled.md"
-            prompt_path.write_text("CONFIRMED PROMPT", encoding="utf-8")
+            prompt_path.write_text(compiled_content, encoding="utf-8")
             settings = AppSettings()
             settings.prompt.compiled_prompt_path = str(prompt_path)
             service = TranslationService(settings)
@@ -33,7 +34,7 @@ class TranslationServicePromptTests(unittest.TestCase):
             prompt = service._current_prompt("English", "中文")
             service.shutdown()
 
-        self.assertIn("CONFIRMED PROMPT", prompt)
+        self.assertIn("CONFIRMED USER CONSTRAINT", prompt)
         self.assertIn(DEFAULT_BASE_PROMPT, prompt)
         self.assertIn("Translate from English to 中文.", prompt)
 

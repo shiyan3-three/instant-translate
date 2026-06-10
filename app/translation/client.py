@@ -50,7 +50,7 @@ class OpenAICompatibleClient:
         """
 
         import time as _time
-        from app.logger import get_debug_logger
+        from app.logger import get_logger, get_debug_logger
 
         if not user_prompt.strip():
             raise TranslationError("Cannot send an empty prompt.")
@@ -68,18 +68,21 @@ class OpenAICompatibleClient:
             )
             response.raise_for_status()
         except httpx.TimeoutException:
+            get_logger().warning("API 超时 (%.0fs)", self._config.timeout_seconds)
             get_debug_logger().warning("API timeout after %.0fs", self._config.timeout_seconds)
             raise TranslationError(
                 f"Translation request timed out after "
                 f"{self._config.timeout_seconds:.0f}s."
             )
         except httpx.HTTPStatusError as exc:
+            get_logger().warning("API HTTP 错误 %d", exc.response.status_code)
             get_debug_logger().warning("API HTTP %d", exc.response.status_code)
             raise TranslationError(
                 f"API error {exc.response.status_code}: "
                 f"{self._truncate(str(exc.response.text))}"
             )
         except httpx.RequestError as exc:
+            get_logger().warning("API 网络错误: %s", exc)
             get_debug_logger().warning("API network error: %s", exc)
             raise TranslationError(
                 f"Network error reaching {self._config.base_url}: {exc}"
@@ -106,15 +109,30 @@ class OpenAICompatibleClient:
     # ------------------------------------------------------------------
 
     def _build_payload(self, system_prompt: str, source_text: str) -> dict:
-        return {
-            "model": self._config.model,
+        model = self._config.model
+        payload: dict = {
+            "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": source_text},
             ],
             "temperature": 0.0,
-            "max_tokens": 1024,
+            "max_tokens": 4096,
         }
+
+        # DeepSeek v4 reasoning models consume max_tokens for both
+        # thinking and output.  "low" keeps reasoning short so more
+        # budget is left for the actual translation content.
+        # Only add this for DeepSeek reasoning models to avoid breaking
+        # other providers that don't recognise this parameter.
+        is_deepseek_reasoning = (
+            "deepseek" in self._config.base_url.lower()
+            and "v4" in model.lower()
+        )
+        if is_deepseek_reasoning:
+            payload["reasoning_effort"] = "low"
+
+        return payload
 
     def _build_headers(self) -> dict[str, str]:
         return {
@@ -125,7 +143,8 @@ class OpenAICompatibleClient:
     @staticmethod
     def _extract_content(response_json: dict) -> str:
         try:
-            return response_json["choices"][0]["message"]["content"]
+            msg = response_json["choices"][0]["message"]
+            return msg.get("content") or ""
         except (KeyError, IndexError, TypeError):
             raise TranslationError(
                 "Unexpected API response format — missing choices[0].message.content."
@@ -135,4 +154,4 @@ class OpenAICompatibleClient:
     def _truncate(text: str, max_len: int = 200) -> str:
         if len(text) <= max_len:
             return text
-        return text[:max_len] + "…"
+        return text[:max_len] + "..."

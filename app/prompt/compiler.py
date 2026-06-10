@@ -89,6 +89,8 @@ class PromptCompiler:
             try:
                 content = path.read_text(encoding="utf-8").strip()
             except OSError as exc:
+                from app.logger import get_debug_logger
+                get_debug_logger().warning("\u77e5\u8bc6\u5f15\u7528\u6587\u4ef6\u8bfb\u53d6\u5931\u8d25 (%s): %s", path, exc)
                 content = f"(Unable to read reference: {exc})"
             if not content:
                 content = "(empty reference)"

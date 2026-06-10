@@ -139,6 +139,8 @@ class GlobalHotkeyService(QObject):
         if os.name != "nt":
             raise RuntimeError("Global hotkeys are only implemented for Windows.")
 
+        from app.logger import get_logger, get_debug_logger
+
         user32 = ctypes.windll.user32
         self._app.installNativeEventFilter(self._event_filter)
         try:
@@ -146,7 +148,9 @@ class GlobalHotkeyService(QObject):
                 success = user32.RegisterHotKey(None, binding.identifier, binding.modifiers, binding.virtual_key)
                 if not success:
                     raise RuntimeError(f"无法注册全局快捷键 {binding.sequence}")
+                get_debug_logger().debug("已注册快捷键 %s (id=%d)", binding.sequence, binding.identifier)
         except Exception:
+            get_logger().error("快捷键注册失败，已回滚")
             self.stop()
             raise
 
@@ -164,9 +168,13 @@ class GlobalHotkeyService(QObject):
         self._running = False
 
     def _dispatch_hotkey(self, identifier: int) -> None:
+        from app.logger import get_debug_logger
+
         if identifier == 1:
+            get_debug_logger().debug("快捷键触发: create_selection")
             self.create_selection_triggered.emit()
         elif identifier == 2:
+            get_debug_logger().debug("快捷键触发: toggle_edit_mode")
             self.toggle_edit_mode_triggered.emit()
 
     @classmethod

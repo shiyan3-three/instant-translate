@@ -430,8 +430,13 @@ class PromptPage(QWidget):
         layout.addLayout(btn_row)
         layout.addStretch(1)
 
+    def _knowledge_reference_dir(self) -> Path:
+        """Return the project-local folder used for reference-layer markdown."""
+
+        return self._prompt_storage.ensure_reference_dir()
+
     def _on_add_knowledge(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(self, "选择知识文档", str(Path.home()), "Markdown 文件 (*.md);;所有文件 (*)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "选择知识文档", str(self._knowledge_reference_dir()), "Markdown 文件 (*.md);;所有文件 (*)")
         if file_path:
             self._knowledge_paths.append(file_path)
             self._knowledge_list.setPlainText("\n".join(self._knowledge_paths))
