@@ -83,7 +83,7 @@ class TranslationService:
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._lock = threading.RLock()
         self._groups: dict[int, GroupContext] = {}
-        self._agent: TranslationAgent | None = None
+        self._agents: dict[int, TranslationAgent] = {}
         self._agent_lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -143,11 +143,11 @@ class TranslationService:
         with self._lock:
             self._groups.pop(group_id, None)
 
-    def reset_agent(self) -> None:
-        """Destroy the Agent session so a new one is created on next translation."""
+    def reset_agent(self, group_id: int) -> None:
+        """Destroy the Agent session for one group so a new one is created on next translation."""
 
         with self._agent_lock:
-            self._agent = None
+            self._agents.pop(group_id, None)
 
     def shutdown(self) -> None:
         """Shut down the background thread pool (best-effort, no wait)."""
@@ -165,7 +165,7 @@ class TranslationService:
                 return
 
         try:
-            agent = self._ensure_agent(request.source_language, request.target_language)
+            agent = self._ensure_agent(request.group_id, request.source_language, request.target_language)
             text = agent.translate(request.ocr_text)
 
             with self._lock:
@@ -192,12 +192,12 @@ class TranslationService:
                 )
             )
 
-    def _ensure_agent(self, source: str = "English", target: str = "中文") -> TranslationAgent:
+    def _ensure_agent(self, group_id: int, source: str = "English", target: str = "中文") -> TranslationAgent:
         with self._agent_lock:
-            if self._agent is not None:
-                return self._agent
+            if group_id in self._agents:
+                return self._agents[group_id]
             ai = self._settings.ai
-            self._agent = TranslationAgent(
+            agent = TranslationAgent(
                 ClientConfig(
                     base_url=ai.base_url,
                     api_key=ai.api_key,
@@ -205,8 +205,9 @@ class TranslationService:
                 )
             )
             prompt = self._current_prompt(source, target)
-            self._agent.digest_rules(prompt)
-            return self._agent
+            agent.digest_rules(prompt)
+            self._agents[group_id] = agent
+            return agent
 
     @staticmethod
     def _is_stale_request(request: TranslationRequest, ctx: GroupContext) -> bool:

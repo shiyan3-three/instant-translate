@@ -14,3 +14,7 @@ build/
 
 compiled-prompt.md
 logs/
+
+# AI tool configs
+.claude/
+.omo/

@@ -5,7 +5,9 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from app.agent.agent import TranslationAgent
 from app.prompt.base_template import DEFAULT_BASE_PROMPT
 from app.settings import AppSettings
 from app.translation.client import TranslationError
@@ -70,6 +72,57 @@ class TranslationServicePromptTests(unittest.TestCase):
         service.shutdown()
 
         self.assertEqual(results, [])
+
+
+class TranslationServiceAgentPerGroupTests(unittest.TestCase):
+    """Verify each group gets its own independent Agent instance."""
+
+    def test_different_groups_create_different_agents(self) -> None:
+        """Two groups should have separate Agent instances."""
+        service = TranslationService(AppSettings())
+        
+        with patch.object(TranslationAgent, 'digest_rules'), \
+             patch.object(TranslationAgent, '__init__', return_value=None):
+            agent1 = service._ensure_agent(1, "English", "中文")
+            agent2 = service._ensure_agent(2, "日本語", "English")
+        
+        service.shutdown()
+        
+        self.assertIsNot(agent1, agent2, "Different groups should have different agents")
+        self.assertEqual(len(service._agents), 2)
+        self.assertIn(1, service._agents)
+        self.assertIn(2, service._agents)
+
+    def test_same_group_reuses_same_agent(self) -> None:
+        """Multiple calls for same group should reuse the same Agent."""
+        service = TranslationService(AppSettings())
+        
+        with patch.object(TranslationAgent, 'digest_rules'), \
+             patch.object(TranslationAgent, '__init__', return_value=None):
+            agent1 = service._ensure_agent(1, "English", "中文")
+            agent2 = service._ensure_agent(1, "English", "中文")
+        
+        service.shutdown()
+        
+        self.assertIs(agent1, agent2, "Same group should reuse same agent")
+        self.assertEqual(len(service._agents), 1)
+
+    def test_reset_agent_only_clears_specified_group(self) -> None:
+        """reset_agent(group_id) should only clear that group's agent."""
+        service = TranslationService(AppSettings())
+        
+        with patch.object(TranslationAgent, 'digest_rules'), \
+             patch.object(TranslationAgent, '__init__', return_value=None):
+            agent1 = service._ensure_agent(1, "English", "中文")
+            agent2 = service._ensure_agent(2, "日本語", "English")
+        
+        service.reset_agent(1)
+        
+        self.assertNotIn(1, service._agents, "Group 1 agent should be cleared")
+        self.assertIn(2, service._agents, "Group 2 agent should remain")
+        self.assertIs(service._agents[2], agent2, "Group 2 agent should be unchanged")
+        
+        service.shutdown()
 
 
 if __name__ == "__main__":

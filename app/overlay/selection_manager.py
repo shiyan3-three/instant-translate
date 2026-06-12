@@ -301,7 +301,7 @@ class SelectionWorkflowController(QObject):
         self._clear_processing(group_id)
         if self._translation_service is not None:
             self._translation_service.reset_group(group_id)
-            self._translation_service.reset_agent()
+            self._translation_service.reset_agent(group_id)
         self._reset_ocr_tracking(group_id)
 
         box = self._selection_boxes.pop(group_id, None)
@@ -589,6 +589,7 @@ class SelectionWorkflowController(QObject):
         self._reset_ocr_tracking(group_id)
         if self._translation_service is not None:
             self._translation_service.reset_group(group_id)
+            self._translation_service.reset_agent(group_id)
         region = self._runtime_store.regions[group_id]
         self._upsert_translation_window(group_id, region)
         get_logger().info("[G%d] \u6e90\u8bed\u8a00\u5207\u6362\u4e3a %s", group_id, language)
@@ -606,6 +607,7 @@ class SelectionWorkflowController(QObject):
         self._reset_ocr_tracking(group_id)
         if self._translation_service is not None:
             self._translation_service.reset_group(group_id)
+            self._translation_service.reset_agent(group_id)
         region = self._runtime_store.regions[group_id]
         self._upsert_translation_window(group_id, region)
         get_logger().info("[G%d] \u76ee\u6807\u8bed\u8a00\u5207\u6362\u4e3a %s", group_id, language)

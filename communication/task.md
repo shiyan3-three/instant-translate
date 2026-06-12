@@ -1,152 +1,97 @@
-# 任务指令 - 2026-06-10
+# 任务：翻译模板 GUI 重构
 
-> 给执行 AI 的明确任务列表
-
----
-
-## 🔴 立即执行（今天必须完成）
-
-### 任务 1：修复编辑模式闪烁
-
-**目标**：选择框编辑模式下，badge/工具栏不再闪烁，用户能正常点击按钮
-
-**具体要求**：
-1. 修改文件：`app/overlay/selection_box.py`
-2. 在 `SelectionBoxWidget` 类的 `__init__` 中添加 `_last_applied_state = None`
-3. `apply_model()` 方法开头加状态比对：
-   ```python
-   current_state = (
-       (model.x, model.y, model.width, model.height),
-       model.group_id,
-       (model.source_language, model.target_language),
-       self._editable
-   )
-   if current_state == self._last_applied_state:
-       return
-   self._last_applied_state = current_state
-   ```
-4. 测试：编辑模式下停留 10 秒，工具栏不闪烁，按钮能点击
-
-**交付物**：
-- 修改后的代码文件路径
-- 测试结果截图或日志
+> 发给执行 AI。完成后审查 AI 验收。
 
 ---
 
-### 任务 2：OCR 卡死诊断日志
+## 目标
 
-**目标**：在 OCR 入口/出口加时间戳日志，定位卡在 PaddleOCR 还是去重逻辑
-
-**具体要求**：
-1. 修改文件：`app/ocr/engine.py` 的 `_run_paddle()` 方法
-   - 在 `ocr.ocr(array)` 前加：
-     ```python
-     import time
-     from app.logger import get_debug_logger
-     t0 = time.time()
-     get_debug_logger().debug(f"[OCR-IN] lang={lang_code} img_shape={array.shape}")
-     ```
-   - 在 `ocr.ocr(array)` 后加：
-     ```python
-     get_debug_logger().debug(f"[OCR-OUT] lang={lang_code} elapsed={time.time()-t0:.2f}s raw_len={len(raw_results) if raw_results else 0}")
-     ```
-2. 修改文件：`app/translation/service.py` 的 `_is_similar()` 方法
-   - 在 `return overlap >= ...` 前加：
-     ```python
-     from app.logger import get_debug_logger
-     get_debug_logger().debug(f"[DEDUP] overlap={overlap:.3f} threshold={self._SIMILARITY_THRESHOLD:.3f} skip={overlap >= self._SIMILARITY_THRESHOLD}")
-     ```
-3. 运行程序，框选大段文本，等待卡死现象，导出 `debug.log`
-
-**交付物**：
-- 修改后的代码
-- 出现卡死时的完整 debug.log（最后 100 行）
+侧边栏从四页改为三页。"翻译模板"合并当前"翻译方向"和"提示词"两页。
 
 ---
 
-### 任务 3：顺手修复翻译方向持久化
+## 当前状态
 
-**目标**：主窗口选择的语言对重启后保存
+```
+侧边栏                        右侧内容
+┌──────────┐                ┌──────────────────┐
+│ 翻译方向  │ → LanguagePage   │ 选择源/目标语言    │
+│ 模型配置  │ → ModelPage      │ Base URL 等       │
+│ 提示词   │ → PromptPage     │ 约束层+引用层       │
+│ 设置     │ → SettingsPage   │ 快捷键            │
+└──────────┘                └──────────────────┘
+```
 
-**具体要求**：
-1. 修改文件：`app/gui/main_window.py`
-2. 在 `LanguagePage` 的 `_emit_change()` 方法中调用 `AppSettings` 保存
-3. 在 `MainWindow` 初始化 `LanguagePage` 时从 `AppSettings.load()` 读取默认语言对
-4. 测试：选中文→英文，重启程序，语言对保持不变
+## 目标状态
 
-**交付物**：
-- 修改后的代码文件路径
-
----
-
-## 🟡 并行准备（不阻塞上面的任务）
-
-### 任务 4：DeepSeek thinking 切换 POC
-
-**目标**：验证同一 messages 数组能否混用 thinking enabled/disabled
-
-**具体要求**：
-1. 新建 `tests/poc_deepseek_thinking.py`
-2. 实现三个测试场景：
-   ```python
-   # 场景 1: 混用 enabled/disabled
-   # 场景 2: reasoning_content 持久性（多轮对话）
-   # 场景 3: 检查 usage.reasoning_tokens 计费
-   ```
-3. 运行并记录：
-   - 是否报错
-   - 关 thinking 后正确率是否下降
-   - thinking tokens 消耗量
-
-**交付物**：
-- POC 脚本代码
-- 测试结果 markdown 报告（包含每个场景的输入/输出/结论）
+```
+侧边栏                        右侧内容
+┌──────────┐                ┌──────────────────┐
+│ 翻译模板  │ → TemplatePage  │ 语言方向          │
+│ 模型配置  │                │ 约束层编辑         │
+│ 设置     │                │ 知识引用层         │
+└──────────┘                │ 编译预览+保存      │
+                            └──────────────────┘
+```
 
 ---
 
-## ⚠️ 执行规则
+## 具体要求
 
-1. **按顺序做**：任务 1 → 任务 2 → 任务 3，完成一个再开始下一个
-2. **任务 4 可以并行**：如果 API 调用需要等待，可以在等待时切到任务 1-3
-3. **不要擅自改需求**：
-   - 不要"顺便优化"其他代码
-   - 不要"我觉得这样更好"就改方案
-   - 如果发现需求有问题，先在 `communication/question.md` 里提问，等回复再动手
-4. **每个任务完成后**：
-   - 在 `communication/progress.md` 里更新进度
-   - 写清楚改了哪些文件、测试结果如何
-5. **如果卡住超过 30 分钟**：
-   - 立即停止
-   - 在 `communication/blocked.md` 里说明卡在哪里、尝试了什么、需要什么帮助
+### 改动 1：新建 `TemplatePage`
+
+**文件**：`app/gui/main_window.py`
+
+新建 `TemplatePage(QWidget)` 类，内部用 `QVBoxLayout` 垂直排列：
+
+1. **语言方向区** — 顶部。源语言 QComboBox + ⇄ 交换按钮 + 目标语言 QComboBox（从 `LanguagePage` 迁移）
+2. **约束层区** — 预览按钮 + 弹窗编辑（从 `PromptPage` 迁移）
+3. **知识引用区** — 文档列表 + 添加/移除按钮（从 `PromptPage` 迁移）
+4. **编译区** — Compiled Prompt 路径只读显示 + "生成预览" + "保存并启用"（从 `PromptPage` 迁移）
+5. 整个页面套 `QScrollArea`，内容多时可滚动
+
+**信号保留**：
+- `language_changed(str, str)` — 和现在 `LanguagePage` 一样
+
+### 改动 2：修改 `MainWindow`
+
+**文件**：`app/gui/main_window.py`
+
+- 侧边栏 `_nav_language`、`_nav_prompt` 两个按钮 → 合并为一个 `_nav_template`（"翻译模板"）
+- `_stack` 中删除 `_language_page` 和 `_prompt_page`，替换为一个 `_template_page`
+- `_on_nav_clicked` 调整索引映射
+- `_on_language_changed` 连接 `_template_page.language_changed`
+- `default_language_pair()` 从 `_template_page` 取
+
+### 改动 3：更新测试
+
+**文件**：`tests/test_gui_shell.py`
+
+- `test_main_window_has_sidebar_and_pages` 改为检查 3 个按钮 + 3 页
+- 新增：`test_template_page_has_language_and_prompt_sections` 验证 TemplatePage 包含语言选择和约束层
+
+### 不改动
+
+- OCR、截图、巡检、翻译管线、日志、打包
+- `ModelPage` 和 `SettingsPage` 内部逻辑
+- `LanguagePage` 和 `PromptPage` 可以保留在文件中但不再被 MainWindow 引用
 
 ---
 
-## 📋 优先级说明
+## 验收标准
 
-- 任务 1（闪烁）是用户完全无法使用的阻塞问题，最高优先级
-- 任务 2（OCR 日志）是诊断工具，不修复问题但必须先定位
-- 任务 3（持久化）是 5 行代码的小问题，顺手修
-- 任务 4（POC）决定 Agent 方案是否可行，但不阻塞当前开发
+- ✅ `python -m unittest discover` 全部通过（至少 78 个，新增 1+）
+- ✅ 侧边栏只有 3 个按钮：翻译模板、模型配置、设置
+- ✅ 翻译模板页包含：语言选择 + 约束层预览按钮 + 知识引用列表 + 编译区
+- ✅ 翻译模板页可滚动
+- ✅ 点击约束层预览按钮弹出编辑弹窗（现有功能不变）
+- ✅ 现有功能不受影响（模型配置页、设置页、测试连接）
 
 ---
 
-## ✅ 验收标准
+## 执行规则
 
-**任务 1 通过条件**：
-- 编辑模式下工具栏不闪烁
-- 能正常点击工具栏按钮
-- 代码逻辑清晰，没有引入新 bug
-
-**任务 2 通过条件**：
-- 日志能明确显示 OCR 耗时
-- 能区分是 PaddleOCR 慢还是去重误杀
-- 日志格式统一，易于分析
-
-**任务 3 通过条件**：
-- 重启后语言对保持不变
-- 不影响现有功能
-
-**任务 4 通过条件**：
-- 三个场景全部测试
-- 结论明确（支持/不支持/有限支持）
-- 如果不支持，提出替代方案
+1. 改一小块就跑 `test_gui_shell` 和全量测试
+2. 不改 OCR、翻译管线、日志、打包
+3. 卡住 20 分钟以上→停止，写 `communication/blocked.md`
+4. **提交前自己跑一次 `python -m unittest discover`**
