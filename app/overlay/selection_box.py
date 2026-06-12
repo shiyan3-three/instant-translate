@@ -260,7 +260,19 @@ class SelectionBoxWidget(QWidget):
     def apply_model(self, model: SelectionBoxModel) -> None:
         """Refresh geometry and color from the latest model state."""
 
+        # Skip redraw if nothing changed (prevents 500ms polling flicker)
+        current = (
+            model.x, model.y, model.width, model.height,
+            model.group_id, model.accent_color,
+            model.paused, model.source_language, model.target_language,
+            self._editable,
+        )
+        if getattr(self, "_last_applied_state", None) == current:
+            return
+        self._last_applied_state = current
+
         self.model = model
+        self._toolbar_sized = False  # toolbar content may have changed size
         self.setGeometry(model.x, model.y, model.width, model.height)
         self.group_badge.setText(str(model.group_id))
         self.size_badge.setText(self.format_dimensions(model.width, model.height))
@@ -273,6 +285,8 @@ class SelectionBoxWidget(QWidget):
     def apply_edit_mode(self, enabled: bool) -> None:
         """Update visual emphasis and interaction mode for edit mode."""
 
+        # Skip toolbar flicker but always apply visual state on first call
+        changed = self._editable != enabled
         self._editable = enabled
         self.size_badge.setHidden(not enabled)
 
@@ -285,11 +299,13 @@ class SelectionBoxWidget(QWidget):
         else:
             self.unsetCursor()
 
-        if enabled:
-            self.toolbar_panel.show()
-            self._update_toolbar_position()
-        else:
-            self.toolbar_panel.hide()
+        if changed:
+            self._toolbar_sized = False  # force re-measure on next position update
+            if enabled:
+                self.toolbar_panel.show()
+                self._update_toolbar_position()
+            else:
+                self.toolbar_panel.hide()
 
         self._apply_child_styles()
         self.update()
@@ -434,6 +450,7 @@ class SelectionBoxWidget(QWidget):
             self._resizing = False
             self._resize_edge = ""
             self.releaseMouse()
+            self._update_overlay_geometry()
             g = self.geometry()
             self.resized.emit(self.model.group_id, g.x(), g.y(), g.width(), g.height())
             event.accept()
@@ -442,6 +459,7 @@ class SelectionBoxWidget(QWidget):
         if self._dragging:
             self._dragging = False
             self.releaseMouse()
+            self._update_toolbar_position()
             self.moved.emit(self.model.group_id, self.x(), self.y())
             event.accept()
             return
@@ -478,17 +496,16 @@ class SelectionBoxWidget(QWidget):
 
     def moveEvent(self, event) -> None:
         super().moveEvent(event)
-        self._update_toolbar_position()
+        if not self._dragging:
+            self._update_toolbar_position()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        self._update_overlay_geometry()
-        self._update_input_mask()
+        if not self._resizing:
+            self._update_overlay_geometry()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        set_window_click_through(self, not self._editable)
-        self._update_input_mask()
         if self._editable:
             self.toolbar_panel.show()
             self._update_toolbar_position()
@@ -518,11 +535,14 @@ class SelectionBoxWidget(QWidget):
         if not self.toolbar_panel.isVisible() and not self._editable:
             return
 
-        self.toolbar_panel.adjustSize()
+        if not getattr(self, "_toolbar_sized", False):
+            self.toolbar_panel.adjustSize()
+            self._toolbar_sized = True
+
         screen = QApplication.primaryScreen().virtualGeometry()
         frame = self.frameGeometry()
-        toolbar_width = self.toolbar_panel.sizeHint().width()
-        toolbar_height = self.toolbar_panel.sizeHint().height()
+        toolbar_width = self.toolbar_panel.width()
+        toolbar_height = self.toolbar_panel.height()
 
         x = frame.x()
         max_x = screen.x() + screen.width() - toolbar_width - 8
@@ -535,7 +555,9 @@ class SelectionBoxWidget(QWidget):
         else:
             y = min(screen.y() + screen.height() - toolbar_height - 8, below_y)
 
-        self.toolbar_panel.move(x, y)
+        # Only move if position actually changed (prevents flicker)
+        if self.toolbar_panel.x() != x or self.toolbar_panel.y() != y:
+            self.toolbar_panel.move(x, y)
 
     def _apply_child_styles(self) -> None:
         badge_background = "rgba(15, 23, 42, 0.68)"

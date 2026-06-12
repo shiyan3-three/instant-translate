@@ -301,6 +301,7 @@ class SelectionWorkflowController(QObject):
         self._clear_processing(group_id)
         if self._translation_service is not None:
             self._translation_service.reset_group(group_id)
+            self._translation_service.reset_agent()
         self._reset_ocr_tracking(group_id)
 
         box = self._selection_boxes.pop(group_id, None)
@@ -424,13 +425,7 @@ class SelectionWorkflowController(QObject):
 
             t_cap = time.perf_counter()
             try:
-                box = self._selection_boxes.get(group_id)
-                if box is None:
-                    frame = self._capture_service.capture(screen, region)
-                else:
-                    frame = box.capture_with_chrome_hidden(
-                        lambda: self._capture_service.capture(screen, region)
-                    )
+                frame = self._capture_service.capture(screen, region)
             except ValueError:
                 continue
             cap_ms = (time.perf_counter() - t_cap) * 1000

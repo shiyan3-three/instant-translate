@@ -36,7 +36,11 @@ def build_application_context() -> ApplicationContext:
     """Create the top-level application context with persisted settings."""
 
     settings = AppSettings.load()
-    return ApplicationContext(settings=settings)
+    return ApplicationContext(
+        settings=settings,
+        default_source_language=settings.default_source_language,
+        default_target_language=settings.default_target_language,
+    )
 
 
 def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
@@ -60,9 +64,19 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
         on_state_changed=main_window.refresh_runtime_state,
     )
 
-    main_window.default_language_changed.connect(
-        lambda src, tgt: setattr(context, "default_source_language", src) or setattr(context, "default_target_language", tgt)
-    )
+    def _apply_default_language(src: str, tgt: str) -> None:
+        context.default_source_language = src
+        context.default_target_language = tgt
+        for gid in runtime_store.active_group_ids():
+            config = runtime_store.configs.get(gid)
+            if config is not None:
+                config.source_language = src
+                config.target_language = tgt
+            region = runtime_store.regions.get(gid)
+            if region is not None:
+                selection_workflow._upsert_selection_box(gid, region)
+
+    main_window.default_language_changed.connect(_apply_default_language)
     hotkeys.create_selection_triggered.connect(selection_workflow.request_new_selection)
     hotkeys.toggle_edit_mode_triggered.connect(selection_workflow.toggle_edit_mode)
 

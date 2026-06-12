@@ -60,6 +60,8 @@ class AppSettings:
 
     ai: AiSettings = field(default_factory=AiSettings)
     prompt: PromptSettings = field(default_factory=PromptSettings)
+    default_source_language: str = "English"
+    default_target_language: str = "中文"
 
     # ------------------------------------------------------------------
     # persistence
@@ -93,6 +95,8 @@ class AppSettings:
                         prompt_data.get("compiled_prompt_path", "prompts/compiled-prompt.md")
                     ),
                 ),
+                default_source_language=data.get("default_source_language", "English"),
+                default_target_language=data.get("default_target_language", "中文"),
             )
         except (json.JSONDecodeError, OSError) as exc:
             from app.logger import get_logger
@@ -106,6 +110,8 @@ class AppSettings:
         payload = {
             "ai": asdict(self.ai),
             "prompt": asdict(self.prompt),
+            "default_source_language": self.default_source_language,
+            "default_target_language": self.default_target_language,
         }
         file_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False),

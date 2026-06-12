@@ -104,6 +104,12 @@ class OcrEngine:
 
         t0 = _time.perf_counter()
 
+        # --- OCR-IN marker (for diagnosing stuck/crash) ---
+        get_debug_logger().debug(
+            "[OCR-IN] lang=%s size=%dx%d",
+            source_language, frame.width, frame.height,
+        )
+
         image = self._preprocessor.from_rgba_bytes(
             frame.pixel_bytes,
             frame.width,
@@ -115,11 +121,12 @@ class OcrEngine:
         result = self._run_ocr(processed, source_language)
         total_ms = (_time.perf_counter() - t0) * 1000
 
-        if not result.is_empty:
-            get_debug_logger().debug(
-                "OCR: prep=%.0fms total=%.0fms text=%r",
-                pp_ms, total_ms, result.raw_text[:80],
-            )
+        # --- OCR-OUT marker ---
+        out_len = len(result.raw_text)
+        get_debug_logger().debug(
+            "[OCR-OUT] lang=%s prep=%.0fms total=%.0fms len=%d text=%r",
+            source_language, pp_ms, total_ms, out_len, result.raw_text[:80],
+        )
 
         return result
 

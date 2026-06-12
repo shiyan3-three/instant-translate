@@ -715,7 +715,10 @@ class MainWindow(QMainWindow):
         # pages
         self._stack = QStackedWidget()
 
-        self._language_page = LanguagePage("English", "中文")
+        self._language_page = LanguagePage(
+            context.settings.default_source_language,
+            context.settings.default_target_language,
+        )
         self._model_page = ModelPage(
             context.settings.ai.base_url,
             context.settings.ai.api_key,
@@ -791,9 +794,17 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_language_changed(self, source: str, target: str) -> None:
-        self._context.settings.ai.base_url = self._context.settings.ai.base_url  # keep
+        s = self._context.settings
+        s.default_source_language = source
+        s.default_target_language = target
+        try:
+            s.save()
+        except Exception:
+            pass
+        self._context.default_source_language = source
+        self._context.default_target_language = target
         self.default_language_changed.emit(source, target)
-        self._status.showMessage(f"默认翻译方向已更新: {source} → {target}", 3000)
+        self._status.showMessage(f"默认翻译方向已保存: {source} → {target}", 3000)
 
     def _on_model_changed(self, base_url: str, api_key: str, model: str) -> None:
         s = self._context.settings

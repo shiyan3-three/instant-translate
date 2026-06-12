@@ -6,6 +6,7 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 
+from app.agent.agent import TranslationAgent
 from app.prompt.base_template import DEFAULT_BASE_PROMPT
 from app.prompt.storage import PromptStorage
 from app.settings import AppSettings
@@ -82,6 +83,8 @@ class TranslationService:
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._lock = threading.RLock()
         self._groups: dict[int, GroupContext] = {}
+        self._agent: TranslationAgent | None = None
+        self._agent_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # public API
@@ -140,6 +143,12 @@ class TranslationService:
         with self._lock:
             self._groups.pop(group_id, None)
 
+    def reset_agent(self) -> None:
+        """Destroy the Agent session so a new one is created on next translation."""
+
+        with self._agent_lock:
+            self._agent = None
+
     def shutdown(self) -> None:
         """Shut down the background thread pool (best-effort, no wait)."""
 
@@ -150,15 +159,18 @@ class TranslationService:
     # ------------------------------------------------------------------
 
     def _execute(self, request: TranslationRequest, on_result) -> None:
+        with self._lock:
+            ctx = self._ensure_group(request.group_id)
+            if self._is_stale_request(request, ctx):
+                return
+
         try:
-            client = self._build_client()
-            system_prompt = self._current_prompt(request.source_language, request.target_language)
-            text = client.translate(system_prompt, request.ocr_text)
+            agent = self._ensure_agent(request.source_language, request.target_language)
+            text = agent.translate(request.ocr_text)
 
             with self._lock:
                 ctx = self._ensure_group(request.group_id)
                 if self._is_stale_request(request, ctx):
-                    # Stale — a newer request superseded this one.
                     return
                 ctx.last_translation = text
 
@@ -171,10 +183,6 @@ class TranslationService:
                 )
             )
         except TranslationError as exc:
-            with self._lock:
-                ctx = self._ensure_group(request.group_id)
-                if self._is_stale_request(request, ctx):
-                    return
             on_result(
                 TranslationResult(
                     group_id=request.group_id,
@@ -183,6 +191,22 @@ class TranslationService:
                     error=str(exc),
                 )
             )
+
+    def _ensure_agent(self, source: str = "English", target: str = "中文") -> TranslationAgent:
+        with self._agent_lock:
+            if self._agent is not None:
+                return self._agent
+            ai = self._settings.ai
+            self._agent = TranslationAgent(
+                ClientConfig(
+                    base_url=ai.base_url,
+                    api_key=ai.api_key,
+                    model=ai.model,
+                )
+            )
+            prompt = self._current_prompt(source, target)
+            self._agent.digest_rules(prompt)
+            return self._agent
 
     @staticmethod
     def _is_stale_request(request: TranslationRequest, ctx: GroupContext) -> bool:
@@ -250,24 +274,18 @@ class TranslationService:
         """
 
         lines: list[str] = []
-        capture = False
         for line in raw.splitlines():
             stripped = line.strip()
             if not stripped:
                 continue
-            # Skip pure-header lines
-            if stripped.startswith("# Instant Translate"):
-                capture = True
-                continue
+            # Skip markdown structure, keep content
             if stripped.startswith("## Runtime Direction"):
                 break
-            if stripped.startswith("##"):
-                capture = True
-                continue
             if stripped.startswith("This layer"):
                 continue
-            if capture:
-                lines.append(stripped)
+            if stripped.startswith("#") or stripped.startswith("##"):
+                continue
+            lines.append(stripped)
 
         compact = " ".join(lines).strip()
         return compact if compact else DEFAULT_BASE_PROMPT

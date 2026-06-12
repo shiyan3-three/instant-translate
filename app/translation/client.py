@@ -43,7 +43,57 @@ class OpenAICompatibleClient:
     # public API
     # ------------------------------------------------------------------
 
-    def complete(self, system_prompt: str, user_prompt: str) -> str:
+    def chat(self, messages: list[dict], thinking: bool = False) -> str:
+        """Send a full messages array and return the response text.
+
+        Raises TranslationError on timeout, HTTP error, or empty response.
+        """
+
+        import time as _time
+        from app.logger import get_debug_logger
+
+        if not messages:
+            raise TranslationError("Cannot send empty messages.")
+
+        payload = {
+            "model": self._config.model,
+            "messages": messages,
+            "temperature": 0.0,
+            "max_tokens": 256,
+        }
+        if thinking:
+            payload["thinking"] = {"type": "enabled"}
+
+        headers = self._build_headers()
+
+        t0 = _time.perf_counter()
+        try:
+            response = httpx.post(
+                url=self._config.chat_url,
+                json=payload,
+                headers=headers,
+                timeout=self._config.timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.TimeoutException:
+            get_debug_logger().warning("API timeout after %.0fs", self._config.timeout_seconds)
+            raise TranslationError(f"Translation request timed out after {self._config.timeout_seconds:.0f}s.")
+        except httpx.HTTPStatusError as exc:
+            get_debug_logger().warning("API HTTP %d", exc.response.status_code)
+            raise TranslationError(f"API error {exc.response.status_code}: {self._truncate(str(exc.response.text))}")
+        except httpx.RequestError as exc:
+            get_debug_logger().warning("API network error: %s", exc)
+            raise TranslationError(f"Network error reaching {self._config.base_url}: {exc}")
+
+        http_ms = (_time.perf_counter() - t0) * 1000
+        get_debug_logger().debug("API HTTP round-trip: %.0fms", http_ms)
+
+        result = self._extract_content(response.json())
+        if not result.strip():
+            raise TranslationError("API returned an empty translation.")
+        return result.strip()
+
+    def complete(self, system_prompt: str, user_prompt: str, thinking: bool = False) -> str:
         """Send one chat completion request and return the response text.
 
         Raises TranslationError on timeout, HTTP error, or empty response.
@@ -56,6 +106,8 @@ class OpenAICompatibleClient:
             raise TranslationError("Cannot send an empty prompt.")
 
         payload = self._build_payload(system_prompt, user_prompt)
+        if thinking:
+            payload["thinking"] = {"type": "enabled"}
         headers = self._build_headers()
 
         t0 = _time.perf_counter()

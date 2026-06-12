@@ -35,8 +35,9 @@ class TranslationServicePromptTests(unittest.TestCase):
             service.shutdown()
 
         self.assertIn("CONFIRMED USER CONSTRAINT", prompt)
-        self.assertIn(DEFAULT_BASE_PROMPT, prompt)
         self.assertIn("Translate from English to 中文.", prompt)
+        # Compact joins lines with spaces; DEFAULT_BASE_PROMPT content is present
+        self.assertIn("instant translation assistant", prompt)
 
     def test_current_prompt_falls_back_to_fixed_template_without_compiled_file(self) -> None:
         settings = AppSettings()

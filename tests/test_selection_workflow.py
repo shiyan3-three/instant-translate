@@ -260,7 +260,8 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         self.assertFalse(requested)
         self.assertEqual(self.context.status_message, "最多支持 3 个选择框。")
 
-    def test_poll_hides_selection_chrome_while_capturing(self) -> None:
+    def test_poll_captures_without_hiding_chrome(self) -> None:
+        # Chrome stays visible during capture; badge text is filtered by OCR postprocessing
         self.controller.request_new_selection()
         self.controller.finalize_selection(ScreenRegion(40, 120, 260, 90))
         self.controller.toggle_edit_mode()
@@ -271,19 +272,23 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         self.assertFalse(box.size_badge.isHidden())
         self.assertTrue(box.toolbar_visible)
 
-        def assert_chrome_hidden_during_capture() -> None:
-            self.assertTrue(box.group_badge.isHidden())
-            self.assertTrue(box.size_badge.isHidden())
-            self.assertFalse(box.toolbar_visible)
+        captured = []
 
-        self.capture_service.on_capture = assert_chrome_hidden_during_capture
+        def record_capture() -> None:
+            captured.append(
+                (box.group_badge.isHidden(), box.size_badge.isHidden(), box.toolbar_visible)
+            )
+
+        self.capture_service.on_capture = record_capture
 
         self.controller._tick()
 
         self.assertEqual(self.capture_service.capture_calls, 1)
-        self.assertFalse(box.group_badge.isHidden())
-        self.assertFalse(box.size_badge.isHidden())
-        self.assertTrue(box.toolbar_visible)
+        self.assertEqual(len(captured), 1)
+        # Chrome stays visible — no hide/show flicker
+        self.assertFalse(captured[0][0], "group badge should NOT be hidden during capture")
+        self.assertFalse(captured[0][1], "size badge should NOT be hidden during capture")
+        self.assertTrue(captured[0][2], "toolbar should stay visible during capture")
 
     def test_process_frame_sends_clean_ocr_text_to_translation(self) -> None:
         self.controller.request_new_selection()
