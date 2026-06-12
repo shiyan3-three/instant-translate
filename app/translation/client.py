@@ -217,14 +217,8 @@ class OpenAICompatibleClient:
     def _extract_content(response_json: dict) -> str:
         try:
             msg = response_json["choices"][0]["message"]
-            content = msg.get("content") or ""
-            
-            # If content is empty but reasoning_content exists (DeepSeek thinking mode),
-            # the actual translation might be in reasoning_content
-            if not content.strip() and "reasoning_content" in msg:
-                content = msg.get("reasoning_content") or ""
-            
-            return content
+            # Return content directly, no fallback to reasoning_content
+            return msg.get("content") or ""
         except (KeyError, IndexError, TypeError):
             raise TranslationError(
                 "Unexpected API response format — missing choices[0].message.content."
