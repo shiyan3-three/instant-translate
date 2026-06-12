@@ -59,7 +59,7 @@ class OpenAICompatibleClient:
             "model": self._config.model,
             "messages": messages,
             "temperature": 0.0,
-            "max_tokens": 256,
+            "max_tokens": 1024,
         }
         if thinking:
             payload["thinking"] = {"type": "enabled"}
@@ -88,7 +88,28 @@ class OpenAICompatibleClient:
         http_ms = (_time.perf_counter() - t0) * 1000
         get_debug_logger().debug("API HTTP round-trip: %.0fms", http_ms)
 
-        result = self._extract_content(response.json())
+        response_json = response.json()
+        
+        # Detailed diagnostic: dump full response structure (first call only)
+        import json
+        msg = response_json.get("choices", [{}])[0].get("message", {})
+        get_debug_logger().debug(
+            "API response structure: message_keys=%s",
+            list(msg.keys())
+        )
+        if "reasoning_content" in msg:
+            get_debug_logger().debug(
+                "reasoning_content preview: %s",
+                (msg["reasoning_content"][:200] if msg["reasoning_content"] else "(empty)")
+            )
+        if "content" in msg:
+            get_debug_logger().debug(
+                "content preview: %s",
+                (msg["content"][:200] if msg["content"] else "(empty)")
+            )
+        
+        result = self._extract_content(response_json)
+        
         if not result.strip():
             raise TranslationError("API returned an empty translation.")
         return result.strip()
@@ -196,7 +217,14 @@ class OpenAICompatibleClient:
     def _extract_content(response_json: dict) -> str:
         try:
             msg = response_json["choices"][0]["message"]
-            return msg.get("content") or ""
+            content = msg.get("content") or ""
+            
+            # If content is empty but reasoning_content exists (DeepSeek thinking mode),
+            # the actual translation might be in reasoning_content
+            if not content.strip() and "reasoning_content" in msg:
+                content = msg.get("reasoning_content") or ""
+            
+            return content
         except (KeyError, IndexError, TypeError):
             raise TranslationError(
                 "Unexpected API response format — missing choices[0].message.content."

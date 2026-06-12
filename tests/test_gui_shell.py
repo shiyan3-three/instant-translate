@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.app_context import ApplicationContext
 from app.gui.main_window import MainWindow
-from app.gui.main_window import PromptPage
+from app.gui.main_window import TemplatePage
 from app.gui.settings_window import SettingsWindow
 from app.gui.tray_icon import TrayIconController
 from app.prompt.storage import PromptStorage
@@ -26,11 +26,24 @@ class MainWindowTests(unittest.TestCase):
         window = MainWindow(ApplicationContext())
 
         self.assertEqual(window.windowTitle(), "Instant Translate")
-        self.assertIsNotNone(window._nav_language)
+        self.assertIsNotNone(window._nav_template)
         self.assertIsNotNone(window._nav_model)
-        self.assertIsNotNone(window._nav_prompt)
         self.assertIsNotNone(window._nav_settings)
-        self.assertEqual(window._stack.count(), 4)
+        self.assertEqual(window._stack.count(), 3)
+
+    def test_template_page_has_language_and_prompt_sections(self) -> None:
+        window = MainWindow(ApplicationContext())
+        template_page = window._template_page
+
+        # Has language selection
+        self.assertIsNotNone(template_page._source_combo)
+        self.assertIsNotNone(template_page._target_combo)
+        
+        # Has constraints section
+        self.assertIsNotNone(template_page._constraints_btn)
+        
+        # Has knowledge references section
+        self.assertIsNotNone(template_page._knowledge_list)
 
 
 class SettingsWindowTests(unittest.TestCase):
@@ -64,8 +77,8 @@ class SettingsWindowTests(unittest.TestCase):
             self.assertTrue(reference_dir.exists())
 
 
-class PromptPageTests(unittest.TestCase):
-    """Verify the main-window prompt page enables compiled prompts."""
+class TemplatePageTests(unittest.TestCase):
+    """Verify the template page enables compiled prompts."""
 
     def setUp(self) -> None:
         self.app = ensure_qapplication()
@@ -79,7 +92,9 @@ class PromptPageTests(unittest.TestCase):
             settings.ai.model = "model"
             settings.prompt.compiled_prompt_path = "prompts/compiled-prompt.md"
             optimizer = FakePromptOptimizer("Optimized glossary rules")
-            page = PromptPage(
+            page = TemplatePage(
+                source="English",
+                target="中文",
                 constraints_text="Keep database terms literal.",
                 knowledge_paths=[],
                 compiled_prompt_path=settings.prompt.compiled_prompt_path,
@@ -103,7 +118,7 @@ class PromptPageTests(unittest.TestCase):
 
     def test_knowledge_reference_dir_uses_prompt_storage(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            page = PromptPage(
+            page = TemplatePage(
                 prompt_storage=PromptStorage(config_dir=Path(tmp)),
                 confirm_compiled_prompt=lambda content: True,
                 save_settings=lambda: None,

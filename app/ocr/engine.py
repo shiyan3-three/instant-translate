@@ -214,6 +214,13 @@ class OcrEngine:
     def _ensure_engine(self, source_language: str) -> None:
         lang_code = self._PADDLE_LANG_MAP.get(source_language, "en")
 
+        # Diagnostic logging
+        from app.logger import get_debug_logger
+        get_debug_logger().debug(
+            "OCR warmup: backend=%s lang=%s cached_langs=%s instance_id=%s",
+            self._backend, lang_code, list(self._engines.keys()), id(self)
+        )
+
         # Backend already active and this language's engine is cached → done
         if self._backend == "tesseract":
             return

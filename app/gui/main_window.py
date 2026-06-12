@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QStatusBar,
     QVBoxLayout,
@@ -182,6 +183,342 @@ class LanguagePage(QWidget):
 
     def current_pair(self) -> tuple[str, str]:
         return (self._source_combo.currentText(), self._target_combo.currentText())
+
+
+class TemplatePage(QWidget):
+    """Unified translation template: language pair + constraints + knowledge references."""
+
+    language_changed = Signal(str, str)
+
+    def __init__(
+        self,
+        source: str = "English",
+        target: str = "中文",
+        constraints_text: str = "",
+        knowledge_paths: list | None = None,
+        compiled_prompt_path: str = "compiled-prompt.md",
+        parent: QWidget | None = None,
+        settings: AppSettings | None = None,
+        optimizer: PromptOptimizer | None = None,
+        prompt_storage: PromptStorage | None = None,
+        confirm_compiled_prompt: Callable[[str], bool] | None = None,
+        save_settings: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("contentPage")
+        
+        # Prompt services
+        self._compiler = PromptCompiler()
+        self._optimizer = optimizer or PromptOptimizer(self._compiler)
+        self._prompt_storage = prompt_storage or PromptStorage()
+        self._settings = settings
+        self._confirm_compiled_prompt = (
+            confirm_compiled_prompt or self._confirm_compiled_prompt_with_dialog
+        )
+        self._save_settings = save_settings
+        self._knowledge_paths = knowledge_paths or []
+        self._constraints_text = constraints_text
+
+        # Create scrollable content
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(32, 32, 32, 32)
+        layout.setSpacing(16)
+
+        # Page header
+        title = QLabel("翻译模板")
+        title.setObjectName("pageTitle")
+        desc = QLabel("配置语言方向、翻译约束和知识引用")
+        desc.setObjectName("pageDesc")
+        layout.addWidget(title)
+        layout.addWidget(desc)
+        layout.addSpacing(8)
+
+        # Section 1: Language Pair
+        lang_label = QLabel("语言方向")
+        lang_label.setStyleSheet("color: #94a3b8; font-weight: 600; font-size: 13px;")
+        layout.addWidget(lang_label)
+
+        self._source_combo = QComboBox()
+        self._source_combo.addItems(LANGUAGES)
+        self._source_combo.setCurrentText(source)
+
+        swap_btn = QPushButton("⇄")
+        swap_btn.setObjectName("swapButton")
+        swap_btn.setFixedSize(36, 36)
+        swap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        swap_btn.setToolTip("交换源语言和目标语言")
+        swap_btn.clicked.connect(self._on_swap)
+
+        self._target_combo = QComboBox()
+        self._target_combo.addItems(LANGUAGES)
+        self._target_combo.setCurrentText(target)
+
+        lang_row = QHBoxLayout()
+        lang_row.setSpacing(12)
+        lang_row.addWidget(QLabel("源语言"))
+        lang_row.addWidget(self._source_combo, 1)
+        lang_row.addWidget(swap_btn)
+        lang_row.addWidget(self._target_combo, 1)
+        lang_row.addWidget(QLabel("目标语言"))
+        lang_row.addStretch(1)
+        layout.addLayout(lang_row)
+
+        self._source_combo.currentTextChanged.connect(self._emit_language_change)
+        self._target_combo.currentTextChanged.connect(self._emit_language_change)
+
+        layout.addSpacing(12)
+
+        # Section 2: Constraints
+        constraints_label = QLabel("约束层")
+        constraints_label.setStyleSheet("color: #94a3b8; font-weight: 600; font-size: 13px;")
+        layout.addWidget(constraints_label)
+
+        self._constraints_btn = QPushButton()
+        self._constraints_btn.setObjectName("constraintsPreview")
+        self._constraints_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._constraints_btn.clicked.connect(self._on_edit_constraints)
+        self._refresh_constraints_preview()
+        layout.addWidget(self._constraints_btn)
+
+        layout.addSpacing(12)
+
+        # Section 3: Knowledge References
+        knowledge_label = QLabel("知识引用层")
+        knowledge_label.setStyleSheet("color: #94a3b8; font-weight: 600; font-size: 13px;")
+        layout.addWidget(knowledge_label)
+
+        self._knowledge_list = QPlainTextEdit()
+        self._knowledge_list.setReadOnly(True)
+        self._knowledge_list.setPlaceholderText("尚未添加知识引用文档...")
+        self._knowledge_list.setMaximumHeight(80)
+        if self._knowledge_paths:
+            self._knowledge_list.setPlainText("\n".join(self._knowledge_paths))
+        layout.addWidget(self._knowledge_list)
+
+        know_btn_row = QHBoxLayout()
+        know_btn_row.setSpacing(8)
+        add_know_btn = QPushButton("+ 添加文档")
+        add_know_btn.setObjectName("secondaryButton")
+        add_know_btn.clicked.connect(self._on_add_knowledge)
+        rm_know_btn = QPushButton("− 移除")
+        rm_know_btn.setObjectName("secondaryButton")
+        rm_know_btn.clicked.connect(self._on_remove_knowledge)
+        know_btn_row.addWidget(add_know_btn)
+        know_btn_row.addWidget(rm_know_btn)
+        know_btn_row.addStretch(1)
+        layout.addLayout(know_btn_row)
+
+        layout.addSpacing(12)
+
+        # Section 4: Compiled Prompt
+        compiled_label = QLabel("Compiled Prompt 文件")
+        compiled_label.setStyleSheet("color: #94a3b8; font-weight: 600; font-size: 13px;")
+        layout.addWidget(compiled_label)
+
+        self._compiled_path = QLineEdit(compiled_prompt_path)
+        self._compiled_path.setReadOnly(True)
+        layout.addWidget(self._compiled_path)
+
+        self._save_status = QLabel("")
+        self._save_status.setObjectName("hintLabel")
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        preview_btn = QPushButton("生成预览")
+        preview_btn.setObjectName("secondaryButton")
+        preview_btn.clicked.connect(self._on_preview)
+        save_btn = QPushButton("保存并启用")
+        save_btn.setObjectName("primaryButton")
+        save_btn.clicked.connect(self._on_save)
+        btn_row.addWidget(preview_btn)
+        btn_row.addWidget(save_btn)
+        btn_row.addWidget(self._save_status)
+        btn_row.addStretch(1)
+        layout.addLayout(btn_row)
+
+        layout.addStretch(1)
+
+        scroll.setWidget(content)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+
+    # Language methods
+    def _on_swap(self) -> None:
+        src = self._source_combo.currentText()
+        tgt = self._target_combo.currentText()
+        self._source_combo.blockSignals(True)
+        self._target_combo.blockSignals(True)
+        self._source_combo.setCurrentText(tgt)
+        self._target_combo.setCurrentText(src)
+        self._source_combo.blockSignals(False)
+        self._target_combo.blockSignals(False)
+        self._emit_language_change()
+
+    def _emit_language_change(self) -> None:
+        self.language_changed.emit(
+            self._source_combo.currentText(),
+            self._target_combo.currentText(),
+        )
+
+    def current_pair(self) -> tuple[str, str]:
+        return (self._source_combo.currentText(), self._target_combo.currentText())
+
+    # Prompt methods (from PromptPage)
+    def _knowledge_reference_dir(self) -> Path:
+        return self._prompt_storage.ensure_reference_dir()
+
+    def _on_add_knowledge(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(self, "选择知识文档", str(self._knowledge_reference_dir()), "Markdown 文件 (*.md);;所有文件 (*)")
+        if file_path:
+            self._knowledge_paths.append(file_path)
+            self._knowledge_list.setPlainText("\n".join(self._knowledge_paths))
+
+    def _on_remove_knowledge(self) -> None:
+        self._knowledge_paths.clear()
+        self._knowledge_list.clear()
+
+    def _refresh_constraints_preview(self) -> None:
+        text = self._constraints_text.strip()
+        if not text:
+            self._constraints_btn.setText("点击编辑约束层...")
+            self._constraints_btn.setStyleSheet(
+                "QPushButton#constraintsPreview {"
+                "background: #1e293b; color: #64748b; border: 1px solid #334155;"
+                "border-radius: 8px; padding: 10px 14px; text-align: left;"
+                "font-size: 13px; min-height: 40px; }"
+                "QPushButton#constraintsPreview:hover { border: 1px solid #60a5fa; }"
+            )
+        else:
+            preview = text.replace("\n", " ")[:100]
+            suffix = "..." if len(text) > 100 else ""
+            self._constraints_btn.setText(f"{preview}{suffix}")
+            self._constraints_btn.setStyleSheet(
+                "QPushButton#constraintsPreview {"
+                "background: #1e293b; color: #e2e8f0; border: 1px solid #334155;"
+                "border-radius: 8px; padding: 10px 14px; text-align: left;"
+                "font-size: 13px; min-height: 40px; }"
+                "QPushButton#constraintsPreview:hover { border: 1px solid #60a5fa; }"
+            )
+
+    def _on_edit_constraints(self) -> None:
+        dlg = _ConstraintsDialog(self._constraints_text, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._constraints_text = dlg.text()
+            self._refresh_constraints_preview()
+
+    def _on_preview(self) -> None:
+        QMessageBox.information(self, "提示词预览", self._build_user_preview())
+
+    def _on_save(self) -> None:
+        settings = self._settings or AppSettings.load()
+        self._apply_form_to_settings(settings)
+        constraints = PromptConstraints(text=self._constraints_text)
+        references = self._collect_knowledge_references()
+
+        result_holder: dict = {}
+
+        def _do_work() -> None:
+            try:
+                rules = self._optimizer.optimize(settings, constraints, references)
+                result_holder["optimized"] = rules
+                compiled = self._compiler.compile_preview(
+                    constraints,
+                    references=references,
+                    optimized_user_layer=rules,
+                )
+                result_holder["compiled"] = compiled
+            except PromptOptimizationError as exc:
+                result_holder["error"] = str(exc)
+            except Exception as exc:
+                result_holder["error"] = str(exc)
+
+        needs_progress = bool(self._settings and self._settings.ai.base_url)
+        if needs_progress:
+            self._save_status.setText("正在优化提示词...")
+            self._save_status.setStyleSheet("color: #fbbf24; font-size: 12px;")
+            QApplication.processEvents()
+
+        _do_work()
+        self._finish_save(result_holder, settings)
+
+    def _finish_save(self, result_holder: dict, settings: AppSettings) -> None:
+        error = result_holder.get("error")
+        if error is not None:
+            self._save_status.setText(f"优化失败: {error}")
+            self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
+            return
+
+        compiled = result_holder.get("compiled")
+        if compiled is None:
+            self._save_status.setText("优化失败: 无结果")
+            self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
+            return
+
+        optimized = result_holder.get("optimized", self._constraints_text)
+        user_preview = self._build_user_preview(optimized)
+        if not self._confirm_compiled_prompt(user_preview):
+            self._save_status.setText("已取消")
+            self._save_status.setStyleSheet("color: #94a3b8; font-size: 12px;")
+            return
+
+        try:
+            saved_path = self._prompt_storage.save_compiled_prompt(
+                compiled.content,
+                settings.prompt.compiled_prompt_path,
+            )
+            stored_path = self._prompt_storage.stored_compiled_prompt_path(
+                settings.prompt.compiled_prompt_path
+            )
+            settings.prompt.compiled_prompt_path = stored_path
+            self._compiled_path.setText(stored_path)
+            if self._save_settings is not None:
+                self._save_settings()
+            else:
+                settings.save()
+            self._save_status.setText("已保存并启用 ✓")
+            self._save_status.setStyleSheet("color: #4ade80; font-size: 12px;")
+        except Exception as exc:
+            self._save_status.setText(f"保存失败: {exc}")
+            self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
+
+    def constraints_text(self) -> str:
+        return self._constraints_text
+
+    def _apply_form_to_settings(self, settings: AppSettings) -> None:
+        settings.prompt.constraints_text = self._constraints_text
+        settings.prompt.knowledge_reference_paths = list(self._knowledge_paths)
+
+    def _collect_knowledge_references(self) -> list[PromptKnowledgeReference]:
+        return [PromptKnowledgeReference(path=path) for path in self._knowledge_paths]
+
+    def _build_user_preview(self, optimized: str = "") -> str:
+        parts: list[str] = []
+        c = optimized.strip() if optimized else self._constraints_text.strip()
+        parts.append(f"约束层：\n{c if c else '（未填写）'}")
+
+        refs = self._knowledge_paths
+        if refs:
+            parts.append(f"知识引用层（{len(refs)} 个文档）：\n" + "\n".join(f"  • {r}" for r in refs))
+        else:
+            parts.append("知识引用层：\n（未添加）")
+        return "\n\n".join(parts)
+
+    def _confirm_compiled_prompt_with_dialog(self, content: str) -> bool:
+        confirmed = QMessageBox.question(
+            self,
+            "Compiled Prompt Preview",
+            f"{content}\n\nConfirm and enable this compiled prompt?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return confirmed == QMessageBox.StandardButton.Yes
 
 
 class ModelPage(QWidget):
@@ -694,11 +1031,10 @@ class MainWindow(QMainWindow):
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(200)
 
-        self._nav_language = NavButton("翻译方向")
+        self._nav_template = NavButton("翻译模板")
         self._nav_model = NavButton("模型配置")
-        self._nav_prompt = NavButton("提示词")
         self._nav_settings = NavButton("设置")
-        self._nav_buttons = [self._nav_language, self._nav_model, self._nav_prompt, self._nav_settings]
+        self._nav_buttons = [self._nav_template, self._nav_model, self._nav_settings]
         for btn in self._nav_buttons:
             btn.clicked.connect(self._on_nav_clicked)
 
@@ -706,42 +1042,38 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(4)
         sidebar_layout.addSpacing(20)
-        sidebar_layout.addWidget(self._nav_language)
+        sidebar_layout.addWidget(self._nav_template)
         sidebar_layout.addWidget(self._nav_model)
-        sidebar_layout.addWidget(self._nav_prompt)
         sidebar_layout.addWidget(self._nav_settings)
         sidebar_layout.addStretch(1)
 
         # pages
         self._stack = QStackedWidget()
 
-        self._language_page = LanguagePage(
-            context.settings.default_source_language,
-            context.settings.default_target_language,
+        self._template_page = TemplatePage(
+            source=context.settings.default_source_language,
+            target=context.settings.default_target_language,
+            constraints_text=context.settings.prompt.constraints_text,
+            knowledge_paths=context.settings.prompt.knowledge_reference_paths,
+            compiled_prompt_path=context.settings.prompt.compiled_prompt_path,
+            settings=context.settings,
         )
         self._model_page = ModelPage(
             context.settings.ai.base_url,
             context.settings.ai.api_key,
             context.settings.ai.model,
         )
-        self._prompt_page = PromptPage(
-            context.settings.prompt.constraints_text,
-            knowledge_paths=context.settings.prompt.knowledge_reference_paths,
-            compiled_prompt_path=context.settings.prompt.compiled_prompt_path,
-            settings=context.settings,
-        )
         self._settings_page = SettingsPage(
             context.hotkeys.create_selection,
             context.hotkeys.toggle_edit_mode,
         )
 
-        self._stack.addWidget(self._language_page)
+        self._stack.addWidget(self._template_page)
         self._stack.addWidget(self._model_page)
-        self._stack.addWidget(self._prompt_page)
         self._stack.addWidget(self._settings_page)
 
-        # signals — wire everything to real persistence
-        self._language_page.language_changed.connect(self._on_language_changed)
+        # signals
+        self._template_page.language_changed.connect(self._on_language_changed)
         self._model_page.config_changed.connect(self._on_model_changed)
         self._settings_page.shortcuts_changed.connect(self._on_shortcuts_changed)
 
@@ -769,7 +1101,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         # initial nav
-        self._nav_language.setChecked(True)
+        self._nav_template.setChecked(True)
         self._stack.setCurrentIndex(0)
 
     # ------------------------------------------------------------------
@@ -780,14 +1112,12 @@ class MainWindow(QMainWindow):
         sender = self.sender()
         for i, btn in enumerate(self._nav_buttons):
             btn.setChecked(btn is sender)
-        if sender is self._nav_language:
+        if sender is self._nav_template:
             self._stack.setCurrentIndex(0)
         elif sender is self._nav_model:
             self._stack.setCurrentIndex(1)
-        elif sender is self._nav_prompt:
-            self._stack.setCurrentIndex(2)
         elif sender is self._nav_settings:
-            self._stack.setCurrentIndex(3)
+            self._stack.setCurrentIndex(2)
 
     # ------------------------------------------------------------------
     # handlers — real persistence
@@ -830,7 +1160,7 @@ class MainWindow(QMainWindow):
         self._status.showMessage(f"选择框: {active}/3  |  模式: {edit}")
 
     def default_language_pair(self) -> tuple[str, str]:
-        return self._language_page.current_pair()
+        return self._template_page.current_pair()
 
     def show_window(self) -> None:
         self.show()
