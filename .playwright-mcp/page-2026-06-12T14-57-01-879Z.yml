@@ -1,0 +1,53 @@
+- generic [ref=e3]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - link [ref=e9] [cursor=pointer]:
+        - /url: /
+      - navigation [ref=e14]
+    - generic [ref=e23]:
+      - button "使用指南" [ref=e24] [cursor=pointer]:
+        - generic [ref=e25]:
+          - img "bell" [ref=e26]:
+            - img [ref=e27]
+          - generic [ref=e30]: 使用指南
+      - button "切换主题" [ref=e31] [cursor=pointer]:
+        - img "moon" [ref=e33]:
+          - img [ref=e34]
+      - button "切换语言" [ref=e36] [cursor=pointer]:
+        - img "language" [ref=e38]:
+          - img [ref=e39]
+  - main [ref=e47]:
+    - generic [ref=e51]:
+      - generic [ref=e52]:
+        - img "Logo"
+        - heading "Any Router" [level=3] [ref=e53]
+      - generic [ref=e55]:
+        - heading "登 录" [level=3] [ref=e57]
+        - generic [ref=e58]:
+          - generic [ref=e59]:
+            - generic [ref=e60]:
+              - generic [ref=e62]: 用户名或邮箱
+              - generic [ref=e64]:
+                - img "mail" [ref=e66]:
+                  - img [ref=e67]
+                - textbox "用户名或邮箱" [ref=e69]:
+                  - /placeholder: 请输入您的用户名或邮箱地址
+            - generic [ref=e70]:
+              - generic [ref=e72]: 密码
+              - generic [ref=e74]:
+                - img "lock" [ref=e76]:
+                  - img [ref=e77]
+                - textbox "密码" [ref=e79]:
+                  - /placeholder: 请输入您的密码
+                - button "Show password" [ref=e80] [cursor=pointer]:
+                  - img "eye_closed_solid" [ref=e81]:
+                    - img [ref=e82]
+            - generic [ref=e85]:
+              - button "继续" [ref=e86] [cursor=pointer]:
+                - generic [ref=e87]: 继续
+              - button "忘记密码？" [ref=e88] [cursor=pointer]:
+                - generic [ref=e89]: 忘记密码？
+          - generic [ref=e91]:
+            - text: 没有账户？
+            - link "注册" [ref=e92] [cursor=pointer]:
+              - /url: /register

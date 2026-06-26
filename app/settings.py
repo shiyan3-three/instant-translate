@@ -43,6 +43,20 @@ class AiSettings:
     base_url: str = ""
     api_key: str = ""
     model: str = ""
+    fast_model: str = ""
+    thinking_model: str = ""
+
+    @property
+    def fast_model_name(self) -> str:
+        """Return the model used for low-latency translation."""
+
+        return self.fast_model.strip() or self.model.strip()
+
+    @property
+    def thinking_model_name(self) -> str:
+        """Return the model used for rule digest and quality fallback."""
+
+        return self.thinking_model.strip() or self.model.strip() or self.fast_model.strip()
 
 
 @dataclass
@@ -80,11 +94,14 @@ class AppSettings:
             data = json.loads(file_path.read_text(encoding="utf-8"))
             ai_data = data.get("ai", {})
             prompt_data = data.get("prompt", {})
+            legacy_model = ai_data.get("model", "")
             return cls(
                 ai=AiSettings(
                     base_url=ai_data.get("base_url", ""),
                     api_key=ai_data.get("api_key", ""),
-                    model=ai_data.get("model", ""),
+                    model=legacy_model,
+                    fast_model=ai_data.get("fast_model", legacy_model),
+                    thinking_model=ai_data.get("thinking_model", legacy_model),
                 ),
                 prompt=PromptSettings(
                     constraints_text=prompt_data.get("constraints_text", ""),

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication
 from app.app_context import ApplicationContext
 from app.capture.change_detector import RegionChangeDetector
 from app.capture.screen_capture import ScreenCaptureService
+from app.feedback.store import FeedbackStore
 from app.logger import get_logger, get_debug_logger
 from app.ocr.engine import OcrEngine
 from app.ocr.postprocess import (
@@ -26,7 +27,7 @@ from app.overlay.ocr_text_window import OcrTextWindowModel, OcrTextWindowWidget
 from app.overlay.selection_box import SelectionBoxModel, SelectionBoxWidget
 from app.overlay.selection_overlay import RegionSelectionOverlay
 from app.overlay.translation_window import TranslationWindowModel, TranslationWindowWidget
-from app.state.group_state import ScreenRegion
+from app.state.group_state import GroupRuntimeState, ScreenRegion
 from app.state.runtime_store import RuntimeStore
 from app.translation.service import TranslationService
 
@@ -39,9 +40,10 @@ GROUP_COLORS = {
 
 @dataclass
 class OcrCandidate:
-    """Per-group OCR text waiting for one more stable read."""
+    """Per-group OCR text waiting until it remains stable long enough."""
 
     text: str
+    first_seen_at: float
     seen_count: int = 1
 
 
@@ -50,6 +52,8 @@ class SelectionWorkflowController(QObject):
 
     _ocr_text_ready = Signal(int, str)
     _translation_ready = Signal(int, str)
+    OCR_STABLE_SECONDS = 2.0
+    OCR_STABLE_MIN_READS = 2
 
     def __init__(
         self,
@@ -60,6 +64,7 @@ class SelectionWorkflowController(QObject):
         on_state_changed,
         capture_service: ScreenCaptureService | None = None,
         change_detector: RegionChangeDetector | None = None,
+        feedback_store: FeedbackStore | None = None,
     ) -> None:
         super().__init__()
         self._app = app
@@ -69,6 +74,7 @@ class SelectionWorkflowController(QObject):
         self._on_state_changed = on_state_changed
         self._capture_service = capture_service or ScreenCaptureService()
         self._change_detector = change_detector or RegionChangeDetector()
+        self._feedback_store = feedback_store or FeedbackStore()
         self._pending_group_id: int | None = None
         self._selection_boxes: dict[int, SelectionBoxWidget] = {}
         self._translation_windows: dict[int, TranslationWindowWidget] = {}
@@ -80,7 +86,10 @@ class SelectionWorkflowController(QObject):
         self._poll_executor = ThreadPoolExecutor(max_workers=2)
         self._last_logged_ocr: dict[int, str] = {}
         self._pending_ocr_candidates: dict[int, OcrCandidate] = {}
-        self._processing_groups: set[int] = set()
+        self._ocr_stable_seconds = self.OCR_STABLE_SECONDS
+        self._stable_clock = time.monotonic
+        self._processing_groups: dict[int, int] = {}
+        self._group_versions: dict[int, int] = {}
         self._processing_lock = Lock()
         self._poll_timer = QTimer()
         self._poll_timer.setInterval(500)
@@ -165,10 +174,14 @@ class SelectionWorkflowController(QObject):
 
         group_id = self._pending_group_id
         self._pending_group_id = None
+        group_version = self._bump_group_version(group_id)
         self._runtime_store.save_region(group_id, region)
+        self._runtime_store.runtime_states[group_id] = GroupRuntimeState()
         self._runtime_store.clear_translation_window_position(group_id)
         self._change_detector.reset_group(group_id)
         self._reset_ocr_tracking(group_id)
+        self._clear_processing(group_id)
+        self._reset_translation_request_state(group_id, "selection finalized")
 
         # Apply default language pair
         config = self._runtime_store.configs[group_id]
@@ -181,6 +194,7 @@ class SelectionWorkflowController(QObject):
         if not self._poll_timer.isActive():
             self._poll_timer.start()
 
+        get_debug_logger().debug("[G%d] OCR pipeline reset for new selection version=%d", group_id, group_version)
         get_logger().info("[G%d] \u5df2\u521b\u5efa\u9009\u62e9\u6846 (%dx%d @ %d,%d)", group_id, region.width, region.height, region.x, region.y)
         self._context.status_message = f"\u5df2\u521b\u5efa\u7b2c {group_id} \u7ec4\u9009\u62e9\u6846\u3002"
         self._notify_state_changed()
@@ -201,9 +215,12 @@ class SelectionWorkflowController(QObject):
             return False
 
         updated_region = ScreenRegion(x=x, y=y, width=w, height=h)
+        self._bump_group_version(group_id)
         self._runtime_store.save_region(group_id, updated_region)
         self._change_detector.reset_group(group_id)
         self._reset_ocr_tracking(group_id)
+        self._clear_processing(group_id)
+        self._reset_translation_request_state(group_id, "selection resized")
 
         self._upsert_selection_box(group_id, updated_region)
         if group_id not in self._runtime_store.translation_window_positions:
@@ -223,9 +240,12 @@ class SelectionWorkflowController(QObject):
             return False
 
         updated_region = ScreenRegion(x=x, y=y, width=region.width, height=region.height)
+        self._bump_group_version(group_id)
         self._runtime_store.save_region(group_id, updated_region)
         self._change_detector.reset_group(group_id)
         self._reset_ocr_tracking(group_id)
+        self._clear_processing(group_id)
+        self._reset_translation_request_state(group_id, "selection moved")
         self._upsert_selection_box(group_id, updated_region)
 
         if group_id not in self._runtime_store.translation_window_positions:
@@ -257,6 +277,7 @@ class SelectionWorkflowController(QObject):
 
         self._runtime_store.configs[group_id].translation_dock = dock
         self._runtime_store.clear_translation_window_position(group_id)
+        self._upsert_selection_box(group_id, self._runtime_store.regions[group_id])
         self._upsert_translation_window(group_id, self._runtime_store.regions[group_id])
         dock_labels = {
             "top": "\u4e0a\u4fa7",
@@ -296,10 +317,12 @@ class SelectionWorkflowController(QObject):
         if group_id not in self._runtime_store.regions:
             return False
 
+        self._bump_group_version(group_id)
+        self._clear_processing(group_id)
         self._runtime_store.remove_group(group_id)
         self._change_detector.reset_group(group_id)
-        self._clear_processing(group_id)
         if self._translation_service is not None:
+            self._translation_service.invalidate_group_requests(group_id, reason="selection deleted")
             self._translation_service.reset_group(group_id)
             self._translation_service.reset_agent(group_id)
         self._reset_ocr_tracking(group_id)
@@ -339,6 +362,11 @@ class SelectionWorkflowController(QObject):
         for box in self._selection_boxes.values():
             if box.toolbar_visible:
                 box.toolbar_panel.raise_()
+        if enabled:
+            for group_id in self._runtime_store.active_group_ids():
+                self._change_detector.reset_group(group_id)
+                self._reset_ocr_tracking(group_id)
+                self._invalidate_translation_requests(group_id, "edit mode enabled")
 
         self._notify_state_changed()
         return enabled
@@ -377,6 +405,33 @@ class SelectionWorkflowController(QObject):
         self._notify_state_changed()
         return True
 
+    def mark_translation_feedback(self, group_id: int) -> bool:
+        """Save the current OCR/translation pair as pending user feedback."""
+
+        config = self._runtime_store.configs.get(group_id)
+        state = self._runtime_store.runtime_states.get(group_id)
+        if config is None or state is None:
+            return False
+
+        ocr_text = state.latest_ocr_text.strip()
+        translation_text = state.latest_translation_text.strip()
+        if not ocr_text or not translation_text or translation_text.startswith("翻译失败"):
+            self._context.status_message = f"第 {group_id} 组暂无可标记的翻译。"
+            self._notify_state_changed()
+            return False
+
+        record = self._feedback_store.add_feedback(
+            group_id=group_id,
+            source_language=config.source_language,
+            target_language=config.target_language,
+            ocr_text=ocr_text,
+            translation_text=translation_text,
+        )
+        get_logger().info("[G%d] Translation feedback marked | id=%s", group_id, record.id[:8])
+        self._context.status_message = f"已标记第 {group_id} 组翻译，稍后可在主界面“优化翻译”中处理。"
+        self._notify_state_changed()
+        return True
+
     # ------------------------------------------------------------------
     # polling pipeline
     # ------------------------------------------------------------------
@@ -387,26 +442,60 @@ class SelectionWorkflowController(QObject):
         with self._processing_lock:
             return group_id in self._processing_groups
 
-    def _try_mark_processing(self, group_id: int) -> bool:
+    def _try_mark_processing(self, group_id: int, group_version: int) -> bool:
         """Mark a group as processing, unless it is already busy."""
 
         with self._processing_lock:
             if group_id in self._processing_groups:
                 return False
-            self._processing_groups.add(group_id)
+            self._processing_groups[group_id] = group_version
             return True
 
-    def _clear_processing(self, group_id: int) -> None:
+    def _clear_processing(self, group_id: int, group_version: int | None = None) -> None:
         """Release the in-flight OCR marker for one group."""
 
         with self._processing_lock:
-            self._processing_groups.discard(group_id)
+            if group_version is None or self._processing_groups.get(group_id) == group_version:
+                self._processing_groups.pop(group_id, None)
+
+    def _bump_group_version(self, group_id: int) -> int:
+        """Invalidate older async OCR work for one group id."""
+
+        self._group_versions[group_id] = self._group_versions.get(group_id, 0) + 1
+        return self._group_versions[group_id]
+
+    def _group_version(self, group_id: int) -> int:
+        return self._group_versions.get(group_id, 0)
+
+    def _is_stale_group_work(self, group_id: int, group_version: int) -> bool:
+        return (
+            group_version != self._group_version(group_id)
+            or group_id not in self._runtime_store.regions
+            or group_id not in self._runtime_store.runtime_states
+        )
 
     def _reset_ocr_tracking(self, group_id: int) -> None:
         """Clear accepted and pending OCR text for one group."""
 
         self._last_logged_ocr.pop(group_id, None)
         self._pending_ocr_candidates.pop(group_id, None)
+
+    def _invalidate_translation_requests(self, group_id: int, reason: str) -> None:
+        """Mark in-flight translations stale when OCR/region state changes."""
+
+        if self._translation_service is None:
+            return
+        invalidate = getattr(self._translation_service, "invalidate_group_requests", None)
+        if invalidate is not None:
+            invalidate(group_id, reason=reason)
+
+    def _reset_translation_request_state(self, group_id: int, reason: str) -> None:
+        """Invalidate in-flight work and clear duplicate-text dedupe for one group."""
+
+        if self._translation_service is None:
+            return
+        self._translation_service.invalidate_group_requests(group_id, reason=reason)
+        self._translation_service.reset_group(group_id)
 
     def _tick(self) -> None:
         """Called by QTimer every 500 ms — scan active groups for changes."""
@@ -443,23 +532,34 @@ class SelectionWorkflowController(QObject):
                 "[G%d] tick: capture=%.1fms change=%.1fms total=%.1fms",
                 group_id, cap_ms, chg_ms, tick_ms,
             )
-            if not self._try_mark_processing(group_id):
+            group_version = self._group_version(group_id)
+            if not self._try_mark_processing(group_id, group_version):
                 continue
             try:
-                self._poll_executor.submit(self._process_frame, group_id, frame)
+                self._poll_executor.submit(self._process_frame, group_id, frame, group_version)
             except Exception:
-                self._clear_processing(group_id)
+                self._clear_processing(group_id, group_version)
                 raise
 
-    def _process_frame(self, group_id: int, frame) -> None:
+    def _process_frame(self, group_id: int, frame, group_version: int | None = None) -> None:
         """Run OCR and translation, then release this group's in-flight marker."""
 
+        if group_version is None:
+            group_version = self._group_version(group_id)
         try:
-            self._process_frame_inner(group_id, frame)
+            if self._is_stale_group_work(group_id, group_version):
+                get_debug_logger().debug(
+                    "[G%d] OCR worker ignored before start: stale version=%d current=%d",
+                    group_id,
+                    group_version,
+                    self._group_version(group_id),
+                )
+                return
+            self._process_frame_inner(group_id, frame, group_version)
         finally:
-            self._clear_processing(group_id)
+            self._clear_processing(group_id, group_version)
 
-    def _process_frame_inner(self, group_id: int, frame) -> None:
+    def _process_frame_inner(self, group_id: int, frame, group_version: int) -> None:
         """Run OCR and request translation — executes on a background thread."""
 
         log = get_logger()
@@ -476,9 +576,19 @@ class SelectionWorkflowController(QObject):
             return
 
         ocr_ms = (time.perf_counter() - t0) * 1000
+        if self._is_stale_group_work(group_id, group_version):
+            get_debug_logger().debug(
+                "[G%d] OCR worker ignored after recognise: stale version=%d current=%d",
+                group_id,
+                group_version,
+                self._group_version(group_id),
+            )
+            return
 
         if result.is_empty:
             get_debug_logger().debug("[G%d] OCR empty (%.0fms)", group_id, ocr_ms)
+            self._pending_ocr_candidates.pop(group_id, None)
+            self._invalidate_translation_requests(group_id, "ocr empty")
             self._translation_ready.emit(group_id, "\u672a\u8bc6\u522b\u5230\u6587\u672c")
             return
 
@@ -487,9 +597,11 @@ class SelectionWorkflowController(QObject):
         clean_text = normalize_ocr_text(result.raw_text)
         if not clean_text:
             self._pending_ocr_candidates.pop(group_id, None)
+            self._invalidate_translation_requests(group_id, "ocr normalized empty")
             return
         if is_suspicious_ocr_text(clean_text, source_lang):
             self._pending_ocr_candidates.pop(group_id, None)
+            self._invalidate_translation_requests(group_id, "ocr suspicious")
             get_debug_logger().debug("[G%d] OCR suspicious skipped: %r", group_id, clean_text[:60])
             return
 
@@ -498,14 +610,46 @@ class SelectionWorkflowController(QObject):
             get_debug_logger().debug("[G%d] OCR dup skipped: %r", group_id, clean_text[:60])
             return
 
+        now = self._stable_clock()
         pending = self._pending_ocr_candidates.get(group_id)
-        if pending is None or not is_stable_ocr_text(clean_text, pending.text):
-            self._pending_ocr_candidates[group_id] = OcrCandidate(clean_text)
-            get_debug_logger().debug("[G%d] OCR waiting for stable read: %r", group_id, clean_text[:60])
+        if pending is None:
+            self._pending_ocr_candidates[group_id] = OcrCandidate(clean_text, first_seen_at=now)
+            self._invalidate_translation_requests(group_id, "ocr candidate started")
+            get_debug_logger().debug("[G%d] OCR waiting for stable window: %r", group_id, clean_text[:60])
+            return
+
+        same_candidate = clean_text == pending.text or is_duplicate_ocr_text(clean_text, pending.text)
+        if not same_candidate:
+            fuzzy_stable = is_stable_ocr_text(clean_text, pending.text)
+            self._pending_ocr_candidates[group_id] = OcrCandidate(clean_text, first_seen_at=now)
+            self._invalidate_translation_requests(group_id, "ocr candidate changed")
+            get_debug_logger().debug(
+                "[G%d] OCR candidate changed; restarting stable window fuzzy=%s text=%r",
+                group_id,
+                fuzzy_stable,
+                clean_text[:60],
+            )
             return
 
         pending.seen_count += 1
-        if pending.seen_count < 2:
+        stable_for = now - pending.first_seen_at
+        if pending.seen_count < self.OCR_STABLE_MIN_READS or stable_for < self._ocr_stable_seconds:
+            get_debug_logger().debug(
+                "[G%d] OCR stable candidate waiting %.1fs/%.1fs reads=%d text=%r",
+                group_id,
+                stable_for,
+                self._ocr_stable_seconds,
+                pending.seen_count,
+                clean_text[:60],
+            )
+            return
+        if self._is_stale_group_work(group_id, group_version):
+            get_debug_logger().debug(
+                "[G%d] OCR worker ignored before accept: stale version=%d current=%d",
+                group_id,
+                group_version,
+                self._group_version(group_id),
+            )
             return
         self._pending_ocr_candidates.pop(group_id, None)
         self._last_logged_ocr[group_id] = clean_text
@@ -575,7 +719,10 @@ class SelectionWorkflowController(QObject):
 
     def _ensure_translation(self) -> TranslationService:
         if self._translation_service is None:
-            self._translation_service = TranslationService(self._context.settings)
+            self._translation_service = TranslationService(
+                self._context.settings,
+                feedback_store=self._feedback_store,
+            )
         return self._translation_service
 
     def set_source_language(self, group_id: int, language: str) -> None:
@@ -642,6 +789,7 @@ class SelectionWorkflowController(QObject):
             paused=config.paused,
             source_language=config.source_language,
             target_language=config.target_language,
+            translation_dock=config.translation_dock,
         )
 
         box = self._selection_boxes.get(group_id)
@@ -653,6 +801,8 @@ class SelectionWorkflowController(QObject):
             box.pause_toggled.connect(self.toggle_group_pause)
             box.source_language_changed.connect(self.set_source_language)
             box.target_language_changed.connect(self.set_target_language)
+            box.translation_dock_changed.connect(self.set_translation_dock)
+            box.feedback_requested.connect(self.mark_translation_feedback)
             box.moved.connect(self.move_group)
             box.resized.connect(self.resize_group)
             self._selection_boxes[group_id] = box
@@ -691,7 +841,6 @@ class SelectionWorkflowController(QObject):
         if translation_window is None:
             translation_window = TranslationWindowWidget(model)
             translation_window.moved.connect(self.move_translation_window)
-            translation_window.dock_changed.connect(self.set_translation_dock)
             self._translation_windows[group_id] = translation_window
         else:
             translation_window.apply_model(model)

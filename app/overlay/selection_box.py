@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.overlay.window_interaction import set_window_click_through
+from app.overlay.window_interaction import set_window_click_through, set_window_excluded_from_capture
 
 TOOLBAR_MARGIN = 10
 
@@ -33,6 +33,7 @@ class SelectionBoxModel:
     paused: bool = False
     source_language: str = "English"
     target_language: str = "中文"
+    translation_dock: str = "bottom"
 
 
 class SelectionToolbarWidget(QWidget):
@@ -44,8 +45,16 @@ class SelectionToolbarWidget(QWidget):
     pause_toggled = Signal()
     source_language_changed = Signal(str)
     target_language_changed = Signal(str)
+    translation_dock_changed = Signal(str)
+    feedback_requested = Signal()
 
     LANGUAGES = ["English", "中文", "日本語"]
+    DOCK_OPTIONS = [
+        ("下", "bottom"),
+        ("上", "top"),
+        ("左", "left"),
+        ("右", "right"),
+    ]
 
     def __init__(self, parent: QWidget | None = None) -> None:
         flags = (
@@ -57,6 +66,7 @@ class SelectionToolbarWidget(QWidget):
         self.setObjectName("selectionToolbarPanel")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        set_window_excluded_from_capture(self, True)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 6, 8, 6)
@@ -72,25 +82,42 @@ class SelectionToolbarWidget(QWidget):
         self.target_combo.setCurrentText("中文")
         self.target_combo.setObjectName("toolbarCombo")
 
+        self.dock_combo = QComboBox()
+        for label, value in self.DOCK_OPTIONS:
+            self.dock_combo.addItem(label, value)
+        self.dock_combo.setCurrentIndex(0)
+        self.dock_combo.setObjectName("toolbarCombo")
+        self.dock_combo.setToolTip("翻译框位置")
+
         self.reselect_button = QPushButton("重选")
         self.ocr_button = QPushButton("OCR")
+        self.feedback_button = QPushButton("翻译有误")
         self.pause_button = QPushButton("暂停")
         self.delete_button = QPushButton("删除")
 
         layout.addWidget(self.source_combo)
         layout.addWidget(self.target_combo)
+        layout.addWidget(self.dock_combo)
 
-        for button in (self.reselect_button, self.ocr_button, self.pause_button, self.delete_button):
+        for button in (
+            self.reselect_button,
+            self.ocr_button,
+            self.feedback_button,
+            self.pause_button,
+            self.delete_button,
+        ):
             button.setObjectName("toolbarButton")
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             layout.addWidget(button)
 
         self.reselect_button.clicked.connect(self.reselect_requested.emit)
         self.ocr_button.clicked.connect(self.ocr_view_requested.emit)
+        self.feedback_button.clicked.connect(self.feedback_requested.emit)
         self.pause_button.clicked.connect(self.pause_toggled.emit)
         self.delete_button.clicked.connect(self.delete_requested.emit)
         self.source_combo.currentTextChanged.connect(self.source_language_changed.emit)
         self.target_combo.currentTextChanged.connect(self.target_language_changed.emit)
+        self.dock_combo.currentIndexChanged.connect(self._emit_translation_dock_changed)
         self._apply_styles()
 
     def set_paused(self, paused: bool) -> None:
@@ -107,6 +134,25 @@ class SelectionToolbarWidget(QWidget):
         self.target_combo.blockSignals(True)
         self.target_combo.setCurrentText(target)
         self.target_combo.blockSignals(False)
+
+    def set_translation_dock(self, dock: str) -> None:
+        """Update dock combo without re-emitting signals."""
+
+        self.dock_combo.blockSignals(True)
+        for index in range(self.dock_combo.count()):
+            if self.dock_combo.itemData(index) == dock:
+                self.dock_combo.setCurrentIndex(index)
+                break
+        self.dock_combo.blockSignals(False)
+
+    def _emit_translation_dock_changed(self, *_args) -> None:
+        dock = self.dock_combo.currentData()
+        if isinstance(dock, str):
+            self.translation_dock_changed.emit(dock)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        set_window_excluded_from_capture(self, True)
 
     def _apply_styles(self) -> None:
         normal_button_style = """
@@ -145,6 +191,7 @@ class SelectionToolbarWidget(QWidget):
         """
         self.reselect_button.setStyleSheet(normal_button_style)
         self.ocr_button.setStyleSheet(normal_button_style)
+        self.feedback_button.setStyleSheet(normal_button_style)
         self.pause_button.setStyleSheet(normal_button_style)
         self.delete_button.setStyleSheet(danger_button_style)
         self.setStyleSheet(
@@ -192,6 +239,8 @@ class SelectionBoxWidget(QWidget):
     ocr_view_requested = Signal(int)
     source_language_changed = Signal(int, str)
     target_language_changed = Signal(int, str)
+    translation_dock_changed = Signal(int, str)
+    feedback_requested = Signal(int)
     moved = Signal(int, int, int)
     resized = Signal(int, int, int, int, int)  # group_id, x, y, w, h
 
@@ -214,6 +263,7 @@ class SelectionBoxWidget(QWidget):
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        set_window_excluded_from_capture(self, True)
         self.setMouseTracking(True)
 
         self.group_badge = QLabel(str(model.group_id), self)
@@ -229,6 +279,8 @@ class SelectionBoxWidget(QWidget):
         self.toolbar_panel.delete_requested.connect(lambda: self.delete_requested.emit(self.model.group_id))
         self.toolbar_panel.source_language_changed.connect(lambda lang: self.source_language_changed.emit(self.model.group_id, lang))
         self.toolbar_panel.target_language_changed.connect(lambda lang: self.target_language_changed.emit(self.model.group_id, lang))
+        self.toolbar_panel.translation_dock_changed.connect(lambda dock: self.translation_dock_changed.emit(self.model.group_id, dock))
+        self.toolbar_panel.feedback_requested.connect(lambda: self.feedback_requested.emit(self.model.group_id))
 
         self.apply_model(model)
         self.apply_edit_mode(False)
@@ -265,6 +317,7 @@ class SelectionBoxWidget(QWidget):
             model.x, model.y, model.width, model.height,
             model.group_id, model.accent_color,
             model.paused, model.source_language, model.target_language,
+            model.translation_dock,
             self._editable,
         )
         if getattr(self, "_last_applied_state", None) == current:
@@ -278,6 +331,7 @@ class SelectionBoxWidget(QWidget):
         self.size_badge.setText(self.format_dimensions(model.width, model.height))
         self.toolbar_panel.set_paused(model.paused)
         self.toolbar_panel.set_languages(model.source_language, model.target_language)
+        self.toolbar_panel.set_translation_dock(model.translation_dock)
         self._update_overlay_geometry()
         self._apply_child_styles()
         self.update()
@@ -288,7 +342,12 @@ class SelectionBoxWidget(QWidget):
         # Skip toolbar flicker but always apply visual state on first call
         changed = self._editable != enabled
         self._editable = enabled
-        self.size_badge.setHidden(not enabled)
+        # OCR captures the same rectangle as this widget. Keep all badge chrome
+        # hidden in every mode so group numbers and size labels never become
+        # source text. The group is still visible via accent color, toolbar, and
+        # the linked translation/OCR windows.
+        self.group_badge.setHidden(True)
+        self.size_badge.setHidden(True)
 
         # Win32 WS_EX_TRANSPARENT toggle — reliable at runtime unlike setWindowFlags
         set_window_click_through(self, not enabled)
@@ -323,25 +382,14 @@ class SelectionBoxWidget(QWidget):
         return self._editable and not self.input_passthrough_enabled
 
     def capture_with_chrome_hidden(self, callback):
-        """Run a capture callback without badges or toolbar polluting OCR."""
+        """Run a capture callback without mutating visible overlay state.
 
-        group_badge_hidden = self.group_badge.isHidden()
-        size_badge_hidden = self.size_badge.isHidden()
-        toolbar_visible = self.toolbar_panel.isVisible()
+        Edit mode keeps OCR polling active, but inner badges are hidden up
+        front. Avoid hide/show mutations here because doing that every polling
+        tick causes visible flicker.
+        """
 
-        self.group_badge.hide()
-        self.size_badge.hide()
-        self.toolbar_panel.hide()
-        QApplication.processEvents()
-        try:
-            return callback()
-        finally:
-            self.group_badge.setHidden(group_badge_hidden)
-            self.size_badge.setHidden(size_badge_hidden)
-            self.toolbar_panel.setVisible(toolbar_visible)
-            if toolbar_visible:
-                self._update_toolbar_position()
-            QApplication.processEvents()
+        return callback()
 
     def _update_input_mask(self) -> None:
         """Keep edit-mode hit testing active across the whole selection body."""
@@ -506,6 +554,7 @@ class SelectionBoxWidget(QWidget):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        set_window_excluded_from_capture(self, True)
         if self._editable:
             self.toolbar_panel.show()
             self._update_toolbar_position()

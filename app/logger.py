@@ -65,9 +65,8 @@ _initialised = False
 
 def _init_loggers() -> None:
     global _pipeline_logger, _debug_logger, _initialised
-    if _initialised:
+    if _initialised and _pipeline_logger is not None and _debug_logger is not None:
         return
-    _initialised = True
 
     # -- pipeline log (INFO+) ------------------------------------------------
     pl = logging.getLogger("instant-translate.pipeline")
@@ -89,6 +88,7 @@ def _init_loggers() -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     for lg in (pl, dl):
         lg.info("─── 启动 %s ───", ts)
+    _initialised = True
 
 
 def _add_file_handler(logger: logging.Logger, path: Path, level: int) -> None:

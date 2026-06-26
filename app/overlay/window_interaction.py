@@ -9,6 +9,8 @@ from PySide6.QtWidgets import QWidget
 GWL_EXSTYLE = -20
 WS_EX_LAYERED = 0x00080000
 WS_EX_TRANSPARENT = 0x00000020
+WDA_NONE = 0x00000000
+WDA_EXCLUDEFROMCAPTURE = 0x00000011
 SWP_FRAMECHANGED = 0x0020
 SWP_NOMOVE = 0x0002
 SWP_NOSIZE = 0x0001
@@ -48,3 +50,23 @@ def is_window_click_through(widget: QWidget) -> bool:
     hwnd = int(widget.winId())
     ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
     return bool(ex_style & WS_EX_TRANSPARENT)
+
+
+def set_window_excluded_from_capture(widget: QWidget, enabled: bool) -> bool:
+    """Record capture-exclusion intent without calling risky native APIs.
+
+    ``SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`` looked attractive for
+    hiding overlays from OCR screenshots, but it can crash or behave
+    inconsistently across real Windows/Qt/frozen-app combinations. OCR avoids
+    edit-mode overlay pollution by hiding inner selection badges while polling
+    continues.
+    """
+
+    setattr(widget, "_capture_excluded_enabled", enabled)
+    return False
+
+
+def is_window_excluded_from_capture(widget: QWidget) -> bool:
+    """Return whether capture exclusion is intended/enabled for a widget."""
+
+    return bool(getattr(widget, "_capture_excluded_enabled", False))

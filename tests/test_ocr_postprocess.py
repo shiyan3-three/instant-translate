@@ -49,8 +49,18 @@ class OcrPostprocessTests(unittest.TestCase):
         self.assertNotIn("595", clean)
         self.assertNotIn("37", clean)
 
+    def test_normalize_removes_social_metric_noise_lines(self) -> None:
+        raw = "关注6.7W\n点赞45.6W\n古力娜扎丁字牛仔裤, 这穿搭太酷了!"
+
+        clean = normalize_ocr_text(raw)
+
+        self.assertEqual(clean, "古力娜扎丁字牛仔裤, 这穿搭太酷了!")
+
     def test_suspicious_detection_rejects_dimension_only_noise(self) -> None:
         self.assertTrue(is_suspicious_ocr_text("595 x 3", "中文"))
+
+    def test_suspicious_detection_rejects_single_group_number_noise(self) -> None:
+        self.assertTrue(is_suspicious_ocr_text("1", "中文"))
 
     def test_suspicious_detection_rejects_source_language_script_mismatch(self) -> None:
         self.assertTrue(is_suspicious_ocr_text("の、\n初加索引的", "中文"))

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal, Union
 
 import httpx
+
+ThinkingMode = Union[Literal["enabled", "disabled"], bool, None]
 
 
 @dataclass
@@ -43,7 +46,7 @@ class OpenAICompatibleClient:
     # public API
     # ------------------------------------------------------------------
 
-    def chat(self, messages: list[dict], thinking: bool = False) -> str:
+    def chat(self, messages: list[dict], thinking: ThinkingMode = None) -> str:
         """Send a full messages array and return the response text.
 
         Raises TranslationError on timeout, HTTP error, or empty response.
@@ -59,10 +62,9 @@ class OpenAICompatibleClient:
             "model": self._config.model,
             "messages": messages,
             "temperature": 0.0,
-            "max_tokens": 1024,
+            "max_tokens": 4096,  # Increased from 1024 to give reasoning+content enough budget
         }
-        if thinking:
-            payload["thinking"] = {"type": "enabled"}
+        self._apply_thinking(payload, thinking)
 
         headers = self._build_headers()
 
@@ -114,7 +116,7 @@ class OpenAICompatibleClient:
             raise TranslationError("API returned an empty translation.")
         return result.strip()
 
-    def complete(self, system_prompt: str, user_prompt: str, thinking: bool = False) -> str:
+    def complete(self, system_prompt: str, user_prompt: str, thinking: ThinkingMode = None) -> str:
         """Send one chat completion request and return the response text.
 
         Raises TranslationError on timeout, HTTP error, or empty response.
@@ -127,8 +129,7 @@ class OpenAICompatibleClient:
             raise TranslationError("Cannot send an empty prompt.")
 
         payload = self._build_payload(system_prompt, user_prompt)
-        if thinking:
-            payload["thinking"] = {"type": "enabled"}
+        self._apply_thinking(payload, thinking)
         headers = self._build_headers()
 
         t0 = _time.perf_counter()
@@ -212,6 +213,27 @@ class OpenAICompatibleClient:
             "Authorization": f"Bearer {self._config.api_key}",
             "Content-Type": "application/json",
         }
+
+    @staticmethod
+    def _apply_thinking(payload: dict, thinking: ThinkingMode) -> None:
+        """Apply DeepSeek-style thinking controls to a request payload.
+
+        ``None`` omits the provider-specific field for compatibility.
+        ``True``/``False`` are accepted for older callers, but new code
+        should pass the explicit string modes.
+        """
+
+        if thinking is None:
+            return
+        if thinking is True:
+            mode = "enabled"
+        elif thinking is False:
+            mode = "disabled"
+        elif thinking in ("enabled", "disabled"):
+            mode = thinking
+        else:
+            raise ValueError("thinking must be 'enabled', 'disabled', True, False, or None")
+        payload["thinking"] = {"type": mode}
 
     @staticmethod
     def _extract_content(response_json: dict) -> str:

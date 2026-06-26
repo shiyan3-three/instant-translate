@@ -37,6 +37,14 @@ class TranslationWindowWidgetTests(unittest.TestCase):
 
         self.assertLess(geometry.y(), region.y)
 
+    def test_compute_geometry_keeps_toolbar_usable_for_tiny_selection(self) -> None:
+        region = ScreenRegion(120, 160, 70, 36)
+        screen = QRect(0, 0, 1920, 1080)
+
+        geometry = TranslationWindowWidget.compute_geometry(region, screen, "bottom")
+
+        self.assertEqual(geometry.width(), 260)
+
     def test_widget_shows_group_and_translation_text_in_normal_mode(self) -> None:
         model = TranslationWindowModel(
             group_id=2,
@@ -59,7 +67,7 @@ class TranslationWindowWidgetTests(unittest.TestCase):
         self.assertFalse(widget.dock_controls_visible)
         self.assertFalse(widget.translation_label.isHidden())
 
-    def test_edit_mode_reveals_language_pair_and_dock_buttons(self) -> None:
+    def test_edit_mode_reveals_language_pair_without_translation_toolbar(self) -> None:
         model = TranslationWindowModel(
             group_id=1,
             x=100,
@@ -74,10 +82,8 @@ class TranslationWindowWidgetTests(unittest.TestCase):
 
         widget.apply_edit_mode(True)
 
-        self.assertTrue(widget.dock_controls_visible)
         self.assertFalse(widget.language_pair_label.isHidden())
-        self.assertEqual(widget.dock_up_button.text(), "\u4e0a")
-        self.assertEqual(widget.dock_right_button.text(), "\u53f3")
+        self.assertFalse(widget.dock_controls_visible)
 
     def test_mouse_drag_updates_window_position(self) -> None:
         model = TranslationWindowModel(

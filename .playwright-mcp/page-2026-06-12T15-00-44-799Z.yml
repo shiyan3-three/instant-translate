@@ -1,0 +1,56 @@
+- generic [ref=e3]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - link [ref=e9] [cursor=pointer]:
+        - /url: /
+      - navigation [ref=e14]
+    - generic [ref=e23]:
+      - button "使用指南" [ref=e24] [cursor=pointer]:
+        - generic [ref=e25]:
+          - img "bell" [ref=e26]:
+            - img [ref=e27]
+          - generic [ref=e30]: 使用指南
+      - button "切换主题" [ref=e31] [cursor=pointer]:
+        - img "moon" [ref=e33]:
+          - img [ref=e34]
+      - button "切换语言" [ref=e36] [cursor=pointer]:
+        - img "language" [ref=e38]:
+          - img [ref=e39]
+  - generic [ref=e45]:
+    - complementary [ref=e46]:
+      - generic [ref=e48]:
+        - menu [ref=e53]:
+          - generic [ref=e55]:
+            - generic [ref=e56]: 控制台
+            - link "数据看板" [ref=e57] [cursor=pointer]:
+              - /url: /console
+              - menuitem "数据看板" [ref=e58]:
+                - img [ref=e61]
+                - generic [ref=e68]: 数据看板
+            - link "API令牌" [ref=e69] [cursor=pointer]:
+              - /url: /console/token
+              - menuitem "API令牌" [ref=e70]:
+                - img [ref=e73]
+                - generic [ref=e79]: API令牌
+            - link "使用日志" [ref=e80] [cursor=pointer]:
+              - /url: /console/log
+              - menuitem "使用日志" [ref=e81]:
+                - img [ref=e84]
+                - generic [ref=e88]: 使用日志
+          - generic [ref=e90]:
+            - generic [ref=e91]: 个人中心
+            - link "钱包" [ref=e92] [cursor=pointer]:
+              - /url: /console/topup
+              - menuitem "钱包" [ref=e93]:
+                - img [ref=e96]
+                - generic [ref=e100]: 钱包
+            - link "个人设置" [ref=e101] [cursor=pointer]:
+              - /url: /console/personal
+              - menuitem "个人设置" [ref=e102]:
+                - img [ref=e105]
+                - generic [ref=e110]: 个人设置
+        - img [ref=e114] [cursor=pointer]
+    - main [ref=e117]:
+      - generic [ref=e119]:
+        - img [ref=e122]
+        - generic [ref=e126]: 加载中...

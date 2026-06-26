@@ -1,0 +1,107 @@
+- generic [ref=e3]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - link [ref=e9] [cursor=pointer]:
+        - /url: /
+      - navigation [ref=e14]
+    - generic [ref=e23]:
+      - button "使用指南" [ref=e24] [cursor=pointer]:
+        - generic [ref=e25]:
+          - img "bell" [ref=e26]:
+            - img [ref=e27]
+          - generic [ref=e30]: 使用指南
+      - button "切换主题" [ref=e31] [cursor=pointer]:
+        - img "moon" [ref=e33]:
+          - img [ref=e34]
+      - button "切换语言" [ref=e36] [cursor=pointer]:
+        - img "language" [ref=e38]:
+          - img [ref=e39]
+  - main [ref=e47]:
+    - main [ref=e50]:
+      - generic [ref=e54]:
+        - generic [ref=e61]:
+          - generic [ref=e62]:
+            - generic [ref=e63]:
+              - img "layers" [ref=e65]:
+                - img [ref=e66]
+              - generic [ref=e68]:
+                - generic [ref=e69]: 模型定价
+                - generic [ref=e71]:
+                  - img "verify" [ref=e72]:
+                    - img [ref=e73]
+                  - generic [ref=e75]: "当前分组: default，倍率:"
+            - generic [ref=e76]:
+              - generic [ref=e77]:
+                - generic [ref=e78]: 分组倍率
+                - generic [ref=e79]: 1.0x
+              - generic [ref=e80]:
+                - generic [ref=e81]: 可用模型
+                - generic [ref=e82]: "0"
+              - generic [ref=e83]:
+                - generic [ref=e84]: 计费类型
+                - generic [ref=e85]: "2"
+          - generic [ref=e88]:
+            - img "info_circle" [ref=e89]:
+              - img [ref=e90]
+            - generic [ref=e92]: 按量计费费用 = 分组倍率 × 模型倍率 × （提示token数 + 补全token数 × 补全倍率）/ 500000 （单位：美元）
+        - generic [ref=e94]:
+          - generic [ref=e95]:
+            - tablist [ref=e96]:
+              - generic [ref=e97]:
+                - generic [ref=e98] [cursor=pointer]: ←
+                - tab "全部模型 0" [selected] [ref=e100]:
+                  - generic [ref=e101]:
+                    - text: 全部模型
+                    - generic [ref=e103]: "0"
+                - generic [ref=e104] [cursor=pointer]: →
+            - generic:
+              - tabpanel "全部模型 0"
+          - generic [ref=e107]:
+            - generic [ref=e109]:
+              - img "search" [ref=e111]:
+                - img [ref=e112]
+              - textbox "模糊搜索模型名称" [ref=e114]
+            - button "copy 复制选中模型" [disabled] [ref=e115]:
+              - generic [ref=e116]:
+                - img "copy" [ref=e117]:
+                  - img [ref=e118]
+                - generic [ref=e121]: 复制选中模型
+          - generic [ref=e125]:
+            - img [ref=e127]
+            - generic [ref=e132]:
+              - generic [ref=e134]:
+                - grid [ref=e135]:
+                  - rowgroup [ref=e144]:
+                    - row "Select all rows Current sort order is descending 模型名称 Current sort order is none 可用分组 倍率 help_circle 模型价格" [ref=e145]:
+                      - columnheader "Select all rows" [ref=e146]:
+                        - checkbox "Select all rows" [ref=e150]
+                      - columnheader "Current sort order is descending" [ref=e152] [cursor=pointer]:
+                        - button "Current sort order is descending" [ref=e154]:
+                          - generic "可用性" [ref=e155]
+                          - generic [ref=e156]:
+                            - img "caretup" [ref=e157]:
+                              - img [ref=e158]
+                            - img "caretdown" [ref=e160]:
+                              - img [ref=e161]
+                      - columnheader "模型名称" [ref=e163]
+                      - columnheader "Current sort order is none" [ref=e164] [cursor=pointer]:
+                        - button "Current sort order is none" [ref=e166]:
+                          - generic "计费类型" [ref=e167]
+                          - generic [ref=e168]:
+                            - img "caretup" [ref=e169]:
+                              - img [ref=e170]
+                            - img "caretdown" [ref=e172]:
+                              - img [ref=e173]
+                      - columnheader "可用分组" [ref=e175]
+                      - columnheader "倍率 help_circle" [ref=e176]:
+                        - generic [ref=e177]:
+                          - generic [ref=e178]: 倍率
+                          - img "help_circle" [ref=e179] [cursor=pointer]:
+                            - img [ref=e180]
+                      - columnheader "模型价格" [ref=e182]
+                  - rowgroup
+                - generic [ref=e185]:
+                  - generic:
+                    - img
+                  - generic [ref=e187]: 搜索无结果
+              - generic [ref=e189]: 第 0 - 0 条，共 0 条

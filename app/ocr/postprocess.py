@@ -14,6 +14,10 @@ _LATIN_RE = re.compile(r"[A-Za-z]")
 _CJK_RE = re.compile(r"[\u3400-\u9fff]")
 _KANA_RE = re.compile(r"[\u3040-\u30ff]")
 _PUNCT_OR_SYMBOL_RE = re.compile(r"[\W_]+", re.UNICODE)
+_SOCIAL_METRIC_RE = re.compile(
+    r"^(?:关注|粉丝|获赞|点赞|赞|评论|收藏|分享|转发|播放|浏览)"
+    r"\s*[:：]?\s*[\d.,]+(?:[wW万kK千]+)?$"
+)
 
 
 def normalize_ocr_text(raw_text: str) -> str:
@@ -32,6 +36,8 @@ def normalize_ocr_text(raw_text: str) -> str:
         if not line:
             continue
         if _is_toolbar_noise(line):
+            continue
+        if _is_social_metric_noise(line):
             continue
         clean_lines.append(line)
 
@@ -53,6 +59,8 @@ def is_suspicious_ocr_text(text: str, source_language: str = "") -> bool:
     key = _comparison_key(clean)
     compact = re.sub(r"\s+", "", key)
     if not compact:
+        return True
+    if compact.isdigit():
         return True
     if not _CONTENT_RE.search(compact):
         return True
@@ -106,6 +114,13 @@ def _is_toolbar_noise(line: str) -> bool:
 
     compact = re.sub(r"\s+", "", line)
     return bool(compact) and all(word in _TOOLBAR_WORDS for word in _split_toolbar_words(compact))
+
+
+def _is_social_metric_noise(line: str) -> bool:
+    """Detect common social-video counters accidentally captured near subtitles."""
+
+    compact = re.sub(r"\s+", "", line)
+    return bool(compact) and bool(_SOCIAL_METRIC_RE.match(compact))
 
 
 def _split_toolbar_words(compact: str) -> list[str]:

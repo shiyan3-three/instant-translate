@@ -8,6 +8,7 @@ from typing import Sequence
 from PySide6.QtWidgets import QApplication
 
 from app.app_context import ApplicationContext
+from app.feedback.store import FeedbackStore
 from app.gui.main_window import MainWindow
 from app.gui.settings_window import SettingsWindow
 from app.gui.tray_icon import TrayIconController
@@ -29,6 +30,7 @@ class DesktopShell:
     tray_icon: TrayIconController
     hotkeys: GlobalHotkeyService
     runtime_store: RuntimeStore
+    feedback_store: FeedbackStore
     selection_workflow: SelectionWorkflowController
 
 
@@ -52,14 +54,20 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
 
     context = build_application_context()
     runtime_store = RuntimeStore()
+    feedback_store = FeedbackStore()
     settings_window = SettingsWindow(context.settings)
-    main_window = MainWindow(context, runtime_store=runtime_store)
+    main_window = MainWindow(
+        context,
+        runtime_store=runtime_store,
+        feedback_store=feedback_store,
+    )
     tray_icon = TrayIconController(app, main_window, settings_window, main_window)
     hotkeys = GlobalHotkeyService(app, context.hotkeys, main_window)
     selection_workflow = SelectionWorkflowController(
         app=app,
         context=context,
         runtime_store=runtime_store,
+        feedback_store=feedback_store,
         edit_mode_controller=EditModeController(),
         on_state_changed=main_window.refresh_runtime_state,
     )
@@ -88,6 +96,7 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
         tray_icon=tray_icon,
         hotkeys=hotkeys,
         runtime_store=runtime_store,
+        feedback_store=feedback_store,
         selection_workflow=selection_workflow,
     )
 

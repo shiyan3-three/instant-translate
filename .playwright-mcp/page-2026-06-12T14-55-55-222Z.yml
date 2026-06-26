@@ -1,0 +1,46 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - heading "🚀 AnyRouter" [level=1] [ref=e4]
+    - paragraph [ref=e5]: Claude Code 中转站 · 零门槛 · 免费 $50
+    - generic [ref=e6]:
+      - strong [ref=e7]: 🎊 限时福利：注册即送 $50 免费额度
+      - text: 无需信用卡，无需付费，立即体验最新 AI 编程助手
+    - link "立即注册使用" [ref=e8] [cursor=pointer]:
+      - /url: https://anyrouter.top/
+  - generic [ref=e9]:
+    - navigation [ref=e10]:
+      - generic [ref=e11]:
+        - generic [ref=e12] [cursor=pointer]: 限时福利
+        - generic [ref=e13] [cursor=pointer]: 平台特色
+        - generic [ref=e14] [cursor=pointer]: 快速开始
+        - generic [ref=e15] [cursor=pointer]: 使用教程
+        - generic [ref=e16] [cursor=pointer]: 高级功能
+        - generic [ref=e17] [cursor=pointer]: 命令参考
+        - generic [ref=e18] [cursor=pointer]: 常见问题
+    - text: BASH BASH BASH BASH BASH
+    - generic [ref=e55]:
+      - heading "🔧 高级功能" [level=2] [ref=e56]
+      - heading "图像处理" [level=3] [ref=e57]
+      - paragraph [ref=e58]: Claude Code 可以处理图像信息，支持多种输入方式：
+      - list [ref=e59]:
+        - listitem [ref=e60]: 将图像拖放到 Claude Code 窗口中
+        - listitem [ref=e61]: 复制图像并使用 cmd+v 粘贴到 CLI 中
+        - listitem [ref=e62]: 提供图像路径
+      - heading "记忆系统" [level=3] [ref=e63]
+      - paragraph [ref=e64]:
+        - text: Claude Code 通过
+        - code [ref=e65]: CLAUDE.md
+        - text: 文件存储重要的项目信息、约定和常用命令。
+      - generic [ref=e66]:
+        - text: BASH
+        - generic [ref=e67]: "# 初始化记忆文件 /init # 快速添加记忆 # 始终使用描述性变量名"
+      - heading "压缩上下文" [level=3] [ref=e68]
+      - paragraph [ref=e69]: 使用压缩功能节省开销：
+      - generic [ref=e70]:
+        - text: BASH
+        - generic [ref=e71]: /compact [instructions]
+      - heading "Git 集成" [level=3] [ref=e72]
+      - paragraph [ref=e73]: Claude Code 支持使用自然语言操作 Git：
+      - generic [ref=e74]:
+        - text: BASH
+        - generic [ref=e75]: "> 提交我的更改 > 创建一个 pr > 哪个提交在去年十二月添加了 markdown 测试？ > 在 main 分支上变基并解决任何合并冲突"

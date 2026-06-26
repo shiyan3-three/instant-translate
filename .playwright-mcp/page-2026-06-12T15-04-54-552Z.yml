@@ -1,0 +1,1281 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic "跳过导航链接":
+      - link "跳到主要内容" [ref=e4] [cursor=pointer]:
+        - /url: "#main-container"
+    - generic [ref=e9]:
+      - button "边栏" [expanded] [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+      - link "LINUX DO" [ref=e15] [cursor=pointer]:
+        - /url: /
+        - img "LINUX DO" [ref=e17]
+      - navigation "标头" [ref=e18]:
+        - list [ref=e19]:
+          - button "ZH" [ref=e20] [cursor=pointer]:
+            - generic [ref=e21]: ZH
+            - img [ref=e22]
+          - listitem [ref=e23]:
+            - link "聊天" [ref=e24] [cursor=pointer]:
+              - /url: /chat
+              - img [ref=e25]
+          - listitem [ref=e26]:
+            - button "通知和帐户" [ref=e27] [cursor=pointer]
+    - main [ref=e28]:
+      - navigation "边栏" [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e32]:
+            - list [ref=e34]:
+              - listitem [ref=e35]:
+                - link "话题" [ref=e36] [cursor=pointer]:
+                  - /url: /latest
+                  - img [ref=e38]
+                  - generic [ref=e39]: 话题
+                  - img [ref=e41]
+              - listitem [ref=e42]:
+                - link "我的草稿" [ref=e43] [cursor=pointer]:
+                  - /url: /u/majorai/activity/drafts
+                  - img [ref=e45]
+                  - generic [ref=e46]: 我的草稿
+                  - img [ref=e48]
+              - listitem [ref=e49]:
+                - link "我的消息" [ref=e50] [cursor=pointer]:
+                  - /url: /u/majorai/messages
+                  - img [ref=e52]
+                  - generic [ref=e53]: 我的消息
+              - listitem [ref=e54]:
+                - link "近期活动" [ref=e55] [cursor=pointer]:
+                  - /url: /upcoming-events
+                  - img [ref=e57]
+                  - generic [ref=e58]: 近期活动
+              - listitem [ref=e59]:
+                - button "更多" [ref=e60] [cursor=pointer]:
+                  - img [ref=e62]
+                  - generic [ref=e63]: 更多
+            - generic [ref=e64]:
+              - button "资源" [expanded] [ref=e66] [cursor=pointer]:
+                - img [ref=e68]
+                - generic [ref=e69]: 资源
+              - list [ref=e70]:
+                - listitem [ref=e71]:
+                  - link "Connect" [ref=e72] [cursor=pointer]:
+                    - /url: https://connect.linux.do
+                    - img [ref=e74]
+                    - generic [ref=e75]: Connect
+                - listitem [ref=e76]:
+                  - link "Channel" [ref=e77] [cursor=pointer]:
+                    - /url: https://t.me/linux_do_channel
+                    - img [ref=e79]
+                    - generic [ref=e80]: Channel
+                - listitem [ref=e81]:
+                  - link "IDC Flare" [ref=e82] [cursor=pointer]:
+                    - /url: https://idcflare.com
+                    - img [ref=e84]
+                    - generic [ref=e85]: IDC Flare
+                - listitem [ref=e86]:
+                  - link "T-Shirt" [ref=e87] [cursor=pointer]:
+                    - /url: https://go.linux.do/t/topic/2045356
+                    - img [ref=e89]
+                    - generic [ref=e90]: T-Shirt
+                - listitem [ref=e91]:
+                  - link "More..." [ref=e92] [cursor=pointer]:
+                    - /url: https://go.linux.do/pub/resources
+                    - img [ref=e94]
+                    - generic [ref=e95]: More...
+          - generic [ref=e96]:
+            - generic [ref=e97]:
+              - button "类别" [expanded] [ref=e98] [cursor=pointer]:
+                - img [ref=e100]
+                - generic [ref=e101]: 类别
+              - button "编辑边栏类别" [ref=e102] [cursor=pointer]:
+                - img
+            - list [ref=e103]:
+              - listitem [ref=e104]:
+                - link "开发调优" [ref=e105] [cursor=pointer]:
+                  - /url: /c/develop/4
+                  - img [ref=e107]
+                  - generic [ref=e108]: 开发调优
+                  - img [ref=e110]
+              - listitem [ref=e111]:
+                - link "国产替代" [ref=e112] [cursor=pointer]:
+                  - /url: /c/domestic/98
+                  - img [ref=e114]
+                  - generic [ref=e115]: 国产替代
+                  - img [ref=e117]
+              - listitem [ref=e118]:
+                - link "资源荟萃" [ref=e119] [cursor=pointer]:
+                  - /url: /c/resource/14
+                  - img [ref=e121]
+                  - generic [ref=e122]: 资源荟萃
+                  - img [ref=e124]
+              - listitem [ref=e125]:
+                - link "网盘资源" [ref=e126] [cursor=pointer]:
+                  - /url: /c/resource/cloud-asset/94
+                  - img [ref=e128]
+                  - generic [ref=e129]: 网盘资源
+                  - img [ref=e131]
+              - listitem [ref=e132]:
+                - link "文档共建" [ref=e133] [cursor=pointer]:
+                  - /url: /c/wiki/42
+                  - img [ref=e135]
+                  - generic [ref=e136]: 文档共建
+                  - img [ref=e138]
+              - listitem [ref=e139]:
+                - link "跳蚤市场" [ref=e140] [cursor=pointer]:
+                  - /url: /c/trade/10
+                  - generic [ref=e141]:
+                    - img [ref=e142]
+                    - img [ref=e143]
+                  - generic [ref=e144]: 跳蚤市场
+              - listitem [ref=e145]:
+                - link "积分乐园" [ref=e146] [cursor=pointer]:
+                  - /url: /c/credit/106
+                  - generic [ref=e147]:
+                    - img [ref=e148]
+                    - img [ref=e149]
+                  - generic [ref=e150]: 积分乐园
+                  - img [ref=e152]
+              - listitem [ref=e153]:
+                - link "非我莫属" [ref=e154] [cursor=pointer]:
+                  - /url: /c/job/27
+                  - img [ref=e156]
+                  - generic [ref=e157]: 非我莫属
+              - listitem [ref=e158]:
+                - link "读书成诗" [ref=e159] [cursor=pointer]:
+                  - /url: /c/reading/32
+                  - img [ref=e161]
+                  - generic [ref=e162]: 读书成诗
+                  - img [ref=e164]
+              - listitem [ref=e165]:
+                - link "扬帆起航" [ref=e166] [cursor=pointer]:
+                  - /url: /c/startup/46
+                  - generic [ref=e167]:
+                    - img [ref=e168]
+                    - img [ref=e169]
+                  - generic [ref=e170]: 扬帆起航
+              - listitem [ref=e171]:
+                - link "前沿快讯" [ref=e172] [cursor=pointer]:
+                  - /url: /c/news/34
+                  - img [ref=e174]
+                  - generic [ref=e175]: 前沿快讯
+                  - img [ref=e177]
+              - listitem [ref=e178]:
+                - link "网络记忆" [ref=e179] [cursor=pointer]:
+                  - /url: /c/feeds/92
+                  - img [ref=e181]
+                  - generic [ref=e182]: 网络记忆
+              - listitem [ref=e183]:
+                - link "福利羊毛" [ref=e184] [cursor=pointer]:
+                  - /url: /c/welfare/36
+                  - img [ref=e186]
+                  - generic [ref=e187]: 福利羊毛
+                  - img [ref=e189]
+              - listitem [ref=e190]:
+                - link "搞七捻三" [ref=e191] [cursor=pointer]:
+                  - /url: /c/gossip/11
+                  - img [ref=e193]
+                  - generic [ref=e194]: 搞七捻三
+                  - img [ref=e196]
+              - listitem [ref=e197]:
+                - link "社区孵化" [ref=e198] [cursor=pointer]:
+                  - /url: /c/incubator/102
+                  - generic [ref=e199]:
+                    - img [ref=e200]
+                    - img [ref=e201]
+                  - generic [ref=e202]: 社区孵化
+              - listitem [ref=e203]:
+                - link "虫洞广场" [ref=e204] [cursor=pointer]:
+                  - /url: /c/square/110
+                  - img [ref=e206]
+                  - generic [ref=e207]: 虫洞广场
+              - listitem [ref=e208]:
+                - link "运营反馈" [ref=e209] [cursor=pointer]:
+                  - /url: /c/feedback/2
+                  - img [ref=e211]
+                  - generic [ref=e212]: 运营反馈
+              - listitem [ref=e213]:
+                - link "深海幽域" [ref=e214] [cursor=pointer]:
+                  - /url: /c/muted/45
+                  - generic [ref=e215]:
+                    - img [ref=e216]
+                    - img [ref=e217]
+                  - generic [ref=e218]: 深海幽域
+              - listitem [ref=e219]:
+                - link "所有类别" [ref=e220] [cursor=pointer]:
+                  - /url: /categories
+                  - img [ref=e222]
+                  - generic [ref=e223]: 所有类别
+          - generic [ref=e224]:
+            - generic [ref=e225]:
+              - button "标签" [expanded] [ref=e226] [cursor=pointer]:
+                - img [ref=e228]
+                - generic [ref=e229]: 标签
+              - button "编辑边栏标签" [ref=e230] [cursor=pointer]:
+                - img
+            - list [ref=e231]:
+              - listitem [ref=e232]:
+                - link "抽奖" [ref=e233] [cursor=pointer]:
+                  - /url: /tag/lottery/10
+                  - img [ref=e235]
+                  - generic [ref=e236]: 抽奖
+                  - img [ref=e238]
+              - listitem [ref=e239]:
+                - link "公告" [ref=e240] [cursor=pointer]:
+                  - /url: /tag/31-tag/31
+                  - img [ref=e242]
+                  - generic [ref=e243]: 公告
+              - listitem [ref=e244]:
+                - link "集中帖" [ref=e245] [cursor=pointer]:
+                  - /url: /tag/1534-tag/1534
+                  - img [ref=e247]
+                  - generic [ref=e248]: 集中帖
+              - listitem [ref=e249]:
+                - link "精华神帖" [ref=e250] [cursor=pointer]:
+                  - /url: /tag/1435-tag/1435
+                  - img [ref=e252]
+                  - generic [ref=e253]: 精华神帖
+              - listitem [ref=e254]:
+                - link "快问快答" [ref=e255] [cursor=pointer]:
+                  - /url: /tag/1436-tag/1436
+                  - img [ref=e257]
+                  - generic [ref=e258]: 快问快答
+                  - img [ref=e260]
+              - listitem [ref=e261]:
+                - link "人工智能" [ref=e262] [cursor=pointer]:
+                  - /url: /tag/444-tag/444
+                  - img [ref=e264]
+                  - generic [ref=e265]: 人工智能
+                  - img [ref=e267]
+              - listitem [ref=e268]:
+                - link "原创" [ref=e269] [cursor=pointer]:
+                  - /url: /tag/1531-tag/1531
+                  - img [ref=e271]
+                  - generic [ref=e272]: 原创
+              - listitem [ref=e273]:
+                - link "所有标签" [ref=e274] [cursor=pointer]:
+                  - /url: /tags
+                  - img [ref=e276]
+                  - generic [ref=e277]: 所有标签
+          - list [ref=e279]:
+            - listitem [ref=e280]:
+              - link "搜索聊天" [ref=e281] [cursor=pointer]:
+                - /url: /chat/search
+                - img [ref=e283]
+                - generic [ref=e284]: 搜索聊天
+          - generic [ref=e285]:
+            - generic [ref=e286]:
+              - button "频道" [expanded] [ref=e287] [cursor=pointer]:
+                - img [ref=e289]
+                - generic [ref=e290]: 频道
+              - button "浏览频道" [ref=e291] [cursor=pointer]:
+                - img
+            - list
+        - button "聊天" [ref=e292] [cursor=pointer]:
+          - img [ref=e293]
+          - generic [ref=e294]: 聊天
+        - generic [ref=e297]:
+          - generic [ref=e298]:
+            - img
+            - group [ref=e299]:
+              - generic "筛选条件：Default" [ref=e300] [cursor=pointer]:
+                - generic [ref=e301]:
+                  - generic "Default" [ref=e302]:
+                    - generic [ref=e303]: Default
+                  - img
+          - button [ref=e304] [cursor=pointer]:
+            - img [ref=e305]
+          - 'button "颜色模式，当前为 [missing %{mode} value]" [ref=e306] [cursor=pointer]':
+            - img [ref=e307]
+          - button "添加自定义版块" [ref=e308] [cursor=pointer]:
+            - img [ref=e309]
+          - button "键盘快捷键" [ref=e310] [cursor=pointer]:
+            - img [ref=e311]
+      - generic [ref=e312]:
+        - generic [ref=e317]:
+          - strong [ref=e318]: 真诚
+          - text: 、
+          - strong [ref=e319]: 友善
+          - text: 、
+          - strong [ref=e320]: 团结
+          - text: 、
+          - strong [ref=e321]: 专业
+          - text: ，共建你我引以为荣之社区。
+          - link "《社区准则》" [ref=e322] [cursor=pointer]:
+            - /url: /guidelines
+        - generic [ref=e323]:
+          - search [ref=e324]:
+            - heading "31 条与 “anyrouter 1m context”有关的结果" [level=1] [ref=e325]:
+              - generic [ref=e326]: 31 条与 “anyrouter 1m context”有关的结果
+            - generic [ref=e327]:
+              - searchbox "输入搜索关键字" [ref=e328]: anyrouter 1m context
+              - group [ref=e329]:
+                - generic "筛选条件：话题/帖子" [ref=e330] [cursor=pointer]:
+                  - generic [ref=e331]:
+                    - generic "话题/帖子" [ref=e332]:
+                      - generic [ref=e333]: 话题/帖子
+                    - img
+              - button "搜索" [ref=e334] [cursor=pointer]:
+                - img [ref=e335]
+                - generic [ref=e336]: 搜索
+            - generic [ref=e338]:
+              - button "[zh_CN.高级筛选器]" [ref=e339] [cursor=pointer]:
+                - text: 高级筛选器
+                - img [ref=e340]
+              - region [ref=e341]:
+                - generic [ref=e343]:
+                  - generic [ref=e345] [cursor=pointer]:
+                    - switch [disabled]
+                  - generic [ref=e347]: AI 结果
+          - generic [ref=e349]:
+            - region "排序或批量选择结果" [ref=e350]:
+              - generic [ref=e351]:
+                - generic [ref=e352]: 排序依据
+                - group [ref=e353]:
+                  - generic "筛选条件：相关性" [ref=e354] [cursor=pointer]:
+                    - generic [ref=e355]:
+                      - generic "相关性" [ref=e356]:
+                        - generic [ref=e357]: 相关性
+                      - img
+            - region "'anyrouter 1m context' 的搜索结果" [ref=e358]:
+              - generic [ref=e359]:
+                - list [ref=e360]:
+                  - listitem [ref=e361]:
+                    - link "2" [ref=e363] [cursor=pointer]:
+                      - /url: /u/2111
+                      - img "2" [ref=e364]
+                    - generic [ref=e365]:
+                      - generic [ref=e366]:
+                        - heading "any的codex一直提示令牌无效[已解决]" [level=2] [ref=e367] [cursor=pointer]:
+                          - generic [ref=e369]: any的codex一直提示令牌无效[已解决]
+                        - generic [ref=e370]:
+                          - link "开发调优" [ref=e371] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e372]:
+                              - img [ref=e373]
+                              - generic [ref=e374]: 开发调优
+                          - list "标签" [ref=e375]:
+                            - listitem [ref=e376]:
+                              - link "人工智能" [ref=e377] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e379]
+                                - text: 人工智能
+                            - listitem [ref=e380]:
+                              - link "OpenAI" [ref=e381] [cursor=pointer]:
+                                - /url: /tag/openai/4
+                            - listitem [ref=e382]:
+                              - link "Codex" [ref=e383] [cursor=pointer]:
+                                - /url: /tag/codex/1574
+                            - listitem [ref=e384]:
+                              - link "anyrouter" [ref=e385] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                            - listitem [ref=e386]:
+                              - link "token-plain" [ref=e387] [cursor=pointer]:
+                                - /url: /tag/2339-tag/2339
+                      - generic [ref=e388]:
+                        - generic [ref=e389]: 11 天 -
+                        - generic [ref=e390]: "{ \"env\": { \"ANTHROPIC_AUTH_TOKEN\": \"apikey\", \"ANTHROPIC_BASE_URL\": \"https://anyrouter.top\", \"ANTHROPIC_BETAS\": \"context-1m-2025-08-07\", \"ANTHROPIC_DEFAULT_HAIKU_MODEL\": \"claude-opus-4-8[1M]\", \"ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME\": \"claude-opus-4-8[1M]\", \"ANTHROPIC_DEFAULT_OPUS_MODEL\": \"claude-opus..."
+                  - listitem [ref=e391]:
+                    - link "青衫" [ref=e393] [cursor=pointer]:
+                      - /url: /u/jikuaidi6yuan
+                      - img "青衫" [ref=e394]
+                    - generic [ref=e395]:
+                      - generic [ref=e396]:
+                        - heading "Any牌路由器使用清障！" [level=2] [ref=e397] [cursor=pointer]:
+                          - generic "您已将此话题添加为书签" [ref=e399]:
+                            - img [ref=e400]
+                          - generic [ref=e402]: Any牌路由器使用清障！
+                        - generic [ref=e403]:
+                          - link "开发调优" [ref=e404] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e405]:
+                              - img [ref=e406]
+                              - generic [ref=e407]: 开发调优
+                          - list "标签" [ref=e408]:
+                            - listitem [ref=e409]:
+                              - link "配置优化" [ref=e410] [cursor=pointer]:
+                                - /url: /tag/1454-tag/1454
+                                - img [ref=e412]
+                                - text: 配置优化
+                            - listitem [ref=e413]:
+                              - link "ClaudeCode" [ref=e414] [cursor=pointer]:
+                                - /url: /tag/claudecode/1575
+                            - listitem [ref=e415]:
+                              - link "Anthropic" [ref=e416] [cursor=pointer]:
+                                - /url: /tag/anthropic/1503
+                            - listitem [ref=e417]:
+                              - link "精华神帖" [ref=e418] [cursor=pointer]:
+                                - /url: /tag/1435-tag/1435
+                                - img [ref=e420]
+                                - text: 精华神帖
+                      - generic [ref=e421]:
+                        - generic [ref=e422]: 5月 8 日 -
+                        - generic [ref=e423]: "{ “env”: { “ANTHROPIC_AUTH_TOKEN”: “xxx”, “ANTHROPIC_BASE_URL”: “ https://anyrouter.top/ https://anyrouter.top ”, “ANTHROPIC_DEFAULT_HAIKU_MODEL”: “claude-opus-4-7”, “ANTHROPIC_DEFAULT_OPUS_MODEL”: “claude-opus-4-7”, “ANTHROPIC_DEFAULT_SONNET_MODEL”: “claude-opus-4-7”, “ANTHROPIC_MODEL”: “claude-..."
+                  - listitem [ref=e424]:
+                    - link "roger319" [ref=e426] [cursor=pointer]:
+                      - /url: /u/roger319
+                      - img "roger319" [ref=e427]
+                    - generic [ref=e428]:
+                      - generic [ref=e429]:
+                        - heading "在cc中配置any以使用claude opus 4.8" [level=2] [ref=e430] [cursor=pointer]:
+                          - generic [ref=e432]: 在cc中配置any以使用claude opus 4.8
+                        - generic [ref=e433]:
+                          - link "搞七捻三" [ref=e434] [cursor=pointer]:
+                            - /url: /c/gossip/11
+                            - generic "闲聊吹水的板块。不得讨论政治、色情等违规内容。" [ref=e435]:
+                              - img [ref=e436]
+                              - generic [ref=e437]: 搞七捻三
+                          - link "搞七捻三, Lv1" [ref=e438] [cursor=pointer]:
+                            - /url: /c/gossip/gossip-lv1/35
+                            - generic "此处为 1级用户 可见空间。" [ref=e439]:
+                              - img [ref=e440]
+                              - img [ref=e441]
+                              - generic [ref=e442]: 搞七捻三, Lv1
+                          - list "标签" [ref=e443]:
+                            - listitem [ref=e444]:
+                              - link "人工智能" [ref=e445] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e447]
+                                - text: 人工智能
+                            - listitem [ref=e448]:
+                              - link "anyrouter" [ref=e449] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                      - generic [ref=e450]:
+                        - generic [ref=e451]: 4 天 -
+                        - generic [ref=e452]: image 大佬，按照你的配置，虽然我这里显示了1M Context，但是还是会有未启用，这是什么情况啊？
+                  - listitem [ref=e453]:
+                    - link "goodbruce" [ref=e455] [cursor=pointer]:
+                      - /url: /u/goodbruce
+                      - img "goodbruce" [ref=e456]
+                    - generic [ref=e457]:
+                      - generic [ref=e458]:
+                        - heading "【any 今天挂了吗】检测站也不上any了，干脆整个长期帖专门反馈互相确认any挂没挂吧" [level=2] [ref=e459] [cursor=pointer]:
+                          - generic [ref=e461]: 【any 今天挂了吗】检测站也不上any了，干脆整个长期帖专门反馈互相确认any挂没挂吧
+                        - generic [ref=e462]:
+                          - link "开发调优" [ref=e463] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e464]:
+                              - img [ref=e465]
+                              - generic [ref=e466]: 开发调优
+                          - link "开发调优, Lv1" [ref=e467] [cursor=pointer]:
+                            - /url: /c/develop/develop-lv1/20
+                            - generic "此处为 1级用户 可见空间。" [ref=e468]:
+                              - img [ref=e469]
+                              - img [ref=e470]
+                              - generic [ref=e471]: 开发调优, Lv1
+                          - list "标签" [ref=e472]:
+                            - listitem [ref=e473]:
+                              - link "人工智能" [ref=e474] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e476]
+                                - text: 人工智能
+                            - listitem [ref=e477]:
+                              - link "anyrouter" [ref=e478] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                            - listitem [ref=e479]:
+                              - link "any今天行不行？" [ref=e480] [cursor=pointer]:
+                                - /url: /tag/2306-tag/2306
+                      - generic [ref=e481]:
+                        - generic [ref=e482]: 5月 8 日 -
+                        - generic [ref=e483]: "{ “env”: { “ANTHROPIC_BASE_URL”: “ https://a-ocnfniawgw.cn-shanghai.fcapp.run ”, “teammateMode”: “in-process”, “DISABLE_AUTOUPDATER”: “1”, “CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS”: “1”, “ANTHROPIC_REASONING_MODEL”: “claude-opus-4-6[1m]”, “ANTHROPIC_DEFAULT_SONNET_MODEL”: “claude-opus-4-7”, “ANTHR..."
+                  - listitem [ref=e484]:
+                    - link "EricZ" [ref=e486] [cursor=pointer]:
+                      - /url: /u/ericz
+                      - img "EricZ" [ref=e487]
+                    - generic [ref=e488]:
+                      - generic [ref=e489]:
+                        - heading "any怎么开启1M上下文" [level=2] [ref=e490] [cursor=pointer]:
+                          - generic [ref=e492]: any怎么开启1M上下文
+                        - generic [ref=e493]:
+                          - link "开发调优" [ref=e494] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e495]:
+                              - img [ref=e496]
+                              - generic [ref=e497]: 开发调优
+                          - list "标签" [ref=e498]:
+                            - listitem [ref=e499]:
+                              - link "纯水" [ref=e500] [cursor=pointer]:
+                                - /url: /tag/1461-tag/1461
+                                - img [ref=e502]
+                                - text: 纯水
+                            - listitem [ref=e503]:
+                              - link "anyrouter" [ref=e504] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                      - generic [ref=e505]:
+                        - generic [ref=e506]: 1 天 -
+                        - generic [ref=e507]: "{ “effortLevel”: “xhigh”, “skipWorkflowUsageWarning”: true, “theme”: “dark”, “advisorModel”: “opus”, “env”: { \"ANTHROPIC_BASE_URL\": \"https://a-ocnfniawgw.cn-shanghai.fcapp.run\", \"ANTHROPIC_AUTH_TOKEN\": \"sk- \", \"ANTHROPIC_BETAS\": \"context-1m-2025-08-07\" }, “model”: “claude-fable-5[1m]”, “autoUpdat..."
+                  - listitem [ref=e508]:
+                    - link "kingsleyrex" [ref=e510] [cursor=pointer]:
+                      - /url: /u/kingsleyrex
+                      - img "kingsleyrex" [ref=e511]
+                    - generic [ref=e512]:
+                      - generic [ref=e513]:
+                        - heading "AnyRouter 1M上下文问题解决" [level=2] [ref=e514] [cursor=pointer]:
+                          - generic [ref=e516]: AnyRouter 1M上下文问题解决
+                        - generic [ref=e517]:
+                          - link "开发调优" [ref=e518] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e519]:
+                              - img [ref=e520]
+                              - generic [ref=e521]: 开发调优
+                          - list "标签" [ref=e522]:
+                            - listitem [ref=e523]:
+                              - link "人工智能" [ref=e524] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e526]
+                                - text: 人工智能
+                      - generic [ref=e527]:
+                        - generic [ref=e528]: 5月 5 日 -
+                        - generic [ref=e529]: "我是在cc- switch里 “ANTHROPIC_MODEL”: “claude-opus-4-7[1m]”, “CLAUDE_CODE_MAX_CONTEXT_WINDOW”: “1000000”, “DISABLE_INSTALLATION_CHECKS”: “1”, “ENABLE_1M_CONTEXT”: “1” 可以试一下行不行"
+                  - listitem [ref=e530]:
+                    - link "moranrs" [ref=e532] [cursor=pointer]:
+                      - /url: /u/liunian_suifeng
+                      - img "moranrs" [ref=e533]
+                    - generic [ref=e534]:
+                      - generic [ref=e535]:
+                        - heading "【anyrouter】自己429，是谁花了我六十几刀额度？？" [level=2] [ref=e536] [cursor=pointer]:
+                          - generic [ref=e538]: 【anyrouter】自己429，是谁花了我六十几刀额度？？
+                        - generic [ref=e539]:
+                          - link "搞七捻三" [ref=e540] [cursor=pointer]:
+                            - /url: /c/gossip/11
+                            - generic "闲聊吹水的板块。不得讨论政治、色情等违规内容。" [ref=e541]:
+                              - img [ref=e542]
+                              - generic [ref=e543]: 搞七捻三
+                          - link "搞七捻三, Lv1" [ref=e544] [cursor=pointer]:
+                            - /url: /c/gossip/gossip-lv1/35
+                            - generic "此处为 1级用户 可见空间。" [ref=e545]:
+                              - img [ref=e546]
+                              - img [ref=e547]
+                              - generic [ref=e548]: 搞七捻三, Lv1
+                          - list "标签" [ref=e549]:
+                            - listitem [ref=e550]:
+                              - link "纯水" [ref=e551] [cursor=pointer]:
+                                - /url: /tag/1461-tag/1461
+                                - img [ref=e553]
+                                - text: 纯水
+                            - listitem [ref=e554]:
+                              - link "人工智能" [ref=e555] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e557]
+                                - text: 人工智能
+                            - listitem [ref=e558]:
+                              - link "anyrouter" [ref=e559] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                      - generic [ref=e560]:
+                        - generic [ref=e561]: 4月 29 日 -
+                        - generic [ref=e562]: ccs里边的模型配置删掉，然后直接cli里边/model切换成Opus (1M context)这个。不过今天应该claude应该就是不行，gpt-5.3-codex倒是一直可以
+                  - listitem [ref=e563]:
+                    - link "IFME" [ref=e565] [cursor=pointer]:
+                      - /url: /u/ariachou
+                      - img "IFME" [ref=e566]
+                    - generic [ref=e567]:
+                      - generic [ref=e568]:
+                        - heading "【06.11 更新】any中claude code & codex配置（可用性/问题合集/答疑/集中帖子）" [level=2] [ref=e569] [cursor=pointer]:
+                          - generic [ref=e571]: 【06.11 更新】any中claude code & codex配置（可用性/问题合集/答疑/集中帖子）
+                        - generic [ref=e572]:
+                          - link "文档共建" [ref=e573] [cursor=pointer]:
+                            - /url: /c/wiki/42
+                            - generic "佬友化身翰林学士，一起来编书了。" [ref=e574]:
+                              - img [ref=e575]
+                              - generic [ref=e576]: 文档共建
+                          - list "标签" [ref=e577]:
+                            - listitem [ref=e578]:
+                              - link "人工智能" [ref=e579] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e581]
+                                - text: 人工智能
+                            - listitem [ref=e582]:
+                              - link "Codex" [ref=e583] [cursor=pointer]:
+                                - /url: /tag/codex/1574
+                            - listitem [ref=e584]:
+                              - link "ClaudeCode" [ref=e585] [cursor=pointer]:
+                                - /url: /tag/claudecode/1575
+                            - listitem [ref=e586]:
+                              - link "Anthropic" [ref=e587] [cursor=pointer]:
+                                - /url: /tag/anthropic/1503
+                            - listitem [ref=e588]:
+                              - link "anyrouter" [ref=e589] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                            - listitem [ref=e590]:
+                              - link "文档" [ref=e591] [cursor=pointer]:
+                                - /url: /tag/671-tag/671
+                                - img [ref=e593]
+                                - text: 文档
+                      - generic [ref=e594]:
+                        - generic [ref=e595]: 14 天 -
+                        - generic [ref=e596]: 前情提要： 我发现很多佬友都在询问any中应该如何配置才能够正常使用claude code 以及codex，目前一些配置零零散散，没有完整的内容。同时，还有很多人有一些使用疑问，遂开集中帖，给出完整可用的配置以及常见问题答疑 以下配置在不同设备配置包括其他佬友测试均可用，可直接拷贝复用！ claude code配置 export ANTHROPIC_AUTH_TOKEN=“sk-xxx” export ANTHROPIC_BASE_URL=“ https://a-ocnfniawgw.cn-shanghai.fcapp.run ” export CLAUDE_CODE_ATTRIBUTI...
+                  - listitem [ref=e597]:
+                    - link "CDB111" [ref=e599] [cursor=pointer]:
+                      - /url: /u/cdb111
+                      - img "CDB111" [ref=e600]
+                    - generic [ref=e601]:
+                      - generic [ref=e602]:
+                        - heading "Any大善人又归来了(这次还更新了gpt5.5) 4/30" [level=2] [ref=e603] [cursor=pointer]:
+                          - generic [ref=e605]: Any大善人又归来了(这次还更新了gpt5.5) 4/30
+                        - generic [ref=e606]:
+                          - link "搞七捻三" [ref=e607] [cursor=pointer]:
+                            - /url: /c/gossip/11
+                            - generic "闲聊吹水的板块。不得讨论政治、色情等违规内容。" [ref=e608]:
+                              - img [ref=e609]
+                              - generic [ref=e610]: 搞七捻三
+                          - list "标签" [ref=e611]:
+                            - listitem [ref=e612]:
+                              - link "纯水" [ref=e613] [cursor=pointer]:
+                                - /url: /tag/1461-tag/1461
+                                - img [ref=e615]
+                                - text: 纯水
+                            - listitem [ref=e616]:
+                              - link "人工智能" [ref=e617] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e619]
+                                - text: 人工智能
+                            - listitem [ref=e620]:
+                              - link "anyrouter" [ref=e621] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                            - listitem [ref=e622]:
+                              - link "any今天行不行？" [ref=e623] [cursor=pointer]:
+                                - /url: /tag/2306-tag/2306
+                            - listitem [ref=e624]:
+                              - link "日经贴" [ref=e625] [cursor=pointer]:
+                                - /url: /tag/2486-tag/2486
+                      - generic [ref=e626]:
+                        - generic [ref=e627]: 4月 25 日 -
+                        - generic [ref=e628]: "我这样配置的，用的v2.1.111 { “env”: { “ANTHROPIC_AUTH_TOKEN”: “sk-”, “ANTHROPIC_BASE_URL”: “大陆优化的那个”, “ANTHROPIC_BETAS”: “context-1m-2025-08-07”, “HTTPS_PROXY”: “ https://127.0.0.1:7890 ”, “HTTP_PROXY”: “ http://127.0.0.1:7890 ”, “CLAUDE_CODE_ATTRIBUTION_HEADER”: “0”, “ANTHROPIC_DEFAULT_HAIKU_MODEL”: “cla..."
+                  - listitem [ref=e629]:
+                    - link "還記得你說家是唯一的城堡 隨著稻香河流繼續奔跑 微微笑 小時候的夢我知道" [ref=e631] [cursor=pointer]:
+                      - /url: /u/user9527
+                      - img "還記得你說家是唯一的城堡 隨著稻香河流繼續奔跑 微微笑 小時候的夢我知道" [ref=e632]
+                    - generic [ref=e633]:
+                      - generic [ref=e634]:
+                        - heading "[纯前端html] 模拟claude code的请求, 可用于批量测试any的key是否可用, 其它能支持cc调用理论上也可以" [level=2] [ref=e635] [cursor=pointer]:
+                          - generic [ref=e637]: "[纯前端html] 模拟claude code的请求, 可用于批量测试any的key是否可用, 其它能支持cc调用理论上也可以"
+                        - generic [ref=e638]:
+                          - link "开发调优" [ref=e639] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e640]:
+                              - img [ref=e641]
+                              - generic [ref=e642]: 开发调优
+                          - list "标签" [ref=e643]:
+                            - listitem [ref=e644]:
+                              - link "人工智能" [ref=e645] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e647]
+                                - text: 人工智能
+                            - listitem [ref=e648]:
+                              - link "软件开发" [ref=e649] [cursor=pointer]:
+                                - /url: /tag/1451-tag/1451
+                                - img [ref=e651]
+                                - text: 软件开发
+                      - generic [ref=e652]:
+                        - generic [ref=e653]: 5月 5 日 -
+                        - generic [ref=e654]: "image < !doctype html > < html lang=\"zh-CN\" > < head > < meta charset=\"UTF-8\" / > < meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" / > < title > AnyRouter Key Tester (浏览器直连版) < /title > < style > :root { color-scheme: dark; } body { margin: 0; font-family: -apple-system, Bli..."
+                  - listitem [ref=e655]:
+                    - link "bongmu" [ref=e657] [cursor=pointer]:
+                      - /url: /u/bongmu
+                      - img "bongmu" [ref=e658]
+                    - generic [ref=e659]:
+                      - generic [ref=e660]:
+                        - heading "ccSwitch里面怎么配置any呀" [level=2] [ref=e661] [cursor=pointer]:
+                          - generic "此话题有解决方案" [ref=e663]:
+                            - img [ref=e664]
+                          - generic [ref=e666]: ccSwitch里面怎么配置any呀
+                        - generic [ref=e667]:
+                          - link "搞七捻三" [ref=e668] [cursor=pointer]:
+                            - /url: /c/gossip/11
+                            - generic "闲聊吹水的板块。不得讨论政治、色情等违规内容。" [ref=e669]:
+                              - img [ref=e670]
+                              - generic [ref=e671]: 搞七捻三
+                          - list "标签" [ref=e672]:
+                            - listitem [ref=e673]:
+                              - link "快问快答" [ref=e674] [cursor=pointer]:
+                                - /url: /tag/1436-tag/1436
+                                - img [ref=e676]
+                                - text: 快问快答
+                            - listitem [ref=e677]:
+                              - link "anyrouter" [ref=e678] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                      - generic [ref=e679]:
+                        - generic [ref=e680]: 10 小时 -
+                        - generic [ref=e681]: "image { “CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC”: 1, “CLAUDE_CODE_MAX_OUTPUT_TOKENS”: 640000, “CLAUDE_CODE_USE_POWERSHELL_TOOL”: “1”, “alwaysThinkingEnabled”: true, “effortLevel”: “xhigh”, “env”: { “ANTHROPIC_AUTH_TOKEN”: “sk-xxx”, “ANTHROPIC_BASE_URL”: “ https://a-ocnfniawgw.cn-shanghai.fcapp...."
+                  - listitem [ref=e682]:
+                    - link "筑路成书" [ref=e684] [cursor=pointer]:
+                      - /url: /u/beagle4ce
+                      - img "筑路成书" [ref=e685]
+                    - generic [ref=e686]:
+                      - generic [ref=e687]:
+                        - 'heading "Any牌路由器报API Error: Stream ended without receiving any events错误该如何解决?" [level=2] [ref=e688] [cursor=pointer]':
+                          - generic [ref=e690]: "Any牌路由器报API Error: Stream ended without receiving any events错误该如何解决?"
+                        - generic [ref=e691]:
+                          - link "搞七捻三" [ref=e692] [cursor=pointer]:
+                            - /url: /c/gossip/11
+                            - generic "闲聊吹水的板块。不得讨论政治、色情等违规内容。" [ref=e693]:
+                              - img [ref=e694]
+                              - generic [ref=e695]: 搞七捻三
+                          - list "标签" [ref=e696]:
+                            - listitem [ref=e697]:
+                              - link "快问快答" [ref=e698] [cursor=pointer]:
+                                - /url: /tag/1436-tag/1436
+                                - img [ref=e700]
+                                - text: 快问快答
+                            - listitem [ref=e701]:
+                              - link "人工智能" [ref=e702] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e704]
+                                - text: 人工智能
+                            - listitem [ref=e705]:
+                              - link "ClaudeCode" [ref=e706] [cursor=pointer]:
+                                - /url: /tag/claudecode/1575
+                      - generic [ref=e707]:
+                        - generic [ref=e708]: 27 天 -
+                        - generic [ref=e709]:
+                          - text: "求问各路佬友,今天在使用Claude Code(接入的any)的时候报错: API Error: Stream ended without receiving any events 查了下站内, 有说是MCP导致的,我把MCP全删了, 有说是plugin过多导致的,我又把plugin给删的差不多了, 结果还是不行. 请问佬友们如何解决这个问题呢. 背景 Any账号没封, 有充足余额. 本机网络没问题 用CC接DS api调用也没问题 切了"
+                          - img "airplane" [ref=e710]
+                          - text: "节点问题依旧 不是频发性的问题.昨天还可,今天就报错. 不是常见的: 429, 500, 503错误. 查看Any日志,又成功发..."
+                  - listitem [ref=e711]:
+                    - link "Ge0metry" [ref=e713] [cursor=pointer]:
+                      - /url: /u/ge0metry
+                      - img "Ge0metry" [ref=e714]
+                    - generic [ref=e715]:
+                      - generic [ref=e716]:
+                        - heading "Any的opus4.8是不是拉闸了？（附置顶邪修解决方案）" [level=2] [ref=e717] [cursor=pointer]:
+                          - generic "此话题有解决方案" [ref=e719]:
+                            - img [ref=e720]
+                          - generic [ref=e722]: Any的opus4.8是不是拉闸了？（附置顶邪修解决方案）
+                        - generic [ref=e723]:
+                          - link "搞七捻三" [ref=e724] [cursor=pointer]:
+                            - /url: /c/gossip/11
+                            - generic "闲聊吹水的板块。不得讨论政治、色情等违规内容。" [ref=e725]:
+                              - img [ref=e726]
+                              - generic [ref=e727]: 搞七捻三
+                          - list "标签" [ref=e728]:
+                            - listitem [ref=e729]:
+                              - link "快问快答" [ref=e730] [cursor=pointer]:
+                                - /url: /tag/1436-tag/1436
+                                - img [ref=e732]
+                                - text: 快问快答
+                            - listitem [ref=e733]:
+                              - link "人工智能" [ref=e734] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e736]
+                                - text: 人工智能
+                      - generic [ref=e737]:
+                        - generic [ref=e738]: 9 天 -
+                        - generic [ref=e739]: "{ \"env\": { \"CLAUDE_CODE_EFFORT_LEVEL\": \"max\", \"ANTHROPIC_AUTH_TOKEN\": \"sk-bRyXxxxx\", \"ANTHROPIC_BASE_URL\": \"https://anyrouter.top\", \"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\": \"1\", \"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS\": \"1\", \"CLAUDE_CODE_DISABLE_AUTO_MEMORY\": \"1\", \"effortLevel\": \"max\", \"DISABL..."
+                  - listitem [ref=e740]:
+                    - link "梦雨" [ref=e742] [cursor=pointer]:
+                      - /url: /u/yume
+                      - img "梦雨" [ref=e743]
+                    - generic [ref=e744]:
+                      - generic [ref=e745]:
+                        - heading "anyrouter+ccswitch配置claude,codex" [level=2] [ref=e746] [cursor=pointer]:
+                          - generic [ref=e748]: anyrouter+ccswitch配置claude,codex
+                        - generic [ref=e749]:
+                          - link "开发调优" [ref=e750] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e751]:
+                              - img [ref=e752]
+                              - generic [ref=e753]: 开发调优
+                          - list "标签" [ref=e754]:
+                            - listitem [ref=e755]:
+                              - link "人工智能" [ref=e756] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e758]
+                                - text: 人工智能
+                      - generic [ref=e759]:
+                        - generic [ref=e760]: 12 天 -
+                        - generic [ref=e761]: "试了很多配置，终于是能连上any了，分享一下我的配置 image claude的配置 { “env”: { “ANTHROPIC_AUTH_TOKEN”: “你的key”, “ANTHROPIC_BASE_URL”: “ https://a-ocnfniawgw.cn-shanghai.fcapp.run ”, “ANTHROPIC_DEFAULT_SONNET_MODEL”: “claude-opus-4-8[1M]”, “ANTHROPIC_DEFAULT_SONNET_MODEL_NAME”: “claude-opus-4-8”, “ANTHROPIC_DEFAULT_OPUS_M..."
+                  - listitem [ref=e762]:
+                    - link "Xle" [ref=e764] [cursor=pointer]:
+                      - /url: /u/xle-yan
+                      - img "Xle" [ref=e765]
+                    - generic [ref=e766]:
+                      - generic [ref=e767]:
+                        - heading "claude使用ops4.6模型，使用cc-switch配置，使用报错要使用1m上下文，按照佬友们的解决办法，在模型上加上了[1m]，还是不行，报503" [level=2] [ref=e768] [cursor=pointer]:
+                          - generic "此话题有解决方案" [ref=e770]:
+                            - img [ref=e771]
+                          - generic [ref=e773]: claude使用ops4.6模型，使用cc-switch配置，使用报错要使用1m上下文，按照佬友们的解决办法，在模型上加上了[1m]，还是不行，报503
+                        - generic [ref=e774]:
+                          - link "开发调优" [ref=e775] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e776]:
+                              - img [ref=e777]
+                              - generic [ref=e778]: 开发调优
+                          - list "标签" [ref=e779]:
+                            - listitem [ref=e780]:
+                              - link "快问快答" [ref=e781] [cursor=pointer]:
+                                - /url: /tag/1436-tag/1436
+                                - img [ref=e783]
+                                - text: 快问快答
+                      - generic [ref=e784]:
+                        - generic [ref=e785]: 4月 7 日 -
+                        - generic [ref=e786]: 我的claude code到新版，然后cc-switch默认的正常设置不加1m，claude code里面使用/model,选择3. Opus (1M context)。 我现在的问题是不知道openclaw中如何使用anyrouter的1m上下文，正常的不带1m模型提示400，让开启1m上下文。
+                  - listitem [ref=e787]:
+                    - link "zhangMaster" [ref=e789] [cursor=pointer]:
+                      - /url: /u/zhangmaster
+                      - img "zhangMaster" [ref=e790]
+                    - generic [ref=e791]:
+                      - generic [ref=e792]:
+                        - heading "【any 今天挂了吗】检测站也不上any了，干脆整个长期帖专门反馈互相确认any挂没挂吧" [level=2] [ref=e793] [cursor=pointer]:
+                          - generic [ref=e795]: 【any 今天挂了吗】检测站也不上any了，干脆整个长期帖专门反馈互相确认any挂没挂吧
+                        - generic [ref=e796]:
+                          - link "开发调优" [ref=e797] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e798]:
+                              - img [ref=e799]
+                              - generic [ref=e800]: 开发调优
+                          - link "开发调优, Lv1" [ref=e801] [cursor=pointer]:
+                            - /url: /c/develop/develop-lv1/20
+                            - generic "此处为 1级用户 可见空间。" [ref=e802]:
+                              - img [ref=e803]
+                              - img [ref=e804]
+                              - generic [ref=e805]: 开发调优, Lv1
+                          - list "标签" [ref=e806]:
+                            - listitem [ref=e807]:
+                              - link "人工智能" [ref=e808] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e810]
+                                - text: 人工智能
+                            - listitem [ref=e811]:
+                              - link "anyrouter" [ref=e812] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                            - listitem [ref=e813]:
+                              - link "any今天行不行？" [ref=e814] [cursor=pointer]:
+                                - /url: /tag/2306-tag/2306
+                      - generic [ref=e815]:
+                        - generic [ref=e816]: 3月 27 日 -
+                        - generic [ref=e817]: 现在大家cc客户端还有Opus 4.6 这个模型吗，我升级CC客户端后，只有Opus 4.6 (1M context) 这个了
+                  - listitem [ref=e818]:
+                    - link "xMing66" [ref=e820] [cursor=pointer]:
+                      - /url: /u/xming66
+                      - img "xMing66" [ref=e821]
+                    - generic [ref=e822]:
+                      - generic [ref=e823]:
+                        - heading "AnyRouter 1M上下文问题解决" [level=2] [ref=e824] [cursor=pointer]:
+                          - generic [ref=e826]: AnyRouter 1M上下文问题解决
+                        - generic [ref=e827]:
+                          - link "开发调优" [ref=e828] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e829]:
+                              - img [ref=e830]
+                              - generic [ref=e831]: 开发调优
+                          - list "标签" [ref=e832]:
+                            - listitem [ref=e833]:
+                              - link "人工智能" [ref=e834] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e836]
+                                - text: 人工智能
+                      - generic [ref=e837]:
+                        - generic [ref=e838]: 4月 18 日 -
+                        - generic [ref=e839]: 可以自定义请求头吗，可以的话加上anthropic-beta:context-1m-2025-08-07
+                  - listitem [ref=e840]:
+                    - link "Jason3" [ref=e842] [cursor=pointer]:
+                      - /url: /u/jason3
+                      - img "Jason3" [ref=e843]
+                    - generic [ref=e844]:
+                      - generic [ref=e845]:
+                        - heading "claude code for vscode 使用 anyrouter 模型时，提示错误500的解决办法参考" [level=2] [ref=e846] [cursor=pointer]:
+                          - generic [ref=e848]: claude code for vscode 使用 anyrouter 模型时，提示错误500的解决办法参考
+                        - generic [ref=e849]:
+                          - link "开发调优" [ref=e850] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e851]:
+                              - img [ref=e852]
+                              - generic [ref=e853]: 开发调优
+                          - list "标签" [ref=e854]:
+                            - listitem [ref=e855]:
+                              - link "软件调试" [ref=e856] [cursor=pointer]:
+                                - /url: /tag/1453-tag/1453
+                                - img [ref=e858]
+                                - text: 软件调试
+                      - generic [ref=e859]:
+                        - generic [ref=e860]: 3月 16 日 -
+                        - generic [ref=e861]: "我之前在Mac 电脑上可以直接使用，在 Windows 使用的时候一直报：500错误，纠结了我好久，今天让AI帮我排查了一下，原来是 claude code for vscode 默认default 模型是：（= sonnet），因为 anyrouter 的 sonnet 经常满载，所以就会 500。 /model 切换成：opus 4.6(with 1M context) image 还有就是开启：use Terminal image 问题就解决了。 我用的cc switch ,环境变量配置供佬友参考： “env”: { “ANTHROPIC_AUTH_TOKEN”: “sk-***r..."
+                  - listitem [ref=e862]:
+                    - link "yingnvwuyan" [ref=e864] [cursor=pointer]:
+                      - /url: /u/yingnvwuyan
+                      - img "yingnvwuyan" [ref=e865]
+                    - generic [ref=e866]:
+                      - generic [ref=e867]:
+                        - heading "不是any…. OPUS 4.7!!" [level=2] [ref=e868] [cursor=pointer]:
+                          - generic [ref=e870]: 不是any…. OPUS 4.7!!
+                        - generic [ref=e871]:
+                          - link "开发调优" [ref=e872] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e873]:
+                              - img [ref=e874]
+                              - generic [ref=e875]: 开发调优
+                          - list "标签" [ref=e876]:
+                            - listitem [ref=e877]:
+                              - link "人工智能" [ref=e878] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e880]
+                                - text: 人工智能
+                            - listitem [ref=e881]:
+                              - link "Claude" [ref=e882] [cursor=pointer]:
+                                - /url: /tag/claude/207
+                            - listitem [ref=e883]:
+                              - link "anyrouter" [ref=e884] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                      - generic [ref=e885]:
+                        - generic [ref=e886]: 4月 20 日 -
+                        - generic [ref=e887]: "/model ⎿ Set model to Opus 4.6 (1M context) ❯ hi ⎿ API Error: 400 {“error”:“claude-opus-4-6 已下线，请切换到 claude-opus-4-7 模型”,“type”:“error”} ❯ /model ⎿ Set model to Haiku 4.5 ❯ hi ⎿ API Error: 400 {“error”:“1m 上下文已经全量可用，请启用 1m 上下文后重试”,“type”:“error”} ❯ /model ⎿ Set model to Sonnet 4.6 (1M context) ❯ ..."
+                  - listitem [ref=e888]:
+                    - link "Sanite&Ava" [ref=e890] [cursor=pointer]:
+                      - /url: /u/sanite_ava
+                      - img "Sanite&Ava" [ref=e891]
+                    - generic [ref=e892]:
+                      - generic [ref=e893]:
+                        - heading "搞定了CPA正常调用Any子代理和Web Search了" [level=2] [ref=e894] [cursor=pointer]:
+                          - generic [ref=e896]: 搞定了CPA正常调用Any子代理和Web Search了
+                        - generic [ref=e897]:
+                          - link "开发调优" [ref=e898] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e899]:
+                              - img [ref=e900]
+                              - generic [ref=e901]: 开发调优
+                          - list "标签" [ref=e902]:
+                            - listitem [ref=e903]:
+                              - link "软件开发" [ref=e904] [cursor=pointer]:
+                                - /url: /tag/1451-tag/1451
+                                - img [ref=e906]
+                                - text: 软件开发
+                      - generic [ref=e907]:
+                        - generic [ref=e908]: 4月 19 日 -
+                        - generic [ref=e909]: "今天突然看到有佬发了个帖子 https://linux.do/t/topic/1993243 然后发现确实在直接调用Any的时候无法使用子代理和Web Search 但是我日常用的CPA 也不想换CCH了就尝试了一下 发现成功了 具体方法 : 请求头中依旧照着 https://linux.do/u/ktze ktze 佬帖子中的方式填写 anthropic-beta : claude-code-20250219,context-1m-2025-08-07,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,context-..."
+                  - listitem [ref=e910]:
+                    - link "yue" [ref=e912] [cursor=pointer]:
+                      - /url: /u/qiuyue
+                      - img "yue" [ref=e913]
+                    - generic [ref=e914]:
+                      - generic [ref=e915]:
+                        - heading "anyrouter 使用提示：请启用 1m 上下文后重试，怎么解决" [level=2] [ref=e916] [cursor=pointer]:
+                          - generic [ref=e918]: anyrouter 使用提示：请启用 1m 上下文后重试，怎么解决
+                        - generic [ref=e919]:
+                          - link "搞七捻三" [ref=e920] [cursor=pointer]:
+                            - /url: /c/gossip/11
+                            - generic "闲聊吹水的板块。不得讨论政治、色情等违规内容。" [ref=e921]:
+                              - img [ref=e922]
+                              - generic [ref=e923]: 搞七捻三
+                          - link "搞七捻三, Lv1" [ref=e924] [cursor=pointer]:
+                            - /url: /c/gossip/gossip-lv1/35
+                            - generic "此处为 1级用户 可见空间。" [ref=e925]:
+                              - img [ref=e926]
+                              - img [ref=e927]
+                              - generic [ref=e928]: 搞七捻三, Lv1
+                          - list "标签" [ref=e929]:
+                            - listitem [ref=e930]:
+                              - link "纯水" [ref=e931] [cursor=pointer]:
+                                - /url: /tag/1461-tag/1461
+                                - img [ref=e933]
+                                - text: 纯水
+                            - listitem [ref=e934]:
+                              - link "人工智能" [ref=e935] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e937]
+                                - text: 人工智能
+                            - listitem [ref=e938]:
+                              - link "病友" [ref=e939] [cursor=pointer]:
+                                - /url: /tag/73-tag/73
+                                - img [ref=e941]
+                                - text: 病友
+                      - generic [ref=e942]:
+                        - generic [ref=e943]: 4月 3 日 -
+                        - generic [ref=e944]: 一楼给了解决方案。 进入cc 输入 /model 然后选择 Opus 4.6 (1M context) 即可 ❯ /model ⎿ Set model to Opus 4.6 (1M context)
+                  - listitem [ref=e945]:
+                    - link "iMax2328" [ref=e947] [cursor=pointer]:
+                      - /url: /u/imax2328
+                      - img "iMax2328" [ref=e948]
+                    - generic [ref=e949]:
+                      - generic [ref=e950]:
+                        - heading "【求助/Bug反馈】使用 AnyRouter 中转运行 Claude Code 报错 500 new_api_error" [level=2] [ref=e951] [cursor=pointer]:
+                          - generic [ref=e953]: 【求助/Bug反馈】使用 AnyRouter 中转运行 Claude Code 报错 500 new_api_error
+                        - generic [ref=e954]:
+                          - link "开发调优" [ref=e955] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e956]:
+                              - img [ref=e957]
+                              - generic [ref=e958]: 开发调优
+                          - link "开发调优, Lv1" [ref=e959] [cursor=pointer]:
+                            - /url: /c/develop/develop-lv1/20
+                            - generic "此处为 1级用户 可见空间。" [ref=e960]:
+                              - img [ref=e961]
+                              - img [ref=e962]
+                              - generic [ref=e963]: 开发调优, Lv1
+                          - list "标签" [ref=e964]:
+                            - listitem [ref=e965]:
+                              - link "人工智能" [ref=e966] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e968]
+                                - text: 人工智能
+                      - generic [ref=e969]:
+                        - generic [ref=e970]: 3月 19 日 -
+                        - generic [ref=e971]:
+                          - text: 我v2.1.56 也是不能用
+                          - img "yawning_face" [ref=e972]
+                          - text: 换取 v2.1.76 model = Opus 4.6 (1M context) 没问题 model = Opus 4.6 503 所有供应商已熔断 model = Sonnet 4.6 (1M context) 503 所有供应商已熔断 model = Sonnet 4.6 503 所有供应商已熔断
+                  - listitem [ref=e973]:
+                    - link "空气动力学" [ref=e975] [cursor=pointer]:
+                      - /url: /u/slashkkk
+                      - img "空气动力学" [ref=e976]
+                    - generic [ref=e977]:
+                      - generic [ref=e978]:
+                        - heading "any rounter总是报错说上下文长度出错，需要频繁压缩，模型写的1M，是使用不对吗？" [level=2] [ref=e979] [cursor=pointer]:
+                          - generic "此话题有解决方案" [ref=e981]:
+                            - img [ref=e982]
+                          - generic [ref=e984]: any rounter总是报错说上下文长度出错，需要频繁压缩，模型写的1M，是使用不对吗？
+                        - generic [ref=e985]:
+                          - link "开发调优" [ref=e986] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e987]:
+                              - img [ref=e988]
+                              - generic [ref=e989]: 开发调优
+                          - list "标签" [ref=e990]:
+                            - listitem [ref=e991]:
+                              - link "快问快答" [ref=e992] [cursor=pointer]:
+                                - /url: /tag/1436-tag/1436
+                                - img [ref=e994]
+                                - text: 快问快答
+                      - generic [ref=e995]:
+                        - generic [ref=e996]: 2月 24 日 -
+                        - generic [ref=e997]: 选择标注了 1M context 的 opus 实际没有用的，所以会报错，只能手动压缩。 原因是 cc 提供的只是选项，而 anyrouter 提供的 claude 实际不支持，所以造成了错误。 另外还可以选择 fast 模式，实际上也不支持，但不会报错。见下图： image image
+                  - listitem [ref=e998]:
+                    - link "ProYI" [ref=e1000] [cursor=pointer]:
+                      - /url: /u/proyi
+                      - img "ProYI" [ref=e1001]
+                    - generic [ref=e1002]:
+                      - generic [ref=e1003]:
+                        - 'heading "anyrouter报Please run /login · API Error: 403 status code (no body)不是封号，改下模型就可以了" [level=2] [ref=e1004] [cursor=pointer]':
+                          - generic [ref=e1006]: "anyrouter报Please run /login · API Error: 403 status code (no body)不是封号，改下模型就可以了"
+                        - generic [ref=e1007]:
+                          - link "搞七捻三" [ref=e1008] [cursor=pointer]:
+                            - /url: /c/gossip/11
+                            - generic "闲聊吹水的板块。不得讨论政治、色情等违规内容。" [ref=e1009]:
+                              - img [ref=e1010]
+                              - generic [ref=e1011]: 搞七捻三
+                          - list "标签" [ref=e1012]:
+                            - listitem [ref=e1013]:
+                              - link "纯水" [ref=e1014] [cursor=pointer]:
+                                - /url: /tag/1461-tag/1461
+                                - img [ref=e1016]
+                                - text: 纯水
+                      - generic [ref=e1017]:
+                        - generic [ref=e1018]: 3月 20 日 -
+                        - generic [ref=e1019]: 我在cc-switch里配置 opus[1m] 是不行的，后来改成 claude-opus-4-6(1M context) ，可以通了，但是绝望的是以达到最大负载 图片
+                  - listitem [ref=e1020]:
+                    - link "yeluo001" [ref=e1022] [cursor=pointer]:
+                      - /url: /u/yeluo001
+                      - img "yeluo001" [ref=e1023]
+                    - generic [ref=e1024]:
+                      - generic [ref=e1025]:
+                        - heading "关于anyrouter通过axonhub网关接入claude code始终提示启用1m上下文的解决办法" [level=2] [ref=e1026] [cursor=pointer]:
+                          - generic [ref=e1028]: 关于anyrouter通过axonhub网关接入claude code始终提示启用1m上下文的解决办法
+                        - generic [ref=e1029]:
+                          - link "开发调优" [ref=e1030] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e1031]:
+                              - img [ref=e1032]
+                              - generic [ref=e1033]: 开发调优
+                          - link "开发调优, Lv1" [ref=e1034] [cursor=pointer]:
+                            - /url: /c/develop/develop-lv1/20
+                            - generic "此处为 1级用户 可见空间。" [ref=e1035]:
+                              - img [ref=e1036]
+                              - img [ref=e1037]
+                              - generic [ref=e1038]: 开发调优, Lv1
+                          - list "标签" [ref=e1039]:
+                            - listitem [ref=e1040]:
+                              - link "人工智能" [ref=e1041] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e1043]
+                                - text: 人工智能
+                      - generic [ref=e1044]:
+                        - generic [ref=e1045]: 4月 14 日 -
+                        - generic [ref=e1046]: 如果是通过axonhub接入anyrouter的佬友应该有遇到这种情况，即便是claude code已经/model切换到opus[1m]，也始终报错400让更换1m模型，即便开启user-agent透传也没用。 根据论坛哈雷佬之前在某个帖子提到的修改请求头，找gpt研究了下，发现了问题是axonhub并没有原样cc请求里的请求头键值。 具体修改办法就是， axonhub找到anyrouter渠道，点尾部三个点里面的覆盖设置，切到覆盖请求头，新增操作，操作类型选设置，键名填Anthropic-Beta，键值填 claude-code-20250219,context-1m-2025-08...
+                  - listitem [ref=e1047]:
+                    - link "Climber" [ref=e1049] [cursor=pointer]:
+                      - /url: /u/climber
+                      - img "Climber" [ref=e1050]
+                    - generic [ref=e1051]:
+                      - generic [ref=e1052]:
+                        - heading "(any) opus4.7 目前可用，但是 web 能力无法正常使用" [level=2] [ref=e1053] [cursor=pointer]:
+                          - generic "此话题有解决方案" [ref=e1055]:
+                            - img [ref=e1056]
+                          - generic [ref=e1058]: (any) opus4.7 目前可用，但是 web 能力无法正常使用
+                        - generic [ref=e1059]:
+                          - link "开发调优" [ref=e1060] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e1061]:
+                              - img [ref=e1062]
+                              - generic [ref=e1063]: 开发调优
+                          - list "标签" [ref=e1064]:
+                            - listitem [ref=e1065]:
+                              - link "快问快答" [ref=e1066] [cursor=pointer]:
+                                - /url: /tag/1436-tag/1436
+                                - img [ref=e1068]
+                                - text: 快问快答
+                            - listitem [ref=e1069]:
+                              - link "人工智能" [ref=e1070] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e1072]
+                                - text: 人工智能
+                            - listitem [ref=e1073]:
+                              - link "anyrouter" [ref=e1074] [cursor=pointer]:
+                                - /url: /tag/2238-tag/2238
+                      - generic [ref=e1075]:
+                        - generic [ref=e1076]: 4月 18 日 -
+                        - generic [ref=e1077]: 坏消息：两个工具同时故障： 后台 Agent：连续 500 panic（服务端问题） WebSearch：返回"1m 上下文已经全量可用，请启用 1m 上下文后重试"——需要你在界面里启用 1M context 才能走通 是否有佬遇到过类似问题，恳请交流分享
+                  - listitem [ref=e1078]:
+                    - link "yeluo001" [ref=e1080] [cursor=pointer]:
+                      - /url: /u/yeluo001
+                      - img "yeluo001" [ref=e1081]
+                    - generic [ref=e1082]:
+                      - generic [ref=e1083]:
+                        - heading "分享以本地代理方式使用anyrouter的方法【4月25日更新配置】" [level=2] [ref=e1084] [cursor=pointer]:
+                          - generic [ref=e1086]: 分享以本地代理方式使用anyrouter的方法【4月25日更新配置】
+                        - generic [ref=e1087]:
+                          - link "开发调优" [ref=e1088] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e1089]:
+                              - img [ref=e1090]
+                              - generic [ref=e1091]: 开发调优
+                          - link "开发调优, Lv1" [ref=e1092] [cursor=pointer]:
+                            - /url: /c/develop/develop-lv1/20
+                            - generic "此处为 1级用户 可见空间。" [ref=e1093]:
+                              - img [ref=e1094]
+                              - img [ref=e1095]
+                              - generic [ref=e1096]: 开发调优, Lv1
+                          - list "标签" [ref=e1097]:
+                            - listitem [ref=e1098]:
+                              - link "人工智能" [ref=e1099] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e1101]
+                                - text: 人工智能
+                      - generic [ref=e1102]:
+                        - generic [ref=e1103]: 4月 19 日 -
+                        - generic [ref=e1104]: "纳卡卡: \"ANTHROPIC_SMALL_FAST_MODEL\": \"claude-haiku-4-5-20251001[1m]\", \"ANTHROPIC_DEFAULT_HAIKU_MODEL\": \"claude-haiku-4-5-20251001[1m]\", 需要修改请求头内容才行，请求头的Anthropic-Beta设置成 claude-code-20250219,context-1m-2025-08-07,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,context-management-2025-06-..."
+                  - listitem [ref=e1105]:
+                    - link "baobaobao" [ref=e1107] [cursor=pointer]:
+                      - /url: /u/baobaobao_xia
+                      - img "baobaobao" [ref=e1108]
+                    - generic [ref=e1109]:
+                      - generic [ref=e1110]:
+                        - heading "关于OpenCode接入使用Anyrouter二三事(插件版本)" [level=2] [ref=e1111] [cursor=pointer]:
+                          - generic [ref=e1113]: 关于OpenCode接入使用Anyrouter二三事(插件版本)
+                        - generic [ref=e1114]:
+                          - link "开发调优" [ref=e1115] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e1116]:
+                              - img [ref=e1117]
+                              - generic [ref=e1118]: 开发调优
+                          - link "开发调优, Lv2" [ref=e1119] [cursor=pointer]:
+                            - /url: /c/develop/develop-lv2/31
+                            - generic "此处为 2级用户 可见空间。" [ref=e1120]:
+                              - img [ref=e1121]
+                              - img [ref=e1122]
+                              - generic [ref=e1123]: 开发调优, Lv2
+                          - list "标签" [ref=e1124]:
+                            - listitem [ref=e1125]:
+                              - link "软件调试" [ref=e1126] [cursor=pointer]:
+                                - /url: /tag/1453-tag/1453
+                                - img [ref=e1128]
+                                - text: 软件调试
+                      - generic [ref=e1129]:
+                        - generic [ref=e1130]: 3月 20 日 -
+                        - generic [ref=e1131]: "可在opencode 中使用 anyrouter import { generatePKCE } from \"@openauthjs/openauth/pkce\"; const CLIENT_ID = \"9d1c250a-e61b-44d9-88ed-5944d1962f5e\"; const TOOL_PREFIX = \"mcp_\"; const TOKEN_URL = \"https://console.anthropic.com/v1/oauth/token\"; const REDIRECT_URI = \"https://console.anthropic.com/oauth/code..."
+                  - listitem [ref=e1132]:
+                    - link "HiFlyme" [ref=e1134] [cursor=pointer]:
+                      - /url: /u/hiflyme
+                      - img "HiFlyme" [ref=e1135]
+                    - generic [ref=e1136]:
+                      - generic [ref=e1137]:
+                        - heading "Any牌路由器使用清障！" [level=2] [ref=e1138] [cursor=pointer]:
+                          - generic "您已将此话题添加为书签" [ref=e1140]:
+                            - img [ref=e1141]
+                          - generic [ref=e1143]: Any牌路由器使用清障！
+                        - generic [ref=e1144]:
+                          - link "开发调优" [ref=e1145] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e1146]:
+                              - img [ref=e1147]
+                              - generic [ref=e1148]: 开发调优
+                          - list "标签" [ref=e1149]:
+                            - listitem [ref=e1150]:
+                              - link "配置优化" [ref=e1151] [cursor=pointer]:
+                                - /url: /tag/1454-tag/1454
+                                - img [ref=e1153]
+                                - text: 配置优化
+                            - listitem [ref=e1154]:
+                              - link "ClaudeCode" [ref=e1155] [cursor=pointer]:
+                                - /url: /tag/claudecode/1575
+                            - listitem [ref=e1156]:
+                              - link "Anthropic" [ref=e1157] [cursor=pointer]:
+                                - /url: /tag/anthropic/1503
+                            - listitem [ref=e1158]:
+                              - link "精华神帖" [ref=e1159] [cursor=pointer]:
+                                - /url: /tag/1435-tag/1435
+                                - img [ref=e1161]
+                                - text: 精华神帖
+                      - generic [ref=e1162]:
+                        - generic [ref=e1163]: 4月 21 日 -
+                        - generic [ref=e1164]:
+                          - text: claude code 版本 2.1.116，websearch正常，webfetch/subagent异常，有无佬友知道为啥呀？
+                          - img "rofl" [ref=e1165]
+                          - text: "cc-switch配置如下 { \"env\": { \"ANTHROPIC_AUTH_TOKEN\": \"sk-****\", \"ANTHROPIC_BASE_URL\": \"https://anyrouter.top\", \"ANTHROPIC_MODEL\": \"claude-opus-4-7\", \"ANTHROPIC_DEFAULT_HAIKU_MODEL\": \"claude-opus-4-7\", \"ANTHROPIC_DEFAULT_SONNET_M..."
+                  - listitem [ref=e1166]:
+                    - link "HiFlyme" [ref=e1168] [cursor=pointer]:
+                      - /url: /u/hiflyme
+                      - img "HiFlyme" [ref=e1169]
+                    - generic [ref=e1170]:
+                      - generic [ref=e1171]:
+                        - heading "折腾一下午了，any始终连不上，api发出来给大家用好了" [level=2] [ref=e1172] [cursor=pointer]:
+                          - generic [ref=e1174]: 折腾一下午了，any始终连不上，api发出来给大家用好了
+                        - generic [ref=e1175]:
+                          - link "福利羊毛" [ref=e1176] [cursor=pointer]:
+                            - /url: /c/welfare/36
+                            - generic "正经人谁花那个钱啊～ 此版块供羊毛、抽奖等福利使用。" [ref=e1177]:
+                              - img [ref=e1178]
+                              - generic [ref=e1179]: 福利羊毛
+                          - link "福利羊毛, Lv1" [ref=e1180] [cursor=pointer]:
+                            - /url: /c/welfare/welfare-lv1/60
+                            - generic "此处为 1级用户 可见空间。" [ref=e1181]:
+                              - img [ref=e1182]
+                              - img [ref=e1183]
+                              - generic [ref=e1184]: 福利羊毛, Lv1
+                          - list "标签" [ref=e1185]:
+                            - listitem [ref=e1186]:
+                              - link "人工智能" [ref=e1187] [cursor=pointer]:
+                                - /url: /tag/444-tag/444
+                                - img [ref=e1189]
+                                - text: 人工智能
+                      - generic [ref=e1190]:
+                        - generic [ref=e1191]: 4月 21 日 -
+                        - generic [ref=e1192]:
+                          - text: claude code 版本 2.1.116，websearch正常，webfetch/subagent异常，有无佬友知道为啥呀？
+                          - img "rofl" [ref=e1193]
+                          - text: "cc-switch配置如下 { \"env\": { \"ANTHROPIC_AUTH_TOKEN\": \"sk-****\", \"ANTHROPIC_BASE_URL\": \"https://anyrouter.top\", \"ANTHROPIC_MODEL\": \"claude-opus-4-7\", \"ANTHROPIC_DEFAULT_HAIKU_MODEL\": \"claude-opus-4-7\", \"ANTHROPIC_DEFAULT_SONNET_M..."
+                  - listitem [ref=e1194]:
+                    - link "MrAnti" [ref=e1196] [cursor=pointer]:
+                      - /url: /u/mranti
+                      - img "MrAnti" [ref=e1197]
+                    - generic [ref=e1198]:
+                      - generic [ref=e1199]:
+                        - heading "CC 上下文超限，请教各位大佬" [level=2] [ref=e1200] [cursor=pointer]:
+                          - generic "此话题有解决方案" [ref=e1202]:
+                            - img [ref=e1203]
+                          - generic [ref=e1205]: CC 上下文超限，请教各位大佬
+                        - generic [ref=e1206]:
+                          - link "开发调优" [ref=e1207] [cursor=pointer]:
+                            - /url: /c/develop/4
+                            - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e1208]:
+                              - img [ref=e1209]
+                              - generic [ref=e1210]: 开发调优
+                          - list "标签" [ref=e1211]:
+                            - listitem [ref=e1212]:
+                              - link "快问快答" [ref=e1213] [cursor=pointer]:
+                                - /url: /tag/1436-tag/1436
+                                - img [ref=e1215]
+                                - text: 快问快答
+                      - generic [ref=e1216]:
+                        - generic [ref=e1217]: 4月 21 日 -
+                        - generic [ref=e1218]: "我把我的配置分享出来你试下，记得备份原配置。 { “env”: { “ANTHROPIC_AUTH_TOKEN”: “sk-”, “ANTHROPIC_BASE_URL”: “ https://anyrouter.top ”, “ANTHROPIC_MODEL”: “claude-opus-4-7[1m]”, “ANTHROPIC_DEFAULT_HAIKU_MODEL”: “claude-opus-4-7[1m]”, “ANTHROPIC_DEFAULT_OPUS_MODEL”: “claude-opus-4-7[1m]”, “ANTHROPIC_REASONING_MODEL”: “..."
+                - heading "没有找到更多结果。" [level=3] [ref=e1220]
+        - dialog "用户卡"
+  - status [ref=e1221]
+  - alert [ref=e1222]

@@ -34,9 +34,10 @@ class PromptOptimizer:
         """Return optimized user-layer rules using the configured AI endpoint."""
 
         ai = settings.ai
-        if not ai.base_url.strip() or not ai.api_key.strip() or not ai.model.strip():
+        model = ai.thinking_model_name
+        if not ai.base_url.strip() or not ai.api_key.strip() or not model.strip():
             raise PromptOptimizationError(
-                "请先填写 Base URL、API Key 和 Model，再生成 compiled prompt。"
+                "请先填写 Base URL、API Key 和 Thinking Model，再生成 compiled prompt。"
             )
 
         system_prompt, user_prompt = self._compiler.build_optimizer_messages(
@@ -47,7 +48,7 @@ class PromptOptimizer:
             ClientConfig(
                 base_url=ai.base_url,
                 api_key=ai.api_key,
-                model=ai.model,
+                model=model,
             )
         )
 

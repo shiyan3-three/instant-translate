@@ -8,6 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.agent.agent import TranslationAgent
+from app.agent.session_store import AgentSessionMeta
+from app.feedback.store import FeedbackStore
 from app.prompt.base_template import DEFAULT_BASE_PROMPT
 from app.settings import AppSettings
 from app.translation.client import TranslationError
@@ -19,6 +21,39 @@ class FailingClient:
 
     def translate(self, system_prompt: str, source_text: str) -> str:
         raise TranslationError("old request timed out")
+
+
+class FakeSessionStore:
+    """In-memory session store test double."""
+
+    def __init__(self, loaded_messages=None) -> None:
+        self.loaded_messages = loaded_messages
+        self.load_calls = []
+        self.save_calls = []
+
+    def load(self, meta: AgentSessionMeta):
+        self.load_calls.append(meta)
+        return self.loaded_messages
+
+    def save(self, meta: AgentSessionMeta, messages: list[dict]) -> None:
+        self.save_calls.append((meta, list(messages)))
+
+    def delete(self, group_id: int) -> None:
+        pass
+
+
+class FakeMemoryAgent:
+    """Agent test double that records runtime memory hints."""
+
+    def __init__(self) -> None:
+        self.messages = []
+        self.text = ""
+        self.memory_hints = None
+
+    def translate(self, text: str, memory_hints=None) -> str:
+        self.text = text
+        self.memory_hints = memory_hints
+        return "the national college entrance exam starts soon"
 
 
 class TranslationServicePromptTests(unittest.TestCase):
@@ -52,6 +87,45 @@ class TranslationServicePromptTests(unittest.TestCase):
         self.assertIn(DEFAULT_BASE_PROMPT, prompt)
         self.assertIn("Translate from 日本語 to English.", prompt)
 
+    def test_current_prompt_clarifies_hiragana_as_semantic_translation(self) -> None:
+        compiled_content = """
+# Instant Translate Compiled Prompt
+
+## User Constraint Layer
+如果中文翻译为日语时，翻译的日语句子只能由平假名构成
+
+## AI Optimization Layer
+All kanji must be converted to their corresponding hiragana readings without exception.
+- Convert all Chinese characters to hiragana equivalents.
+- Maintain original meaning while adhering to the hiragana-only constraint.
+**Examples**:
+- 中国語 (ちゅうごくご) → ちゅうごくご
+
+## Runtime Direction
+For every request, follow the source and target languages appended by the app.
+""".strip()
+        with tempfile.TemporaryDirectory() as tmp:
+            prompt_path = Path(tmp) / "compiled.md"
+            prompt_path.write_text(compiled_content, encoding="utf-8")
+            settings = AppSettings()
+            settings.prompt.compiled_prompt_path = str(prompt_path)
+            service = TranslationService(settings)
+
+            prompt = service._current_prompt("中文", "日本語")
+            service.shutdown()
+
+        self.assertIn("先把源文本按语义翻译成自然日语", prompt)
+        self.assertIn("不能仅因字符是“高”“考”就输出“こうこう”", prompt)
+        self.assertIn("自然日语质量规则", prompt)
+        self.assertIn("不要逐词硬译中文量词", prompt)
+        self.assertIn("不要译成“いちにんのおんな”", prompt)
+        self.assertIn("单元测试用例", prompt)
+        self.assertIn("たんたいてすとけーす", prompt)
+        self.assertIn("不要机械翻译成“いえ”", prompt)
+        self.assertNotIn("Convert all Chinese characters to hiragana equivalents", prompt)
+        self.assertNotIn("corresponding hiragana readings", prompt)
+        self.assertNotIn("中国語 (ちゅうごくご)", prompt)
+
     def test_stale_translation_error_does_not_notify_result_callback(self) -> None:
         service = TranslationService(AppSettings())
         ctx = service._ensure_group(1)
@@ -72,6 +146,60 @@ class TranslationServicePromptTests(unittest.TestCase):
         service.shutdown()
 
         self.assertEqual(results, [])
+
+    def test_invalidate_group_requests_marks_existing_request_stale(self) -> None:
+        service = TranslationService(AppSettings())
+        request = TranslationRequest(
+            group_id=1,
+            request_id=1,
+            ocr_text="old text",
+            source_language="English",
+            target_language="中文",
+        )
+        ctx = service._ensure_group(1)
+        ctx.current_request_id = 1
+
+        service.invalidate_group_requests(1, reason="ocr changed")
+
+        self.assertTrue(service._is_stale_request(request, ctx))
+        service.shutdown()
+
+    def test_execute_injects_confirmed_feedback_memory_when_trigger_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            feedback_store = FeedbackStore(tmp)
+            record = feedback_store.add_feedback(
+                group_id=1,
+                source_language="English",
+                target_language="中文",
+                ocr_text="The gaokao starts soon",
+                translation_text="高中考试很快开始",
+            )
+            feedback_store.approve_feedback(
+                record.id,
+                trigger="gaokao",
+                rule="gaokao 应译为中国高考/大学入学考试，不要译成普通高中考试。",
+                preferred_translation="高考很快开始",
+            )
+            service = TranslationService(AppSettings(), feedback_store=feedback_store)
+            fake_agent = FakeMemoryAgent()
+            service._ensure_agent = lambda group_id, source, target: fake_agent
+            request = TranslationRequest(
+                group_id=1,
+                request_id=1,
+                ocr_text="The gaokao starts soon",
+                source_language="English",
+                target_language="中文",
+            )
+            service._ensure_group(1).current_request_id = 1
+            results = []
+
+            service._execute(request, results.append)
+            service.shutdown()
+
+            self.assertEqual(results[0].text, "the national college entrance exam starts soon")
+            self.assertEqual(fake_agent.text, "The gaokao starts soon")
+            self.assertIsNotNone(fake_agent.memory_hints)
+            self.assertIn("gaokao 应译为", fake_agent.memory_hints[0])
 
 
 class TranslationServiceAgentPerGroupTests(unittest.TestCase):
@@ -123,6 +251,77 @@ class TranslationServiceAgentPerGroupTests(unittest.TestCase):
         self.assertIs(service._agents[2], agent2, "Group 2 agent should be unchanged")
         
         service.shutdown()
+
+    def test_ensure_agent_passes_fast_and_thinking_model_configs(self) -> None:
+        """Agent should receive separate fast and thinking model configs."""
+        settings = AppSettings()
+        settings.ai.base_url = "https://api.example.test/v1"
+        settings.ai.api_key = "key"
+        settings.ai.fast_model = "deepseek-v4-flash"
+        settings.ai.thinking_model = "deepseek-v4-pro"
+        service = TranslationService(settings)
+
+        with patch.object(TranslationAgent, 'digest_rules'), \
+             patch.object(TranslationAgent, '__init__', return_value=None) as init_mock:
+            service._ensure_agent(1, "中文", "日本語")
+
+        service.shutdown()
+
+        fast_config, thinking_config = init_mock.call_args.args
+        self.assertEqual(fast_config.model, "deepseek-v4-flash")
+        self.assertEqual(thinking_config.model, "deepseek-v4-pro")
+        self.assertEqual(fast_config.base_url, "https://api.example.test/v1")
+        self.assertEqual(thinking_config.api_key, "key")
+
+    def test_ensure_agent_restores_saved_session_without_digest(self) -> None:
+        messages = [
+            {"role": "system", "content": "rules"},
+            {"role": "user", "content": "confirm"},
+            {"role": "assistant", "content": "confirmed"},
+        ]
+        settings = AppSettings()
+        settings.ai.base_url = "https://api.example.test/v1"
+        settings.ai.api_key = "key"
+        settings.ai.fast_model = "deepseek-v4-flash"
+        settings.ai.thinking_model = "deepseek-v4-pro"
+        store = FakeSessionStore(loaded_messages=messages)
+        service = TranslationService(settings, session_store=store)
+
+        with patch.object(TranslationAgent, 'digest_rules') as digest_mock, \
+             patch.object(TranslationAgent, 'restore_messages') as restore_mock:
+            service._ensure_agent(1, "中文", "日本語")
+
+        service.shutdown()
+
+        digest_mock.assert_not_called()
+        restore_mock.assert_called_once_with(messages)
+        self.assertEqual(store.load_calls[0].fast_model, "deepseek-v4-flash")
+        self.assertEqual(store.load_calls[0].thinking_model, "deepseek-v4-pro")
+
+    def test_ensure_agent_saves_session_after_new_digest(self) -> None:
+        messages = [
+            {"role": "system", "content": "rules"},
+            {"role": "user", "content": "confirm"},
+            {"role": "assistant", "content": "confirmed"},
+        ]
+        settings = AppSettings()
+        settings.ai.base_url = "https://api.example.test/v1"
+        settings.ai.api_key = "key"
+        settings.ai.fast_model = "deepseek-v4-flash"
+        settings.ai.thinking_model = "deepseek-v4-pro"
+        store = FakeSessionStore()
+        service = TranslationService(settings, session_store=store)
+
+        def fake_digest(agent, prompt):
+            agent.messages = messages
+
+        with patch.object(TranslationAgent, 'digest_rules', autospec=True, side_effect=fake_digest):
+            service._ensure_agent(1, "中文", "日本語")
+
+        service.shutdown()
+
+        self.assertEqual(len(store.save_calls), 1)
+        self.assertEqual(store.save_calls[0][1], messages)
 
 
 if __name__ == "__main__":

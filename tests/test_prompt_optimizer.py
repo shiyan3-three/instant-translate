@@ -14,6 +14,7 @@ class FakeClient:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
+        self.configs = []
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         self.calls.append((system_prompt, user_prompt))
@@ -27,14 +28,21 @@ class PromptOptimizerTests(unittest.TestCase):
         settings = AppSettings()
         settings.ai.base_url = "https://api.example.test/v1"
         settings.ai.api_key = "key"
-        settings.ai.model = "model"
+        settings.ai.fast_model = "fast-model"
+        settings.ai.thinking_model = "thinking-model"
         fake_client = FakeClient()
-        optimizer = PromptOptimizer(client_factory=lambda config: fake_client)
+
+        def factory(config):
+            fake_client.configs.append(config)
+            return fake_client
+
+        optimizer = PromptOptimizer(client_factory=factory)
 
         result = optimizer.optimize(settings, PromptConstraints(text="short style"))
 
         self.assertEqual(result, "Optimized rules")
         self.assertEqual(len(fake_client.calls), 1)
+        self.assertEqual(fake_client.configs[0].model, "thinking-model")
         self.assertIn("short style", fake_client.calls[0][1])
 
     def test_optimize_rejects_missing_ai_settings(self) -> None:

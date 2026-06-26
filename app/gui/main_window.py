@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QStatusBar,
     QVBoxLayout,
@@ -30,6 +31,8 @@ from PySide6.QtWidgets import (
 )
 
 from app.app_context import ApplicationContext
+from app.feedback.optimizer import FeedbackOptimization, FeedbackOptimizer
+from app.feedback.store import FeedbackRecord, FeedbackStore
 from app.prompt.compiler import PromptCompiler
 from app.prompt.models import PromptConstraints, PromptKnowledgeReference
 from app.prompt.optimizer import PromptOptimizationError, PromptOptimizer
@@ -38,6 +41,21 @@ from app.settings import AppSettings
 from app.translation.client import ClientConfig, OpenAICompatibleClient, TranslationError
 
 LANGUAGES = ["English", "中文", "日本語"]
+
+
+def _prevent_horizontal_growth(widget: QWidget) -> None:
+    """Let long text shrink inside the current page width instead of widening it."""
+
+    widget.setMinimumWidth(0)
+    widget.setSizePolicy(QSizePolicy.Policy.Ignored, widget.sizePolicy().verticalPolicy())
+
+
+def _configure_wrapping_text_edit(editor: QPlainTextEdit) -> None:
+    """Keep long OCR/prompt text readable without creating horizontal page growth."""
+
+    editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+    editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    _prevent_horizontal_growth(editor)
 
 
 # =========================================================================
@@ -222,9 +240,11 @@ class TemplatePage(QWidget):
         # Create scrollable content
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         
         content = QWidget()
+        content.setMinimumWidth(0)
         layout = QVBoxLayout(content)
         layout.setContentsMargins(32, 32, 32, 32)
         layout.setSpacing(16)
@@ -234,6 +254,7 @@ class TemplatePage(QWidget):
         title.setObjectName("pageTitle")
         desc = QLabel("配置语言方向、翻译约束和知识引用")
         desc.setObjectName("pageDesc")
+        desc.setWordWrap(True)
         layout.addWidget(title)
         layout.addWidget(desc)
         layout.addSpacing(8)
@@ -281,6 +302,7 @@ class TemplatePage(QWidget):
         self._constraints_btn = QPushButton()
         self._constraints_btn.setObjectName("constraintsPreview")
         self._constraints_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        _prevent_horizontal_growth(self._constraints_btn)
         self._constraints_btn.clicked.connect(self._on_edit_constraints)
         self._refresh_constraints_preview()
         layout.addWidget(self._constraints_btn)
@@ -296,6 +318,7 @@ class TemplatePage(QWidget):
         self._knowledge_list.setReadOnly(True)
         self._knowledge_list.setPlaceholderText("尚未添加知识引用文档...")
         self._knowledge_list.setMaximumHeight(80)
+        _configure_wrapping_text_edit(self._knowledge_list)
         if self._knowledge_paths:
             self._knowledge_list.setPlainText("\n".join(self._knowledge_paths))
         layout.addWidget(self._knowledge_list)
@@ -322,10 +345,13 @@ class TemplatePage(QWidget):
 
         self._compiled_path = QLineEdit(compiled_prompt_path)
         self._compiled_path.setReadOnly(True)
+        _prevent_horizontal_growth(self._compiled_path)
         layout.addWidget(self._compiled_path)
 
         self._save_status = QLabel("")
         self._save_status.setObjectName("hintLabel")
+        self._save_status.setWordWrap(True)
+        _prevent_horizontal_growth(self._save_status)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
@@ -435,9 +461,19 @@ class TemplatePage(QWidget):
                 )
                 result_holder["compiled"] = compiled
             except PromptOptimizationError as exc:
-                result_holder["error"] = str(exc)
+                result_holder["warning"] = str(exc)
+                result_holder["optimized"] = ""
+                result_holder["compiled"] = self._compiler.compile_preview(
+                    constraints,
+                    references=references,
+                )
             except Exception as exc:
-                result_holder["error"] = str(exc)
+                result_holder["warning"] = str(exc)
+                result_holder["optimized"] = ""
+                result_holder["compiled"] = self._compiler.compile_preview(
+                    constraints,
+                    references=references,
+                )
 
         needs_progress = bool(self._settings and self._settings.ai.base_url)
         if needs_progress:
@@ -482,8 +518,13 @@ class TemplatePage(QWidget):
                 self._save_settings()
             else:
                 settings.save()
-            self._save_status.setText("已保存并启用 ✓")
-            self._save_status.setStyleSheet("color: #4ade80; font-size: 12px;")
+            warning = result_holder.get("warning")
+            if warning:
+                self._save_status.setText(f"已保存并启用（AI 优化失败，已使用原始约束）：{warning}")
+                self._save_status.setStyleSheet("color: #fbbf24; font-size: 12px;")
+            else:
+                self._save_status.setText("已保存并启用 ✓")
+                self._save_status.setStyleSheet("color: #4ade80; font-size: 12px;")
         except Exception as exc:
             self._save_status.setText(f"保存失败: {exc}")
             self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
@@ -524,9 +565,16 @@ class TemplatePage(QWidget):
 class ModelPage(QWidget):
     """OpenAI-compatible API configuration with live test."""
 
-    config_changed = Signal(str, str, str)
+    config_changed = Signal(str, str, str, str)
 
-    def __init__(self, base_url: str = "", api_key: str = "", model: str = "", parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str = "",
+        api_key: str = "",
+        fast_model: str = "",
+        thinking_model: str = "",
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("contentPage")
 
@@ -540,8 +588,10 @@ class ModelPage(QWidget):
         self._api_key = QLineEdit(api_key)
         self._api_key.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit)
         self._api_key.setPlaceholderText("sk-...")
-        self._model = QLineEdit(model)
-        self._model.setPlaceholderText("gpt-4o-mini")
+        self._model = QLineEdit(fast_model)
+        self._model.setPlaceholderText("deepseek-v4-flash")
+        self._thinking_model = QLineEdit(thinking_model)
+        self._thinking_model.setPlaceholderText("deepseek-v4-pro")
 
         self._test_btn = QPushButton("测试连接")
         self._test_btn.setObjectName("secondaryButton")
@@ -559,11 +609,13 @@ class ModelPage(QWidget):
         form.setSpacing(14)
         form.addRow("Base URL", self._base_url)
         form.addRow("API Key", self._api_key)
-        form.addRow("Model", self._model)
+        form.addRow("Fast Model", self._model)
+        form.addRow("Thinking Model", self._thinking_model)
 
         self._base_url.textChanged.connect(self._emit_change)
         self._api_key.textChanged.connect(self._emit_change)
         self._model.textChanged.connect(self._emit_change)
+        self._thinking_model.textChanged.connect(self._emit_change)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 32, 32, 32)
@@ -579,12 +631,13 @@ class ModelPage(QWidget):
             self._base_url.text().strip(),
             self._api_key.text().strip(),
             self._model.text().strip(),
+            self._thinking_model.text().strip(),
         )
 
     def _on_test(self) -> None:
         base = self._base_url.text().strip()
         key = self._api_key.text().strip()
-        model = self._model.text().strip()
+        model = self._model.text().strip() or self._thinking_model.text().strip()
 
         if not base or not key:
             self._test_status.setText("请填写 Base URL 和 API Key")
@@ -601,7 +654,7 @@ class ModelPage(QWidget):
         ok, msg = False, ""
         t0 = _time.perf_counter()
         try:
-            client = OpenAICompatibleClient(ClientConfig(base_url=base, api_key=key, model=model or "gpt-4o-mini"))
+            client = OpenAICompatibleClient(ClientConfig(base_url=base, api_key=key, model=model or "deepseek-v4-flash"))
             client.translate("You are a test.", "hello")
             elapsed = (_time.perf_counter() - t0) * 1000
             ok, msg = True, f"连接成功 ({elapsed:.0f}ms)"
@@ -703,6 +756,7 @@ class PromptPage(QWidget):
         self._constraints_btn = QPushButton()
         self._constraints_btn.setObjectName("constraintsPreview")
         self._constraints_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        _prevent_horizontal_growth(self._constraints_btn)
         self._constraints_btn.clicked.connect(self._on_edit_constraints)
         self._refresh_constraints_preview()
 
@@ -713,6 +767,7 @@ class PromptPage(QWidget):
         self._knowledge_list.setReadOnly(True)
         self._knowledge_list.setPlaceholderText("尚未添加知识引用文档...")
         self._knowledge_list.setMaximumHeight(80)
+        _configure_wrapping_text_edit(self._knowledge_list)
         if self._knowledge_paths:
             self._knowledge_list.setPlainText("\n".join(self._knowledge_paths))
 
@@ -733,9 +788,12 @@ class PromptPage(QWidget):
         compiled_label.setStyleSheet("color: #94a3b8; font-weight: 600;")
         self._compiled_path = QLineEdit(compiled_prompt_path)
         self._compiled_path.setReadOnly(True)
+        _prevent_horizontal_growth(self._compiled_path)
 
         self._save_status = QLabel("")
         self._save_status.setObjectName("hintLabel")
+        self._save_status.setWordWrap(True)
+        _prevent_horizontal_growth(self._save_status)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
@@ -842,9 +900,19 @@ class PromptPage(QWidget):
                 )
                 result_holder["compiled"] = compiled
             except PromptOptimizationError as exc:
-                result_holder["error"] = str(exc)
+                result_holder["warning"] = str(exc)
+                result_holder["optimized"] = ""
+                result_holder["compiled"] = self._compiler.compile_preview(
+                    constraints,
+                    references=references,
+                )
             except Exception as exc:
-                result_holder["error"] = str(exc)
+                result_holder["warning"] = str(exc)
+                result_holder["optimized"] = ""
+                result_holder["compiled"] = self._compiler.compile_preview(
+                    constraints,
+                    references=references,
+                )
 
         needs_progress = bool(self._settings and self._settings.ai.base_url)
         if needs_progress:
@@ -892,8 +960,13 @@ class PromptPage(QWidget):
                 self._save_settings()
             else:
                 settings.save()
-            self._save_status.setText("已保存并启用 ✓")
-            self._save_status.setStyleSheet("color: #4ade80; font-size: 12px;")
+            warning = result_holder.get("warning")
+            if warning:
+                self._save_status.setText(f"已保存并启用（AI 优化失败，已使用原始约束）：{warning}")
+                self._save_status.setStyleSheet("color: #fbbf24; font-size: 12px;")
+            else:
+                self._save_status.setText("已保存并启用 ✓")
+                self._save_status.setStyleSheet("color: #4ade80; font-size: 12px;")
         except Exception as exc:
             self._save_status.setText(f"保存失败: {exc}")
             self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
@@ -931,6 +1004,406 @@ class PromptPage(QWidget):
             QMessageBox.StandardButton.No,
         )
         return confirmed == QMessageBox.StandardButton.Yes
+
+
+class KeywordTagEditor(QWidget):
+    """Small tag editor for AI-proposed and user-edited memory triggers."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("keywordTagEditor")
+        self._keywords: list[str] = []
+
+        self._tag_row = QHBoxLayout()
+        self._tag_row.setContentsMargins(0, 0, 0, 0)
+        self._tag_row.setSpacing(6)
+
+        self._input = QLineEdit()
+        self._input.setPlaceholderText("输入关键词后点击新增")
+        self._input.setMinimumHeight(34)
+        _prevent_horizontal_growth(self._input)
+
+        self._add_button = QPushButton("新增")
+        self._add_button.setObjectName("secondaryButton")
+        self._add_button.setMinimumSize(68, 34)
+
+        input_row = QHBoxLayout()
+        input_row.setContentsMargins(0, 0, 0, 0)
+        input_row.setSpacing(8)
+        input_row.addWidget(self._input, 1)
+        input_row.addWidget(self._add_button)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addLayout(self._tag_row)
+        layout.addLayout(input_row)
+
+        self._add_button.clicked.connect(self._on_add_clicked)
+        self._input.returnPressed.connect(self._on_add_clicked)
+        _prevent_horizontal_growth(self)
+        self._refresh_tags()
+
+    def set_keywords(self, keywords: list[str]) -> None:
+        """Replace all tags with a normalized keyword list."""
+
+        self._keywords = self._normalise_keywords(keywords)
+        self._refresh_tags()
+
+    def add_keyword(self, keyword: str) -> None:
+        """Add one tag unless it is blank or duplicated."""
+
+        merged = self._normalise_keywords(self._keywords + [keyword])
+        if merged != self._keywords:
+            self._keywords = merged
+            self._refresh_tags()
+
+    def remove_keyword(self, keyword: str) -> None:
+        """Remove one tag."""
+
+        key = keyword.casefold()
+        self._keywords = [item for item in self._keywords if item.casefold() != key]
+        self._refresh_tags()
+
+    def keywords(self) -> list[str]:
+        """Return current tags in display order."""
+
+        return list(self._keywords)
+
+    def _on_add_clicked(self) -> None:
+        text = self._input.text().strip()
+        if not text:
+            return
+        self.add_keyword(text)
+        self._input.clear()
+
+    def _refresh_tags(self) -> None:
+        while self._tag_row.count():
+            item = self._tag_row.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        if not self._keywords:
+            hint = QLabel("AI 优化后会在这里生成 1~3 个关键词；也可以手动新增。")
+            hint.setObjectName("hintLabel")
+            hint.setWordWrap(True)
+            _prevent_horizontal_growth(hint)
+            self._tag_row.addWidget(hint, 1)
+            return
+
+        for keyword in self._keywords:
+            tag = QPushButton(f"{keyword}  ×")
+            tag.setObjectName("keywordTagButton")
+            tag.setCursor(Qt.CursorShape.PointingHandCursor)
+            tag.clicked.connect(lambda _checked=False, text=keyword: self.remove_keyword(text))
+            self._tag_row.addWidget(tag)
+        self._tag_row.addStretch(1)
+
+    @staticmethod
+    def _normalise_keywords(keywords: list[str]) -> list[str]:
+        unique: list[str] = []
+        seen: set[str] = set()
+        for keyword in keywords:
+            text = str(keyword).strip()
+            if not text:
+                continue
+            key = text.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(text)
+        return unique
+
+
+class FeedbackPage(QWidget):
+    """Review bad translations and turn accepted fixes into local memory."""
+
+    def __init__(
+        self,
+        feedback_store: FeedbackStore,
+        settings: AppSettings,
+        optimizer: FeedbackOptimizer | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("contentPage")
+        self._feedback_store = feedback_store
+        self._settings = settings
+        self._optimizer = optimizer or FeedbackOptimizer()
+        self._records: list[FeedbackRecord] = []
+
+        title = QLabel("优化翻译")
+        title.setObjectName("pageTitle")
+        desc = QLabel("处理你标记为不满意的翻译；确认后会写入本地记忆，后续快速翻译会自动参考。")
+        desc.setObjectName("pageDesc")
+        desc.setWordWrap(True)
+
+        self._feedback_combo = QComboBox()
+        _prevent_horizontal_growth(self._feedback_combo)
+        self._feedback_combo.currentIndexChanged.connect(self._on_feedback_selected)
+
+        refresh_btn = QPushButton("刷新")
+        refresh_btn.setObjectName("secondaryButton")
+        refresh_btn.setMinimumSize(92, 36)
+        refresh_btn.clicked.connect(self.refresh)
+
+        picker_row = QHBoxLayout()
+        picker_row.addWidget(QLabel("待处理"))
+        picker_row.addWidget(self._feedback_combo, 1)
+        picker_row.addWidget(refresh_btn)
+
+        self._source_text = QPlainTextEdit()
+        self._source_text.setReadOnly(True)
+        self._source_text.setMinimumHeight(82)
+
+        self._current_translation_text = QPlainTextEdit()
+        self._current_translation_text.setReadOnly(True)
+        self._current_translation_text.setMinimumHeight(82)
+
+        self._note_text = QPlainTextEdit()
+        self._note_text.setPlaceholderText("可选：写下哪里不满意，例如术语错、语气错、漏译、把意思翻反了。")
+        self._note_text.setMinimumHeight(72)
+
+        self._corrected_translation_text = QPlainTextEdit()
+        self._corrected_translation_text.setPlaceholderText("可选：你认可的译文。也可以先让 AI 优化后再确认。")
+        self._corrected_translation_text.setMinimumHeight(82)
+
+        self._keyword_editor = KeywordTagEditor()
+
+        self._rule_text = QPlainTextEdit()
+        self._rule_text.setPlaceholderText("确认后写入本地记忆的规则，例如：出现“高考”时应译为日本语境下的大学入学考试，不要误作高校考试。")
+        self._rule_text.setMinimumHeight(112)
+
+        for text_area in (
+            self._source_text,
+            self._current_translation_text,
+            self._note_text,
+            self._corrected_translation_text,
+            self._rule_text,
+        ):
+            _configure_wrapping_text_edit(text_area)
+            text_area.setSizePolicy(
+                QSizePolicy.Policy.Ignored,
+                QSizePolicy.Policy.MinimumExpanding,
+            )
+
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 8, 0)
+        form.setSpacing(12)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.addRow("OCR 原文", self._source_text)
+        form.addRow("当前译文", self._current_translation_text)
+        form.addRow("你的备注", self._note_text)
+        form.addRow("认可译文", self._corrected_translation_text)
+        form.addRow("关键词", self._keyword_editor)
+        form.addRow("记忆规则", self._rule_text)
+
+        self._save_note_button = QPushButton("保存备注")
+        self._ai_optimize_button = QPushButton("让 AI 优化")
+        self._confirm_button = QPushButton("确认采用")
+        self._dismiss_button = QPushButton("忽略")
+        self._save_note_button.setObjectName("secondaryButton")
+        self._confirm_button.setObjectName("primaryButton")
+        self._ai_optimize_button.setObjectName("primaryButton")
+        self._dismiss_button.setObjectName("secondaryButton")
+        for button in (
+            self._save_note_button,
+            self._ai_optimize_button,
+            self._confirm_button,
+            self._dismiss_button,
+        ):
+            button.setMinimumSize(100, 36)
+
+        self._save_note_button.clicked.connect(self._on_save_note)
+        self._ai_optimize_button.clicked.connect(self._on_ai_optimize)
+        self._confirm_button.clicked.connect(self._on_confirm)
+        self._dismiss_button.clicked.connect(self._on_dismiss)
+
+        action_row = QHBoxLayout()
+        action_row.addWidget(self._save_note_button)
+        action_row.addWidget(self._ai_optimize_button)
+        action_row.addWidget(self._confirm_button)
+        action_row.addWidget(self._dismiss_button)
+        action_row.addStretch(1)
+
+        self._status_label = QLabel("")
+        self._status_label.setObjectName("hintLabel")
+        self._status_label.setWordWrap(True)
+        _prevent_horizontal_growth(self._status_label)
+
+        detail_widget = QWidget()
+        detail_widget.setObjectName("feedbackDetailWidget")
+        detail_widget.setMinimumWidth(0)
+        detail_widget.setLayout(form)
+
+        self._detail_scroll = QScrollArea()
+        self._detail_scroll.setObjectName("feedbackDetailScroll")
+        self._detail_scroll.setWidgetResizable(True)
+        self._detail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._detail_scroll.setWidget(detail_widget)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(32, 28, 24, 24)
+        layout.setSpacing(14)
+        layout.addWidget(title)
+        layout.addWidget(desc)
+        layout.addLayout(picker_row)
+        layout.addWidget(self._detail_scroll, 1)
+        layout.addLayout(action_row)
+        layout.addWidget(self._status_label)
+
+        self.refresh()
+
+    def refresh(self, preserve_current: bool = False) -> None:
+        """Reload pending feedback from local storage."""
+
+        current_id = self._feedback_combo.currentData() if preserve_current else None
+        self._records = self._feedback_store.list_feedback(status="pending")
+        self._feedback_combo.blockSignals(True)
+        self._feedback_combo.clear()
+        for record in self._records:
+            self._feedback_combo.addItem(record.summary(), record.id)
+        if current_id:
+            index = self._feedback_combo.findData(current_id)
+            if index >= 0:
+                self._feedback_combo.setCurrentIndex(index)
+        self._feedback_combo.blockSignals(False)
+        self._on_feedback_selected(self._feedback_combo.currentIndex())
+
+    def _current_record(self) -> FeedbackRecord | None:
+        index = self._feedback_combo.currentIndex()
+        if index < 0 or index >= len(self._records):
+            return None
+        return self._records[index]
+
+    def _on_feedback_selected(self, index: int) -> None:
+        record = self._current_record()
+        if record is None:
+            self._source_text.setPlainText("")
+            self._current_translation_text.setPlainText("")
+            self._note_text.setPlainText("")
+            self._corrected_translation_text.setPlainText("")
+            self._set_keyword_options([], "")
+            self._rule_text.setPlainText("")
+            self._set_actions_enabled(False)
+            self._status_label.setText("暂无待优化的翻译。")
+            return
+
+        self._set_actions_enabled(True)
+        self._source_text.setPlainText(record.ocr_text)
+        self._current_translation_text.setPlainText(record.translation_text)
+        self._note_text.setPlainText(record.note)
+        self._corrected_translation_text.setPlainText(record.corrected_translation)
+        self._set_keyword_options([], "")
+        self._rule_text.setPlainText(self._default_rule(record))
+        self._status_label.setText(f"已载入 {record.summary()}")
+
+    def _set_actions_enabled(self, enabled: bool) -> None:
+        for widget in (
+            self._save_note_button,
+            self._ai_optimize_button,
+            self._confirm_button,
+            self._dismiss_button,
+            self._note_text,
+            self._corrected_translation_text,
+            self._keyword_editor,
+            self._rule_text,
+        ):
+            widget.setEnabled(enabled)
+
+    def _default_rule(self, record: FeedbackRecord) -> str:
+        if record.corrected_translation:
+            return "遇到相同或相似表达时，优先参考用户确认译文，保持原意和上下文。"
+        return ""
+
+    def _set_keyword_options(self, options: list[str], preferred: str = "") -> None:
+        """Populate AI-proposed keyword tags while keeping manual edits possible."""
+
+        preferred = preferred.strip()
+        keywords = ([preferred] if preferred else []) + list(options)
+        self._keyword_editor.set_keywords(keywords)
+
+    def _keyword_text(self) -> str:
+        """Return all selected/manual keywords as one stored trigger string."""
+
+        return FeedbackStore.join_triggers(self._keyword_editor.keywords())
+
+    def _sync_record_edits(self) -> FeedbackRecord | None:
+        record = self._current_record()
+        if record is None:
+            return None
+        updated = self._feedback_store.update_feedback(
+            record.id,
+            note=self._note_text.toPlainText().strip(),
+            corrected_translation=self._corrected_translation_text.toPlainText().strip(),
+        )
+        if updated is not None:
+            self._records[self._feedback_combo.currentIndex()] = updated
+        return updated or record
+
+    def _on_save_note(self) -> None:
+        record = self._sync_record_edits()
+        if record is None:
+            return
+        self._status_label.setText("已保存备注。")
+
+    def _on_ai_optimize(self) -> None:
+        record = self._sync_record_edits()
+        if record is None:
+            return
+        self._status_label.setText("正在让思考模型优化...")
+        QApplication.processEvents()
+        try:
+            suggestion: FeedbackOptimization = self._optimizer.optimize(self._settings, record)
+        except TranslationError as exc:
+            self._status_label.setText(f"AI 优化失败：{exc}")
+            return
+        if suggestion.trigger or suggestion.trigger_options:
+            self._set_keyword_options(suggestion.trigger_options, suggestion.trigger)
+        if suggestion.rule:
+            self._rule_text.setPlainText(suggestion.rule)
+        if suggestion.improved_translation:
+            self._corrected_translation_text.setPlainText(suggestion.improved_translation)
+        if self._keyword_text():
+            self._status_label.setText("AI 已给出关键词候选和优化建议，确认后才会写入本地记忆。")
+        else:
+            self._status_label.setText("AI 已给出优化建议，但仍需手动输入关键词后再确认。")
+
+    def _on_confirm(self) -> None:
+        record = self._sync_record_edits()
+        if record is None:
+            return
+        trigger = self._keyword_text()
+        rule = self._rule_text.toPlainText().strip() or self._default_rule(record)
+        if not trigger:
+            self._status_label.setText("请先选择或输入关键词；认可译文可以留空。")
+            return
+        if not rule:
+            self._status_label.setText("请先填写记忆规则，或让 AI 优化后再确认；认可译文可以留空。")
+            return
+        try:
+            memory = self._feedback_store.approve_feedback(
+                record.id,
+                trigger=trigger,
+                rule=rule,
+                preferred_translation=self._corrected_translation_text.toPlainText().strip(),
+            )
+        except (KeyError, ValueError) as exc:
+            self._status_label.setText(f"确认失败：{exc}")
+            return
+        self._status_label.setText(f"已写入本地记忆：{memory.trigger}")
+        self.refresh()
+
+    def _on_dismiss(self) -> None:
+        record = self._current_record()
+        if record is None:
+            return
+        self._feedback_store.update_feedback(record.id, status="dismissed")
+        self._status_label.setText("已忽略该反馈。")
+        self.refresh()
 
 
 class SettingsPage(QWidget):
@@ -1010,10 +1483,17 @@ class MainWindow(QMainWindow):
 
     default_language_changed = Signal(str, str)
 
-    def __init__(self, context: ApplicationContext, runtime_store: object | None = None, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        context: ApplicationContext,
+        runtime_store: object | None = None,
+        feedback_store: FeedbackStore | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent, Qt.WindowType.FramelessWindowHint)
         self._context = context
         self._runtime_store = runtime_store
+        self._feedback_store = feedback_store or FeedbackStore()
 
         self.setWindowTitle("Instant Translate")
         self.resize(820, 580)
@@ -1033,8 +1513,14 @@ class MainWindow(QMainWindow):
 
         self._nav_template = NavButton("翻译模板")
         self._nav_model = NavButton("模型配置")
+        self._nav_feedback = NavButton("优化翻译")
         self._nav_settings = NavButton("设置")
-        self._nav_buttons = [self._nav_template, self._nav_model, self._nav_settings]
+        self._nav_buttons = [
+            self._nav_template,
+            self._nav_model,
+            self._nav_feedback,
+            self._nav_settings,
+        ]
         for btn in self._nav_buttons:
             btn.clicked.connect(self._on_nav_clicked)
 
@@ -1044,6 +1530,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.addSpacing(20)
         sidebar_layout.addWidget(self._nav_template)
         sidebar_layout.addWidget(self._nav_model)
+        sidebar_layout.addWidget(self._nav_feedback)
         sidebar_layout.addWidget(self._nav_settings)
         sidebar_layout.addStretch(1)
 
@@ -1061,15 +1548,21 @@ class MainWindow(QMainWindow):
         self._model_page = ModelPage(
             context.settings.ai.base_url,
             context.settings.ai.api_key,
-            context.settings.ai.model,
+            context.settings.ai.fast_model_name,
+            context.settings.ai.thinking_model_name,
         )
         self._settings_page = SettingsPage(
             context.hotkeys.create_selection,
             context.hotkeys.toggle_edit_mode,
         )
+        self._feedback_page = FeedbackPage(
+            self._feedback_store,
+            context.settings,
+        )
 
         self._stack.addWidget(self._template_page)
         self._stack.addWidget(self._model_page)
+        self._stack.addWidget(self._feedback_page)
         self._stack.addWidget(self._settings_page)
 
         # signals
@@ -1116,8 +1609,11 @@ class MainWindow(QMainWindow):
             self._stack.setCurrentIndex(0)
         elif sender is self._nav_model:
             self._stack.setCurrentIndex(1)
-        elif sender is self._nav_settings:
+        elif sender is self._nav_feedback:
+            self._feedback_page.refresh()
             self._stack.setCurrentIndex(2)
+        elif sender is self._nav_settings:
+            self._stack.setCurrentIndex(3)
 
     # ------------------------------------------------------------------
     # handlers — real persistence
@@ -1136,11 +1632,13 @@ class MainWindow(QMainWindow):
         self.default_language_changed.emit(source, target)
         self._status.showMessage(f"默认翻译方向已保存: {source} → {target}", 3000)
 
-    def _on_model_changed(self, base_url: str, api_key: str, model: str) -> None:
+    def _on_model_changed(self, base_url: str, api_key: str, fast_model: str, thinking_model: str) -> None:
         s = self._context.settings
         s.ai.base_url = base_url
         s.ai.api_key = api_key
-        s.ai.model = model
+        s.ai.fast_model = fast_model
+        s.ai.thinking_model = thinking_model
+        s.ai.model = fast_model or thinking_model
         try:
             s.save()
         except Exception:
@@ -1158,6 +1656,7 @@ class MainWindow(QMainWindow):
         active = self._context.active_group_count
         edit = "编辑中" if self._context.edit_mode_enabled else "普通"
         self._status.showMessage(f"选择框: {active}/3  |  模式: {edit}")
+        self._feedback_page.refresh(preserve_current=True)
 
     def default_language_pair(self) -> tuple[str, str]:
         return self._template_page.current_pair()
@@ -1251,6 +1750,10 @@ class MainWindow(QMainWindow):
             QWidget#contentPage {
                 background: #0f172a;
             }
+            QScrollArea#feedbackDetailScroll, QWidget#feedbackDetailWidget {
+                background: #0f172a;
+                border: none;
+            }
             QLabel#pageTitle {
                 font-size: 22px;
                 font-weight: 700;
@@ -1326,6 +1829,23 @@ class MainWindow(QMainWindow):
             }
             QPushButton#primaryButton:pressed {
                 background: #1d4ed8;
+            }
+            QWidget#keywordTagEditor {
+                background: transparent;
+                border: none;
+            }
+            QPushButton#keywordTagButton {
+                background: #172554;
+                color: #bfdbfe;
+                border: 1px solid #1d4ed8;
+                border-radius: 14px;
+                padding: 5px 10px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QPushButton#keywordTagButton:hover {
+                background: #1e3a8a;
+                color: white;
             }
 
             QStatusBar#appStatusBar {

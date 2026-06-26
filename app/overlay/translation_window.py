@@ -8,12 +8,13 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from app.overlay.window_interaction import set_window_click_through
+from app.overlay.window_interaction import set_window_click_through, set_window_excluded_from_capture
 from app.state.group_state import ScreenRegion
 
 WINDOW_MARGIN = 12
 SCREEN_MARGIN = 8
 DEFAULT_HEIGHT = 132
+MIN_WINDOW_WIDTH = 260
 
 
 @dataclass
@@ -38,6 +39,7 @@ class TranslationWindowWidget(QWidget):
 
     moved = Signal(int, int, int)
     dock_changed = Signal(int, str)
+    feedback_requested = Signal(int)
 
     def __init__(self, model: TranslationWindowModel, parent: QWidget | None = None) -> None:
         flags = (
@@ -55,6 +57,7 @@ class TranslationWindowWidget(QWidget):
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        set_window_excluded_from_capture(self, True)
         self.setMouseTracking(True)
 
         self.group_badge = QLabel(self)
@@ -71,20 +74,26 @@ class TranslationWindowWidget(QWidget):
         self.dock_down_button = QPushButton("\u4e0b")
         self.dock_left_button = QPushButton("\u5de6")
         self.dock_right_button = QPushButton("\u53f3")
+        self.feedback_button = QPushButton("翻译有误")
         for button in (
             self.dock_up_button,
             self.dock_down_button,
             self.dock_left_button,
             self.dock_right_button,
+            self.feedback_button,
         ):
             button.setObjectName("dockButton")
             button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setMinimumSize(34, 28)
             dock_layout.addWidget(button)
+        self.feedback_button.setMinimumWidth(56)
+        self.dock_controls_widget.setMinimumWidth(216)
 
         self.dock_up_button.clicked.connect(lambda: self.dock_changed.emit(self.model.group_id, "top"))
         self.dock_down_button.clicked.connect(lambda: self.dock_changed.emit(self.model.group_id, "bottom"))
         self.dock_left_button.clicked.connect(lambda: self.dock_changed.emit(self.model.group_id, "left"))
         self.dock_right_button.clicked.connect(lambda: self.dock_changed.emit(self.model.group_id, "right"))
+        self.feedback_button.clicked.connect(lambda: self.feedback_requested.emit(self.model.group_id))
 
         self.translation_label = QLabel(self)
         self.translation_label.setObjectName("translationBody")
@@ -96,23 +105,23 @@ class TranslationWindowWidget(QWidget):
         header_row.setSpacing(8)
         header_row.addWidget(self.group_badge, alignment=Qt.AlignmentFlag.AlignLeft)
         header_row.addWidget(self.language_pair_label, stretch=1)
-        header_row.addWidget(self.dock_controls_widget, alignment=Qt.AlignmentFlag.AlignRight)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 12)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
         layout.addLayout(header_row)
         layout.addWidget(self.translation_label, stretch=1)
 
         self.apply_model(model)
         self.apply_edit_mode(False)
-        self.setMinimumSize(160, 60)
+        self.setMinimumSize(MIN_WINDOW_WIDTH, 60)
 
     @staticmethod
     def compute_geometry(region: ScreenRegion, screen: QRect, preferred_dock: str) -> QRect:
         """Return a translation-window geometry matched to one region."""
 
-        width = min(region.width, max(80, screen.width() - SCREEN_MARGIN * 2))
+        available_width = max(80, screen.width() - SCREEN_MARGIN * 2)
+        width = min(max(region.width, MIN_WINDOW_WIDTH), available_width)
         height = DEFAULT_HEIGHT
 
         left_bound = screen.x() + SCREEN_MARGIN
@@ -176,7 +185,7 @@ class TranslationWindowWidget(QWidget):
 
         self._editable = enabled
         self.language_pair_label.setHidden(not enabled)
-        self.dock_controls_widget.setHidden(not enabled)
+        self.dock_controls_widget.setHidden(True)
         set_window_click_through(self, not enabled)
         self._apply_styles()
         self.update()
@@ -191,7 +200,10 @@ class TranslationWindowWidget(QWidget):
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self._editable
-            and not self.dock_controls_widget.geometry().contains(event.position().toPoint())
+            and (
+                self.dock_controls_widget.isHidden()
+                or not self.dock_controls_widget.geometry().contains(event.position().toPoint())
+            )
         ):
             self._dragging = True
             self._drag_origin_global = event.globalPosition().toPoint()
@@ -220,6 +232,7 @@ class TranslationWindowWidget(QWidget):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        set_window_excluded_from_capture(self, True)
         set_window_click_through(self, not self._editable)
 
     def paintEvent(self, event: QPaintEvent) -> None:

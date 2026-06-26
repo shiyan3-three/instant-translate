@@ -9,7 +9,7 @@ from PySide6.QtGui import QMouseEvent
 
 from app.overlay.selection_box import SelectionBoxModel, SelectionBoxWidget
 from app.overlay.translation_window import TranslationWindowModel, TranslationWindowWidget
-from app.overlay.window_interaction import is_window_click_through
+from app.overlay.window_interaction import is_window_click_through, is_window_excluded_from_capture
 from tests.test_support import ensure_qapplication
 
 
@@ -26,6 +26,8 @@ class OverlayInteractionTests(unittest.TestCase):
         widget.show()
         self.app.processEvents()
 
+        self.assertTrue(is_window_excluded_from_capture(widget))
+
         widget.apply_edit_mode(False)
         self.app.processEvents()
         self.assertTrue(widget.input_passthrough_enabled)
@@ -36,6 +38,27 @@ class OverlayInteractionTests(unittest.TestCase):
         self.assertFalse(widget.input_passthrough_enabled)
         self.assertFalse(is_window_click_through(widget))
 
+        widget.close()
+
+    def test_selection_box_capture_callback_does_not_hide_visible_chrome(self) -> None:
+        widget = SelectionBoxWidget(
+            SelectionBoxModel(group_id=1, x=100, y=100, width=280, height=90)
+        )
+        widget.show()
+        widget.apply_edit_mode(True)
+        self.app.processEvents()
+
+        captured_state = widget.capture_with_chrome_hidden(
+            lambda: (
+                widget.group_badge.isHidden(),
+                widget.size_badge.isHidden(),
+                widget.toolbar_visible,
+            )
+        )
+
+        self.assertEqual(captured_state, (True, True, True))
+        self.assertTrue(is_window_excluded_from_capture(widget))
+        self.assertTrue(is_window_excluded_from_capture(widget.toolbar_panel))
         widget.close()
 
     def test_selection_box_body_drag_uses_interior_hit_area_in_edit_mode(self) -> None:
@@ -97,6 +120,8 @@ class OverlayInteractionTests(unittest.TestCase):
         )
         widget.show()
         self.app.processEvents()
+
+        self.assertTrue(is_window_excluded_from_capture(widget))
 
         widget.apply_edit_mode(False)
         self.app.processEvents()

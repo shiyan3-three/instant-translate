@@ -43,6 +43,7 @@ class SettingsWindow(QDialog):
         self.api_key_input = QLineEdit()
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit)
         self.model_input = QLineEdit()
+        self.thinking_model_input = QLineEdit()
         self.constraints_input = QPlainTextEdit()
         self.knowledge_reference_list = QListWidget()
 
@@ -62,7 +63,8 @@ class SettingsWindow(QDialog):
         ai_layout = QFormLayout(ai_group)
         ai_layout.addRow("Base URL", self.base_url_input)
         ai_layout.addRow("API Key", self.api_key_input)
-        ai_layout.addRow("Model", self.model_input)
+        ai_layout.addRow("Fast Model", self.model_input)
+        ai_layout.addRow("Thinking Model", self.thinking_model_input)
 
         prompt_group = QGroupBox("Prompt \u914d\u7f6e")
         prompt_layout = QFormLayout(prompt_group)
@@ -100,7 +102,8 @@ class SettingsWindow(QDialog):
 
         self.base_url_input.setText(self._settings.ai.base_url)
         self.api_key_input.setText(self._settings.ai.api_key)
-        self.model_input.setText(self._settings.ai.model)
+        self.model_input.setText(self._settings.ai.fast_model_name)
+        self.thinking_model_input.setText(self._settings.ai.thinking_model_name)
         self.constraints_input.setPlainText(self._settings.prompt.constraints_text)
         self.knowledge_reference_list.clear()
         self.knowledge_reference_list.addItems(self._settings.prompt.knowledge_reference_paths)
@@ -140,7 +143,9 @@ class SettingsWindow(QDialog):
 
         self._settings.ai.base_url = self.base_url_input.text().strip()
         self._settings.ai.api_key = self.api_key_input.text().strip()
-        self._settings.ai.model = self.model_input.text().strip()
+        self._settings.ai.fast_model = self.model_input.text().strip()
+        self._settings.ai.thinking_model = self.thinking_model_input.text().strip()
+        self._settings.ai.model = self._settings.ai.fast_model or self._settings.ai.thinking_model
         self._settings.prompt.constraints_text = self.constraints_input.toPlainText()
 
         paths: list[str] = []

@@ -1,0 +1,891 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic "跳过导航链接":
+      - generic:
+        - link "跳转到您离开的地方（帖子 27）" [ref=e4] [cursor=pointer]:
+          - /url: /t/topic/2324965/27
+        - link "跳转到最后一条回复" [ref=e5] [cursor=pointer]:
+          - /url: /t/topic/2324965/28
+        - link "跳转到顶部" [ref=e6] [cursor=pointer]:
+          - /url: /t/topic/2324965/1
+      - link "跳到主要内容" [ref=e7] [cursor=pointer]:
+        - /url: "#main-container"
+    - generic [ref=e12]:
+      - button "边栏" [expanded] [ref=e14] [cursor=pointer]:
+        - img [ref=e15]
+      - link "LINUX DO" [ref=e18] [cursor=pointer]:
+        - /url: /
+        - img "LINUX DO" [ref=e19]
+      - generic [ref=e22]:
+        - heading "any怎么开启1M上下文" [level=1] [ref=e23]:
+          - link "any怎么开启1M上下文" [ref=e24] [cursor=pointer]:
+            - /url: /t/topic/2324965
+            - generic [ref=e25]: any怎么开启1M上下文
+        - link "开发调优" [ref=e27] [cursor=pointer]:
+          - /url: /c/develop/4
+          - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e28]:
+            - img [ref=e29]
+            - generic [ref=e30]: 开发调优
+        - list "标签" [ref=e32]:
+          - listitem [ref=e33]:
+            - link "纯水" [ref=e34] [cursor=pointer]:
+              - /url: /tag/1461-tag/1461
+              - img [ref=e36]
+              - text: 纯水
+          - listitem [ref=e37]:
+            - link "anyrouter" [ref=e38] [cursor=pointer]:
+              - /url: /tag/2238-tag/2238
+      - navigation "标头" [ref=e39]:
+        - list [ref=e40]:
+          - button "ZH" [ref=e41] [cursor=pointer]:
+            - generic [ref=e42]: ZH
+            - img [ref=e43]
+          - listitem [ref=e44]:
+            - button "搜索" [ref=e45] [cursor=pointer]:
+              - img [ref=e46]
+          - listitem [ref=e47]:
+            - link "聊天" [ref=e48] [cursor=pointer]:
+              - /url: /chat
+              - img [ref=e49]
+          - listitem [ref=e50]:
+            - button "通知和帐户" [ref=e51] [cursor=pointer]
+    - main [ref=e52]:
+      - navigation "边栏" [ref=e54]:
+        - generic [ref=e55]:
+          - generic [ref=e56]:
+            - list [ref=e58]:
+              - listitem [ref=e59]:
+                - link "话题" [ref=e60] [cursor=pointer]:
+                  - /url: /latest
+                  - img [ref=e62]
+                  - generic [ref=e63]: 话题
+                  - img [ref=e65]
+              - listitem [ref=e66]:
+                - link "我的草稿" [ref=e67] [cursor=pointer]:
+                  - /url: /u/majorai/activity/drafts
+                  - img [ref=e69]
+                  - generic [ref=e70]: 我的草稿
+                  - img [ref=e72]
+              - listitem [ref=e73]:
+                - link "我的消息" [ref=e74] [cursor=pointer]:
+                  - /url: /u/majorai/messages
+                  - img [ref=e76]
+                  - generic [ref=e77]: 我的消息
+              - listitem [ref=e78]:
+                - link "近期活动" [ref=e79] [cursor=pointer]:
+                  - /url: /upcoming-events
+                  - img [ref=e81]
+                  - generic [ref=e82]: 近期活动
+              - listitem [ref=e83]:
+                - button "更多" [ref=e84] [cursor=pointer]:
+                  - img [ref=e86]
+                  - generic [ref=e87]: 更多
+            - generic [ref=e88]:
+              - button "资源" [expanded] [ref=e90] [cursor=pointer]:
+                - img [ref=e92]
+                - generic [ref=e93]: 资源
+              - list [ref=e94]:
+                - listitem [ref=e95]:
+                  - link "Connect" [ref=e96] [cursor=pointer]:
+                    - /url: https://connect.linux.do
+                    - img [ref=e98]
+                    - generic [ref=e99]: Connect
+                - listitem [ref=e100]:
+                  - link "Channel" [ref=e101] [cursor=pointer]:
+                    - /url: https://t.me/linux_do_channel
+                    - img [ref=e103]
+                    - generic [ref=e104]: Channel
+                - listitem [ref=e105]:
+                  - link "IDC Flare" [ref=e106] [cursor=pointer]:
+                    - /url: https://idcflare.com
+                    - img [ref=e108]
+                    - generic [ref=e109]: IDC Flare
+                - listitem [ref=e110]:
+                  - link "T-Shirt" [ref=e111] [cursor=pointer]:
+                    - /url: https://go.linux.do/t/topic/2045356
+                    - img [ref=e113]
+                    - generic [ref=e114]: T-Shirt
+                - listitem [ref=e115]:
+                  - link "More..." [ref=e116] [cursor=pointer]:
+                    - /url: https://go.linux.do/pub/resources
+                    - img [ref=e118]
+                    - generic [ref=e119]: More...
+          - generic [ref=e120]:
+            - generic [ref=e121]:
+              - button "类别" [expanded] [ref=e122] [cursor=pointer]:
+                - img [ref=e124]
+                - generic [ref=e125]: 类别
+              - button "编辑边栏类别" [ref=e126] [cursor=pointer]:
+                - img
+            - list [ref=e127]:
+              - listitem [ref=e128]:
+                - link "开发调优" [ref=e129] [cursor=pointer]:
+                  - /url: /c/develop/4
+                  - img [ref=e131]
+                  - generic [ref=e132]: 开发调优
+                  - img [ref=e134]
+              - listitem [ref=e135]:
+                - link "国产替代" [ref=e136] [cursor=pointer]:
+                  - /url: /c/domestic/98
+                  - img [ref=e138]
+                  - generic [ref=e139]: 国产替代
+                  - img [ref=e141]
+              - listitem [ref=e142]:
+                - link "资源荟萃" [ref=e143] [cursor=pointer]:
+                  - /url: /c/resource/14
+                  - img [ref=e145]
+                  - generic [ref=e146]: 资源荟萃
+                  - img [ref=e148]
+              - listitem [ref=e149]:
+                - link "网盘资源" [ref=e150] [cursor=pointer]:
+                  - /url: /c/resource/cloud-asset/94
+                  - img [ref=e152]
+                  - generic [ref=e153]: 网盘资源
+                  - img [ref=e155]
+              - listitem [ref=e156]:
+                - link "文档共建" [ref=e157] [cursor=pointer]:
+                  - /url: /c/wiki/42
+                  - img [ref=e159]
+                  - generic [ref=e160]: 文档共建
+                  - img [ref=e162]
+              - listitem [ref=e163]:
+                - link "跳蚤市场" [ref=e164] [cursor=pointer]:
+                  - /url: /c/trade/10
+                  - generic [ref=e165]:
+                    - img [ref=e166]
+                    - img [ref=e167]
+                  - generic [ref=e168]: 跳蚤市场
+              - listitem [ref=e169]:
+                - link "积分乐园" [ref=e170] [cursor=pointer]:
+                  - /url: /c/credit/106
+                  - generic [ref=e171]:
+                    - img [ref=e172]
+                    - img [ref=e173]
+                  - generic [ref=e174]: 积分乐园
+                  - img [ref=e176]
+              - listitem [ref=e177]:
+                - link "非我莫属" [ref=e178] [cursor=pointer]:
+                  - /url: /c/job/27
+                  - img [ref=e180]
+                  - generic [ref=e181]: 非我莫属
+              - listitem [ref=e182]:
+                - link "读书成诗" [ref=e183] [cursor=pointer]:
+                  - /url: /c/reading/32
+                  - img [ref=e185]
+                  - generic [ref=e186]: 读书成诗
+                  - img [ref=e188]
+              - listitem [ref=e189]:
+                - link "扬帆起航" [ref=e190] [cursor=pointer]:
+                  - /url: /c/startup/46
+                  - generic [ref=e191]:
+                    - img [ref=e192]
+                    - img [ref=e193]
+                  - generic [ref=e194]: 扬帆起航
+              - listitem [ref=e195]:
+                - link "前沿快讯" [ref=e196] [cursor=pointer]:
+                  - /url: /c/news/34
+                  - img [ref=e198]
+                  - generic [ref=e199]: 前沿快讯
+                  - img [ref=e201]
+              - listitem [ref=e202]:
+                - link "网络记忆" [ref=e203] [cursor=pointer]:
+                  - /url: /c/feeds/92
+                  - img [ref=e205]
+                  - generic [ref=e206]: 网络记忆
+              - listitem [ref=e207]:
+                - link "福利羊毛" [ref=e208] [cursor=pointer]:
+                  - /url: /c/welfare/36
+                  - img [ref=e210]
+                  - generic [ref=e211]: 福利羊毛
+                  - img [ref=e213]
+              - listitem [ref=e214]:
+                - link "搞七捻三" [ref=e215] [cursor=pointer]:
+                  - /url: /c/gossip/11
+                  - img [ref=e217]
+                  - generic [ref=e218]: 搞七捻三
+                  - img [ref=e220]
+              - listitem [ref=e221]:
+                - link "社区孵化" [ref=e222] [cursor=pointer]:
+                  - /url: /c/incubator/102
+                  - generic [ref=e223]:
+                    - img [ref=e224]
+                    - img [ref=e225]
+                  - generic [ref=e226]: 社区孵化
+              - listitem [ref=e227]:
+                - link "虫洞广场" [ref=e228] [cursor=pointer]:
+                  - /url: /c/square/110
+                  - img [ref=e230]
+                  - generic [ref=e231]: 虫洞广场
+              - listitem [ref=e232]:
+                - link "运营反馈" [ref=e233] [cursor=pointer]:
+                  - /url: /c/feedback/2
+                  - img [ref=e235]
+                  - generic [ref=e236]: 运营反馈
+              - listitem [ref=e237]:
+                - link "深海幽域" [ref=e238] [cursor=pointer]:
+                  - /url: /c/muted/45
+                  - generic [ref=e239]:
+                    - img [ref=e240]
+                    - img [ref=e241]
+                  - generic [ref=e242]: 深海幽域
+              - listitem [ref=e243]:
+                - link "所有类别" [ref=e244] [cursor=pointer]:
+                  - /url: /categories
+                  - img [ref=e246]
+                  - generic [ref=e247]: 所有类别
+          - generic [ref=e248]:
+            - generic [ref=e249]:
+              - button "标签" [expanded] [ref=e250] [cursor=pointer]:
+                - img [ref=e252]
+                - generic [ref=e253]: 标签
+              - button "编辑边栏标签" [ref=e254] [cursor=pointer]:
+                - img
+            - list [ref=e255]:
+              - listitem [ref=e256]:
+                - link "抽奖" [ref=e257] [cursor=pointer]:
+                  - /url: /tag/lottery/10
+                  - img [ref=e259]
+                  - generic [ref=e260]: 抽奖
+                  - img [ref=e262]
+              - listitem [ref=e263]:
+                - link "公告" [ref=e264] [cursor=pointer]:
+                  - /url: /tag/31-tag/31
+                  - img [ref=e266]
+                  - generic [ref=e267]: 公告
+              - listitem [ref=e268]:
+                - link "集中帖" [ref=e269] [cursor=pointer]:
+                  - /url: /tag/1534-tag/1534
+                  - img [ref=e271]
+                  - generic [ref=e272]: 集中帖
+              - listitem [ref=e273]:
+                - link "精华神帖" [ref=e274] [cursor=pointer]:
+                  - /url: /tag/1435-tag/1435
+                  - img [ref=e276]
+                  - generic [ref=e277]: 精华神帖
+              - listitem [ref=e278]:
+                - link "快问快答" [ref=e279] [cursor=pointer]:
+                  - /url: /tag/1436-tag/1436
+                  - img [ref=e281]
+                  - generic [ref=e282]: 快问快答
+                  - img [ref=e284]
+              - listitem [ref=e285]:
+                - link "人工智能" [ref=e286] [cursor=pointer]:
+                  - /url: /tag/444-tag/444
+                  - img [ref=e288]
+                  - generic [ref=e289]: 人工智能
+                  - img [ref=e291]
+              - listitem [ref=e292]:
+                - link "原创" [ref=e293] [cursor=pointer]:
+                  - /url: /tag/1531-tag/1531
+                  - img [ref=e295]
+                  - generic [ref=e296]: 原创
+              - listitem [ref=e297]:
+                - link "所有标签" [ref=e298] [cursor=pointer]:
+                  - /url: /tags
+                  - img [ref=e300]
+                  - generic [ref=e301]: 所有标签
+          - list [ref=e303]:
+            - listitem [ref=e304]:
+              - link "搜索聊天" [ref=e305] [cursor=pointer]:
+                - /url: /chat/search
+                - img [ref=e307]
+                - generic [ref=e308]: 搜索聊天
+          - generic [ref=e309]:
+            - generic [ref=e310]:
+              - button "频道" [expanded] [ref=e311] [cursor=pointer]:
+                - img [ref=e313]
+                - generic [ref=e314]: 频道
+              - button "浏览频道" [ref=e315] [cursor=pointer]:
+                - img
+            - list
+        - button "聊天" [ref=e316] [cursor=pointer]:
+          - img [ref=e317]
+          - generic [ref=e318]: 聊天
+        - generic [ref=e321]:
+          - generic [ref=e322]:
+            - img
+            - group [ref=e323]:
+              - generic "筛选条件：Default" [ref=e324] [cursor=pointer]:
+                - generic [ref=e325]:
+                  - generic "Default" [ref=e326]:
+                    - generic [ref=e327]: Default
+                  - img
+          - button [ref=e328] [cursor=pointer]:
+            - img [ref=e329]
+          - 'button "颜色模式，当前为 [missing %{mode} value]" [ref=e330] [cursor=pointer]':
+            - img [ref=e331]
+          - button "添加自定义版块" [ref=e332] [cursor=pointer]:
+            - img [ref=e333]
+          - button "键盘快捷键" [ref=e334] [cursor=pointer]:
+            - img [ref=e335]
+      - generic [ref=e336]:
+        - generic [ref=e337]:
+          - generic [ref=e338]:
+            - generic [ref=e341]:
+              - button "1.1k 浏览量" [ref=e342] [cursor=pointer]:
+                - generic [ref=e343]: 1.1k
+                - generic [ref=e344]: 浏览量
+              - button "26 赞" [ref=e345] [cursor=pointer]:
+                - generic [ref=e346]: "26"
+                - generic [ref=e347]: 赞
+              - button "16 用户" [ref=e348] [cursor=pointer]:
+                - generic [ref=e349]: "16"
+                - generic [ref=e350]: 用户
+              - generic [ref=e351]:
+                - link "EricZ 的个人资料" [ref=e353] [cursor=pointer]:
+                  - /url: /u/EricZ
+                  - img "EricZ" [ref=e354]
+                - link "caolib 的个人资料" [ref=e356] [cursor=pointer]:
+                  - /url: /u/caolib
+                  - img "孤独的Lonely" [ref=e357]
+                - link "TAIY2025 的个人资料" [ref=e359] [cursor=pointer]:
+                  - /url: /u/TAIY2025
+                  - img "TAIY2025" [ref=e360]
+                - link "nativex 的个人资料" [ref=e362] [cursor=pointer]:
+                  - /url: /u/nativex
+                  - img "nativex" [ref=e363]
+                - link "qhongchen 的个人资料" [ref=e365] [cursor=pointer]:
+                  - /url: /u/qhongchen
+                  - img "qhongchen" [ref=e366]
+            - generic [ref=e369]:
+              - button "Toggle Reader Mode (ctrl + alt + r)" [ref=e371] [cursor=pointer]:
+                - img [ref=e372]
+              - generic [ref=e373]:
+                - link "6月 8 日" [ref=e375] [cursor=pointer]:
+                  - /url: /t/topic/2324965/1
+                  - generic [ref=e376]: 6月 8 日
+                - generic [ref=e381]:
+                  - generic [ref=e382]: 26 / 27
+                  - generic [ref=e383]: 6月 11 日
+                - link "1 天 前" [ref=e386] [cursor=pointer]:
+                  - /url: /t/topic/2324965/28
+                  - generic [ref=e387]: 1 天 前
+              - generic [ref=e388]:
+                - button "开始撰写此话题的回复" [ref=e389] [cursor=pointer]:
+                  - img [ref=e390]
+                - button "通知级别：常规" [ref=e392] [cursor=pointer]:
+                  - img [ref=e393]
+            - generic [ref=e397]:
+              - heading "加载上方更多帖子" [level=2] [ref=e399]
+              - heading "由 pzyyl 于 5 天前 发布" [level=2] [ref=e401]
+              - heading "由 EricZ 于 3 天前 发布" [level=2] [ref=e403]
+              - heading "由 EricZ 于 3 天前 发布" [level=2] [ref=e405]
+              - heading "由 YAVAWA 于 3 天前 发布" [level=2] [ref=e407]
+              - heading "由 qhongchen 于 2 天前 发布" [level=2] [ref=e409]
+              - heading "由 caolib 于 2 天前 发布" [level=2] [ref=e411]
+              - heading "由 kbtit_25 于 2 天前 发布" [level=2] [ref=e413]
+              - heading "由 qhongchen 于 2 天前 发布" [level=2] [ref=e415]
+              - heading "由 caolib 于 2 天前 发布" [level=2] [ref=e417]
+              - heading "由 marcussmartchn 于 2 天前 发布" [level=2] [ref=e419]
+              - heading "由 TAIY2025 于 2 天前 发布" [level=2] [ref=e421]
+              - heading "由 Haleclipse 于 2 天前 发布" [level=2] [ref=e423]
+              - heading "由 TAIY2025 于 2 天前 发布" [level=2] [ref=e425]
+              - heading "由 tabor 于 2 天前 发布" [level=2] [ref=e427]
+              - generic [ref=e428]:
+                - heading "由 EricZ 于 2 天前 发布" [level=2] [ref=e429]
+                - article "由 EricZ 于 2 天前 发布" [ref=e430]:
+                  - generic [ref=e431]:
+                    - link "EricZ 的个人资料" [ref=e434] [cursor=pointer]:
+                      - /url: /u/ericz
+                    - generic [ref=e435]:
+                      - generic [ref=e436]:
+                        - link "EricZ 的个人资料" [ref=e439] [cursor=pointer]:
+                          - /url: /u/ericz
+                          - text: EricZ
+                        - generic [ref=e440]:
+                          - link "2 天" [ref=e442] [cursor=pointer]:
+                            - /url: /t/topic/2324965/23?u=majorai
+                          - generic "帖子未读" [ref=e443]:
+                            - img [ref=e444]
+                      - generic [ref=e445]:
+                        - generic [ref=e446]:
+                          - paragraph [ref=e447]:
+                            - text: OK 谢谢佬们的回复 我已经成功运行了
+                            - img ":nerd_face:" [ref=e448]
+                            - text: 我来看看这个 fable5怎么个事
+                          - link "IMG_3112 IMG_3112 2388×1668 271 KB" [ref=e450] [cursor=pointer]:
+                            - /url: https://cdn3.ldstatic.com/original/4X/0/d/8/0d8d199532619c0a65a4f077e0351ed41e3e7387.png
+                            - img "IMG_3112" [ref=e451]
+                            - generic [ref=e452]:
+                              - img [ref=e453]
+                              - generic [ref=e454]: IMG_3112
+                              - generic [ref=e455]: 2388×1668 271 KB
+                              - img [ref=e456]
+                          - paragraph
+                          - text: TOPIC OWNER
+                        - group "帖子操作" [ref=e457]:
+                          - button "此帖子有 2 条回复" [ref=e458] [cursor=pointer]:
+                            - generic [ref=e459]: 2 个回复
+                            - img [ref=e460]
+                          - generic [ref=e461]:
+                            - generic "点赞此帖子" [ref=e464] [cursor=pointer]:
+                              - button "点赞此帖子":
+                                - img
+                            - button "将此帖子的链接复制到剪贴板" [ref=e465] [cursor=pointer]:
+                              - img [ref=e466]
+                            - button "Add a boost" [ref=e467] [cursor=pointer]:
+                              - img [ref=e468]
+                            - button "显示更多" [ref=e469] [cursor=pointer]:
+                              - img [ref=e470]
+                            - 'button "回复 @EricZ 发布的帖子 #23" [ref=e471] [cursor=pointer]':
+                              - img [ref=e472]
+                              - generic [ref=e473]: 回复
+                          - generic:
+                            - list
+              - generic [ref=e475]:
+                - heading "由 nativex 于 1 天前 发布" [level=2] [ref=e476]
+                - article "由 nativex 于 1 天前 发布" [ref=e477]:
+                  - generic [ref=e478]:
+                    - link "nativex 的个人资料" [ref=e481] [cursor=pointer]:
+                      - /url: /u/nativex
+                    - generic [ref=e482]:
+                      - generic [ref=e483]:
+                        - link "nativex 的个人资料" [ref=e486] [cursor=pointer]:
+                          - /url: /u/nativex
+                          - text: nativex
+                        - generic [ref=e487]:
+                          - button "EricZ EricZ" [ref=e488] [cursor=pointer]:
+                            - img [ref=e489]
+                            - img "EricZ" [ref=e490]
+                            - generic [ref=e491]: EricZ
+                          - link "1 天" [ref=e493] [cursor=pointer]:
+                            - /url: /t/topic/2324965/24?u=majorai
+                          - generic "帖子未读" [ref=e494]:
+                            - img [ref=e495]
+                      - generic [ref=e496]:
+                        - paragraph [ref=e498]: 佬，你得setting.json能不能发出来看下，把apikey打码，谢谢佬~
+                        - group "帖子操作" [ref=e499]:
+                          - generic [ref=e500]:
+                            - generic "点赞此帖子" [ref=e503] [cursor=pointer]:
+                              - button "点赞此帖子":
+                                - img
+                            - button "将此帖子的链接复制到剪贴板" [ref=e504] [cursor=pointer]:
+                              - img [ref=e505]
+                            - button "Add a boost" [ref=e506] [cursor=pointer]:
+                              - img [ref=e507]
+                            - button "显示更多" [ref=e508] [cursor=pointer]:
+                              - img [ref=e509]
+                            - 'button "回复 @nativex 发布的帖子 #24" [ref=e510] [cursor=pointer]':
+                              - img [ref=e511]
+                              - generic [ref=e512]: 回复
+                          - generic:
+                            - list
+              - generic [ref=e514]:
+                - heading "由 wnp 于 1 天前 发布" [level=2] [ref=e515]
+                - article "由 wnp 于 1 天前 发布" [ref=e516]:
+                  - generic [ref=e517]:
+                    - link "wnp 的个人资料" [ref=e520] [cursor=pointer]:
+                      - /url: /u/wnp
+                    - generic [ref=e521]:
+                      - generic [ref=e522]:
+                        - generic [ref=e523]:
+                          - link "wnp 的个人资料" [ref=e525] [cursor=pointer]:
+                            - /url: /u/wnp
+                            - text: wnp
+                          - generic [ref=e526]: 一元复始
+                        - generic [ref=e527]:
+                          - link "1 天" [ref=e529] [cursor=pointer]:
+                            - /url: /t/topic/2324965/25?u=majorai
+                          - generic "帖子未读" [ref=e530]:
+                            - img [ref=e531]
+                      - generic [ref=e532]:
+                        - generic [ref=e533]:
+                          - paragraph
+                          - link "image image 974×113 4.16 KB" [ref=e535] [cursor=pointer]:
+                            - /url: https://cdn3.ldstatic.com/original/4X/a/e/c/aec5fa51624b2f7ae592772a3da60c854f8139cd.png
+                            - img "image" [ref=e536]
+                            - generic [ref=e537]:
+                              - img [ref=e538]
+                              - generic [ref=e539]: image
+                              - generic [ref=e540]: 974×113 4.16 KB
+                              - img [ref=e541]
+                          - text: any 对网络是有严格要求吗，管网可以访问，但是claude的请求就是访问不到
+                          - paragraph
+                        - group "帖子操作" [ref=e542]:
+                          - button "此帖子有 1 条回复" [ref=e543] [cursor=pointer]:
+                            - generic [ref=e544]: 1 个回复
+                            - img [ref=e545]
+                          - generic [ref=e546]:
+                            - generic "点赞此帖子" [ref=e549] [cursor=pointer]:
+                              - button "点赞此帖子":
+                                - img
+                            - button "将此帖子的链接复制到剪贴板" [ref=e550] [cursor=pointer]:
+                              - img [ref=e551]
+                            - button "Add a boost" [ref=e552] [cursor=pointer]:
+                              - img [ref=e553]
+                            - button "显示更多" [ref=e554] [cursor=pointer]:
+                              - img [ref=e555]
+                            - 'button "回复 @wnp 发布的帖子 #25" [ref=e556] [cursor=pointer]':
+                              - img [ref=e557]
+                              - generic [ref=e558]: 回复
+                          - generic:
+                            - list
+              - generic [ref=e560]:
+                - heading "由 yangdage 于 1 天前 发布" [level=2] [ref=e561]
+                - article "由 yangdage 于 1 天前 发布" [ref=e562]:
+                  - generic [ref=e563]:
+                    - link "yangdage 的个人资料" [ref=e566] [cursor=pointer]:
+                      - /url: /u/yangdage
+                    - generic [ref=e567]:
+                      - generic [ref=e568]:
+                        - link "yangdage 的个人资料" [ref=e571] [cursor=pointer]:
+                          - /url: /u/yangdage
+                          - text: yangdage
+                        - generic [ref=e572]:
+                          - link "1 天" [ref=e574] [cursor=pointer]:
+                            - /url: /t/topic/2324965/26?u=majorai
+                          - generic "帖子未读" [ref=e575]:
+                            - img [ref=e576]
+                      - generic [ref=e577]:
+                        - generic [ref=e578]:
+                          - paragraph
+                          - link "image image 1133×453 26.6 KB" [ref=e580] [cursor=pointer]:
+                            - /url: https://cdn3.ldstatic.com/original/4X/e/2/4/e24b0ae706bca910f81864ad3206fe03abcc25bd.png
+                            - img "image" [ref=e581]
+                            - generic [ref=e582]:
+                              - img [ref=e583]
+                              - generic [ref=e584]: image
+                              - generic [ref=e585]: 1133×453 26.6 KB
+                              - img [ref=e586]
+                          - text: 照着这样配置就可以了,就是any大部分时候都是429
+                          - img ":grimacing:" [ref=e587]
+                          - paragraph
+                        - group "帖子操作" [ref=e588]:
+                          - generic [ref=e589]:
+                            - generic "点赞此帖子" [ref=e592] [cursor=pointer]:
+                              - button "点赞此帖子":
+                                - img
+                            - button "将此帖子的链接复制到剪贴板" [ref=e593] [cursor=pointer]:
+                              - img [ref=e594]
+                            - button "Add a boost" [ref=e595] [cursor=pointer]:
+                              - img [ref=e596]
+                            - button "显示更多" [ref=e597] [cursor=pointer]:
+                              - img [ref=e598]
+                            - 'button "回复 @yangdage 发布的帖子 #26" [ref=e599] [cursor=pointer]':
+                              - img [ref=e600]
+                              - generic [ref=e601]: 回复
+                          - generic:
+                            - list
+              - generic [ref=e603]:
+                - heading "由 EricZ 于 1 天前 发布" [level=2] [ref=e604]
+                - article "由 EricZ 于 1 天前 发布" [ref=e605]:
+                  - generic [ref=e606]:
+                    - link "EricZ 的个人资料" [ref=e609] [cursor=pointer]:
+                      - /url: /u/ericz
+                    - generic [active] [ref=e610]:
+                      - generic [ref=e611]:
+                        - link "EricZ 的个人资料" [ref=e614] [cursor=pointer]:
+                          - /url: /u/ericz
+                          - text: EricZ
+                        - generic [ref=e615]:
+                          - button "EricZ EricZ" [ref=e616] [cursor=pointer]:
+                            - img [ref=e617]
+                            - img "EricZ" [ref=e618]
+                            - generic [ref=e619]: EricZ
+                          - link "1 天" [ref=e621] [cursor=pointer]:
+                            - /url: /t/topic/2324965/27?u=majorai
+                          - generic "帖子未读" [ref=e622]:
+                            - img [ref=e623]
+                      - generic [ref=e624]:
+                        - generic [ref=e625]:
+                          - paragraph [ref=e626]: "{"
+                          - paragraph [ref=e627]: "“effortLevel”: “xhigh”,"
+                          - paragraph [ref=e628]: "“skipWorkflowUsageWarning”: true,"
+                          - paragraph [ref=e629]: "“theme”: “dark”,"
+                          - paragraph [ref=e630]: "“advisorModel”: “opus”,"
+                          - paragraph [ref=e631]: "“env”: {"
+                          - code [ref=e634]: "\"ANTHROPIC_BASE_URL\": \"https://a-ocnfniawgw.cn-shanghai.fcapp.run\", \"ANTHROPIC_AUTH_TOKEN\": \"sk- \", \"ANTHROPIC_BETAS\": \"context-1m-2025-08-07\""
+                          - paragraph [ref=e635]: "},"
+                          - paragraph [ref=e636]: "“model”: “claude-fable-5[1m]”,"
+                          - paragraph [ref=e637]: "“autoUpdatesChannel”: “latest”"
+                          - paragraph [ref=e638]: "}"
+                          - paragraph [ref=e639]: 我是这样子的 不过用了一会就429用不了了
+                          - text: TOPIC OWNER
+                        - group "帖子操作" [ref=e640]:
+                          - generic [ref=e641]:
+                            - generic "点赞此帖子" [ref=e644] [cursor=pointer]:
+                              - button "点赞此帖子":
+                                - img
+                            - button "将此帖子的链接复制到剪贴板" [ref=e645] [cursor=pointer]:
+                              - img [ref=e646]
+                            - button "Add a boost" [ref=e647] [cursor=pointer]:
+                              - img [ref=e648]
+                            - button "显示更多" [ref=e649] [cursor=pointer]:
+                              - img [ref=e650]
+                            - 'button "回复 @EricZ 发布的帖子 #27" [ref=e651] [cursor=pointer]':
+                              - img [ref=e652]
+                              - generic [ref=e653]: 回复
+                          - generic:
+                            - list
+              - generic [ref=e655]:
+                - heading "由 EricZ 于 1 天前 发布" [level=2] [ref=e656]
+                - article "由 EricZ 于 1 天前 发布" [ref=e657]:
+                  - generic [ref=e658]:
+                    - link "EricZ 的个人资料" [ref=e661] [cursor=pointer]:
+                      - /url: /u/ericz
+                    - generic [ref=e662]:
+                      - generic [ref=e663]:
+                        - link "EricZ 的个人资料" [ref=e666] [cursor=pointer]:
+                          - /url: /u/ericz
+                          - text: EricZ
+                        - generic [ref=e667]:
+                          - button "wnp wnp" [ref=e668] [cursor=pointer]:
+                            - img [ref=e669]
+                            - img "wnp" [ref=e670]
+                            - generic [ref=e671]: wnp
+                          - link "1 天" [ref=e673] [cursor=pointer]:
+                            - /url: /t/topic/2324965/28?u=majorai
+                          - generic "帖子未读" [ref=e674]:
+                            - img [ref=e675]
+                      - generic [ref=e676]:
+                        - generic [ref=e677]:
+                          - paragraph [ref=e678]:
+                            - text: 我这边也一直这样 不知道为啥
+                            - img ":sob:" [ref=e679]
+                          - text: TOPIC OWNER
+                        - group "帖子操作" [ref=e680]:
+                          - generic [ref=e681]:
+                            - generic "点赞此帖子" [ref=e684] [cursor=pointer]:
+                              - button "点赞此帖子":
+                                - img
+                            - button "将此帖子的链接复制到剪贴板" [ref=e685] [cursor=pointer]:
+                              - img [ref=e686]
+                            - button "Add a boost" [ref=e687] [cursor=pointer]:
+                              - img [ref=e688]
+                            - button "显示更多" [ref=e689] [cursor=pointer]:
+                              - img [ref=e690]
+                            - 'button "回复 @EricZ 发布的帖子 #28" [ref=e691] [cursor=pointer]':
+                              - img [ref=e692]
+                              - generic [ref=e693]: 回复
+                          - generic:
+                            - list
+          - region "话题操作" [ref=e699]:
+            - generic [ref=e700]:
+              - generic [ref=e701]:
+                - button "分享" [ref=e702] [cursor=pointer]:
+                  - img [ref=e703]
+                  - generic [ref=e704]: 分享
+                - button "添加为书签" [ref=e705] [cursor=pointer]:
+                  - img [ref=e706]
+                  - generic [ref=e707]: 添加为书签
+                - button "举报" [ref=e708] [cursor=pointer]:
+                  - img [ref=e709]
+                  - generic [ref=e710]: 举报
+              - button "回复" [ref=e711] [cursor=pointer]:
+                - img [ref=e712]
+                - generic [ref=e713]: 回复
+            - paragraph [ref=e715]:
+              - button "常规" [ref=e716] [cursor=pointer]:
+                - img [ref=e717]
+                - generic [ref=e718]: 常规
+                - img [ref=e719]
+              - generic [ref=e720]: 您会在别人 @ 您或回复您时收到通知。
+          - generic [ref=e721]:
+            - complementary "新话题和未读话题" [ref=e723]:
+              - table "话题列表，带有按钮的列标题可以排序。" [ref=e727]:
+                - caption [ref=e728]: 话题列表，带有按钮的列标题可以排序。
+                - rowgroup [ref=e729]:
+                  - row "推荐 相关 回复 活动" [ref=e730]:
+                    - columnheader "推荐 相关" [ref=e731]:
+                      - list [ref=e732]:
+                        - listitem [ref=e733]:
+                          - button "推荐" [ref=e734] [cursor=pointer]:
+                            - generic [ref=e735]: 推荐
+                        - listitem [ref=e736]:
+                          - button "相关" [ref=e737] [cursor=pointer]:
+                            - img [ref=e738]
+                            - generic [ref=e739]: 相关
+                    - columnheader "回复" [ref=e740]:
+                      - generic [ref=e741]: 回复
+                    - columnheader "活动" [ref=e742]:
+                      - generic [ref=e743]: 活动
+                - rowgroup [ref=e744]:
+                  - row "佬们的开发环境是什么？Linux服务器、Windows CMD、powershell、WSL、虚拟机？ 开发调优 标签 10 条回复，跳转到第一个帖子 3 分钟" [ref=e745]:
+                    - cell "佬们的开发环境是什么？Linux服务器、Windows CMD、powershell、WSL、虚拟机？ 开发调优 标签" [ref=e746]:
+                      - heading "佬们的开发环境是什么？Linux服务器、Windows CMD、powershell、WSL、虚拟机？" [level=2] [ref=e747]:
+                        - link "佬们的开发环境是什么？Linux服务器、Windows CMD、powershell、WSL、虚拟机？" [ref=e748] [cursor=pointer]:
+                          - /url: /t/topic/2389599
+                        - link "新话题" [ref=e750] [cursor=pointer]:
+                          - /url: /t/topic/2389599
+                      - generic [ref=e751]:
+                        - link "开发调优" [ref=e752] [cursor=pointer]:
+                          - /url: /c/develop/4
+                          - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e753]:
+                            - img [ref=e754]
+                            - generic [ref=e755]: 开发调优
+                        - list "标签" [ref=e756]:
+                          - listitem [ref=e757]:
+                            - link "人工智能" [ref=e758] [cursor=pointer]:
+                              - /url: /tag/444-tag/444
+                              - img [ref=e760]
+                              - text: 人工智能
+                          - listitem [ref=e761]:
+                            - link "软件开发" [ref=e762] [cursor=pointer]:
+                              - /url: /tag/1451-tag/1451
+                              - img [ref=e764]
+                              - text: 软件开发
+                          - listitem [ref=e765]:
+                            - link "WSL" [ref=e766] [cursor=pointer]:
+                              - /url: /tag/1746-tag/1746
+                          - listitem [ref=e767]:
+                            - link "PowerShell" [ref=e768] [cursor=pointer]:
+                              - /url: /tag/2436-tag/2436
+                    - cell "10 条回复，跳转到第一个帖子" [ref=e769]:
+                      - link "10 条回复，跳转到第一个帖子" [ref=e770] [cursor=pointer]:
+                        - /url: /t/topic/2389599/1
+                        - text: "10"
+                    - cell "3 分钟" [ref=e771]:
+                      - link "3 分钟" [ref=e772] [cursor=pointer]:
+                        - /url: /t/topic/2389599/11
+                  - row "《有没有人想一起做一个面向嵌入式硬件开发的 Agent？从原理图到 PCB Layout》 开发调优 标签 9 条回复，跳转到第一个帖子 6 分钟" [ref=e773]:
+                    - cell "《有没有人想一起做一个面向嵌入式硬件开发的 Agent？从原理图到 PCB Layout》 开发调优 标签" [ref=e774]:
+                      - heading "《有没有人想一起做一个面向嵌入式硬件开发的 Agent？从原理图到 PCB Layout》" [level=2] [ref=e775]:
+                        - link "《有没有人想一起做一个面向嵌入式硬件开发的 Agent？从原理图到 PCB Layout》" [ref=e776] [cursor=pointer]:
+                          - /url: /t/topic/2389191
+                        - link "新话题" [ref=e778] [cursor=pointer]:
+                          - /url: /t/topic/2389191
+                      - generic [ref=e779]:
+                        - link "开发调优" [ref=e780] [cursor=pointer]:
+                          - /url: /c/develop/4
+                          - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e781]:
+                            - img [ref=e782]
+                            - generic [ref=e783]: 开发调优
+                        - list "标签" [ref=e784]:
+                          - listitem [ref=e785]:
+                            - link "人工智能" [ref=e786] [cursor=pointer]:
+                              - /url: /tag/444-tag/444
+                              - img [ref=e788]
+                              - text: 人工智能
+                          - listitem [ref=e789]:
+                            - link "软件开发" [ref=e790] [cursor=pointer]:
+                              - /url: /tag/1451-tag/1451
+                              - img [ref=e792]
+                              - text: 软件开发
+                          - listitem [ref=e793]:
+                            - link "嵌入式" [ref=e794] [cursor=pointer]:
+                              - /url: /tag/750-tag/750
+                              - img [ref=e796]
+                              - text: 嵌入式
+                    - cell "9 条回复，跳转到第一个帖子" [ref=e797]:
+                      - link "9 条回复，跳转到第一个帖子" [ref=e798] [cursor=pointer]:
+                        - /url: /t/topic/2389191/1
+                        - text: "9"
+                    - cell "6 分钟" [ref=e799]:
+                      - link "6 分钟" [ref=e800] [cursor=pointer]:
+                        - /url: /t/topic/2389191/10
+                  - row "小白想跟风购买美股试试水，求平台和需要的支付方式。 开发调优 标签 3 条回复，跳转到第一个帖子 6 分钟" [ref=e801]:
+                    - cell "小白想跟风购买美股试试水，求平台和需要的支付方式。 开发调优 标签" [ref=e802]:
+                      - heading "小白想跟风购买美股试试水，求平台和需要的支付方式。" [level=2] [ref=e803]:
+                        - link "小白想跟风购买美股试试水，求平台和需要的支付方式。" [ref=e804] [cursor=pointer]:
+                          - /url: /t/topic/2389582
+                        - link "新话题" [ref=e806] [cursor=pointer]:
+                          - /url: /t/topic/2389582
+                      - generic [ref=e807]:
+                        - link "开发调优" [ref=e808] [cursor=pointer]:
+                          - /url: /c/develop/4
+                          - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e809]:
+                            - img [ref=e810]
+                            - generic [ref=e811]: 开发调优
+                        - list "标签" [ref=e812]:
+                          - listitem [ref=e813]:
+                            - link "快问快答" [ref=e814] [cursor=pointer]:
+                              - /url: /tag/1436-tag/1436
+                              - img [ref=e816]
+                              - text: 快问快答
+                          - listitem [ref=e817]:
+                            - link "树洞" [ref=e818] [cursor=pointer]:
+                              - /url: /tag/1464-tag/1464
+                              - img [ref=e820]
+                              - text: 树洞
+                          - listitem [ref=e821]:
+                            - link "美股" [ref=e822] [cursor=pointer]:
+                              - /url: /tag/2797-tag/2797
+                    - cell "3 条回复，跳转到第一个帖子" [ref=e823]:
+                      - link "3 条回复，跳转到第一个帖子" [ref=e824] [cursor=pointer]:
+                        - /url: /t/topic/2389582/1
+                        - text: "3"
+                    - cell "6 分钟" [ref=e825]:
+                      - link "6 分钟" [ref=e826] [cursor=pointer]:
+                        - /url: /t/topic/2389582/4
+                  - row "一些新模型的测试结果（包含Kimi K2.7 Code） 开发调优 标签 7 条回复，跳转到第一个帖子 7 分钟" [ref=e827]:
+                    - cell "一些新模型的测试结果（包含Kimi K2.7 Code） 开发调优 标签" [ref=e828]:
+                      - heading "一些新模型的测试结果（包含Kimi K2.7 Code）" [level=2] [ref=e829]:
+                        - link "一些新模型的测试结果（包含Kimi K2.7 Code）" [ref=e830] [cursor=pointer]:
+                          - /url: /t/topic/2389471
+                        - link "新话题" [ref=e832] [cursor=pointer]:
+                          - /url: /t/topic/2389471
+                      - generic [ref=e833]:
+                        - link "开发调优" [ref=e834] [cursor=pointer]:
+                          - /url: /c/develop/4
+                          - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e835]:
+                            - img [ref=e836]
+                            - generic [ref=e837]: 开发调优
+                        - list "标签" [ref=e838]:
+                          - listitem [ref=e839]:
+                            - link "人工智能" [ref=e840] [cursor=pointer]:
+                              - /url: /tag/444-tag/444
+                              - img [ref=e842]
+                              - text: 人工智能
+                    - cell "7 条回复，跳转到第一个帖子" [ref=e843]:
+                      - link "7 条回复，跳转到第一个帖子" [ref=e844] [cursor=pointer]:
+                        - /url: /t/topic/2389471/1
+                        - text: "7"
+                    - cell "7 分钟" [ref=e845]:
+                      - link "7 分钟" [ref=e846] [cursor=pointer]:
+                        - /url: /t/topic/2389471/8
+                  - row "cursor free版是不可以配置第三方公益站的API么？ 开发调优 标签 5 条回复，跳转到第一个帖子 8 分钟" [ref=e847]:
+                    - cell "cursor free版是不可以配置第三方公益站的API么？ 开发调优 标签" [ref=e848]:
+                      - heading "cursor free版是不可以配置第三方公益站的API么？" [level=2] [ref=e849]:
+                        - generic "此话题有解决方案" [ref=e851]:
+                          - img [ref=e852]
+                        - link "cursor free版是不可以配置第三方公益站的API么？" [ref=e853] [cursor=pointer]:
+                          - /url: /t/topic/2389427
+                        - link "新话题" [ref=e855] [cursor=pointer]:
+                          - /url: /t/topic/2389427
+                      - generic [ref=e856]:
+                        - link "开发调优" [ref=e857] [cursor=pointer]:
+                          - /url: /c/develop/4
+                          - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e858]:
+                            - img [ref=e859]
+                            - generic [ref=e860]: 开发调优
+                        - list "标签" [ref=e861]:
+                          - listitem [ref=e862]:
+                            - link "快问快答" [ref=e863] [cursor=pointer]:
+                              - /url: /tag/1436-tag/1436
+                              - img [ref=e865]
+                              - text: 快问快答
+                          - listitem [ref=e866]:
+                            - link "人工智能" [ref=e867] [cursor=pointer]:
+                              - /url: /tag/444-tag/444
+                              - img [ref=e869]
+                              - text: 人工智能
+                          - listitem [ref=e870]:
+                            - link "ChatGPT" [ref=e871] [cursor=pointer]:
+                              - /url: /tag/chatgpt/3
+                          - listitem [ref=e872]:
+                            - link "OpenAI" [ref=e873] [cursor=pointer]:
+                              - /url: /tag/openai/4
+                    - cell "5 条回复，跳转到第一个帖子" [ref=e874]:
+                      - link "5 条回复，跳转到第一个帖子" [ref=e875] [cursor=pointer]:
+                        - /url: /t/topic/2389427/1
+                        - text: "5"
+                    - cell "8 分钟" [ref=e876]:
+                      - link "8 分钟" [ref=e877] [cursor=pointer]:
+                        - /url: /t/topic/2389427/6
+            - heading "有 25 个未读话题 和 136 个新话题， 或浏览 开发调优 中的其他话题" [level=3] [ref=e878]:
+              - text: 有
+              - link "25 个未读" [ref=e879] [cursor=pointer]:
+                - /url: /unread
+              - text: 话题 和
+              - link "136 个新" [ref=e880] [cursor=pointer]:
+                - /url: /new
+              - text: 话题， 或浏览
+              - link "开发调优" [ref=e881] [cursor=pointer]:
+                - /url: /c/develop/4
+                - generic "此版块包含开发、测试、调试、部署、优化、安全等方面的内容。" [ref=e882]:
+                  - img [ref=e883]
+                  - generic [ref=e884]: 开发调优
+              - text: 中的其他话题
+        - dialog "用户卡"
+  - status [ref=e885]
+  - alert [ref=e886]

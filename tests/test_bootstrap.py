@@ -45,3 +45,40 @@ class BuildApplicationContextTests(unittest.TestCase):
             settings = AppSettings.load(settings_path)
 
         self.assertEqual(settings.prompt.compiled_prompt_path, "prompts/compiled-prompt.md")
+
+    def test_settings_load_maps_legacy_model_to_fast_and_thinking_models(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = Path(tmp) / "settings.json"
+            settings_path.write_text(
+                json.dumps(
+                    {
+                        "ai": {
+                            "base_url": "https://api.example.test/v1",
+                            "api_key": "key",
+                            "model": "legacy-model",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            settings = AppSettings.load(settings_path)
+
+        self.assertEqual(settings.ai.model, "legacy-model")
+        self.assertEqual(settings.ai.fast_model_name, "legacy-model")
+        self.assertEqual(settings.ai.thinking_model_name, "legacy-model")
+
+    def test_settings_save_and_load_dual_models(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = Path(tmp) / "settings.json"
+            settings = AppSettings()
+            settings.ai.base_url = "https://api.example.test/v1"
+            settings.ai.api_key = "key"
+            settings.ai.fast_model = "deepseek-v4-flash"
+            settings.ai.thinking_model = "deepseek-v4-pro"
+
+            settings.save(settings_path)
+            loaded = AppSettings.load(settings_path)
+
+        self.assertEqual(loaded.ai.fast_model_name, "deepseek-v4-flash")
+        self.assertEqual(loaded.ai.thinking_model_name, "deepseek-v4-pro")

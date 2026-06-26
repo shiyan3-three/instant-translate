@@ -1,0 +1,28 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - heading "🚀 AnyRouter" [level=1] [ref=e4]
+    - paragraph [ref=e5]: Claude Code 中转站 · 零门槛 · 免费 $50
+    - generic [ref=e6]:
+      - strong [ref=e7]: 🎊 限时福利：注册即送 $50 免费额度
+      - text: 无需信用卡，无需付费，立即体验最新 AI 编程助手
+    - link "立即注册使用" [ref=e8] [cursor=pointer]:
+      - /url: https://anyrouter.top/
+  - generic [ref=e9]:
+    - navigation [ref=e10]:
+      - generic [ref=e11]:
+        - generic [ref=e12] [cursor=pointer]: 限时福利
+        - generic [ref=e13] [cursor=pointer]: 平台特色
+        - generic [ref=e14] [cursor=pointer]: 快速开始
+        - generic [ref=e15] [cursor=pointer]: 使用教程
+        - generic [ref=e16] [cursor=pointer]: 高级功能
+        - generic [ref=e17] [cursor=pointer]: 命令参考
+        - generic [ref=e18] [cursor=pointer]: 常见问题
+    - text: BASH BASH BASH BASH BASH BASH BASH BASH
+    - generic [ref=e99]:
+      - heading "🤔 常见问题解答" [level=2] [ref=e100]
+      - generic [ref=e102] [cursor=pointer]: Invalid API Key · Please run /login 怎么解决？
+      - generic [ref=e104] [cursor=pointer]: "显示 `offline` 是什么原因？"
+      - generic [ref=e106] [cursor=pointer]: 为什么浏览网页的 Fetch 会失败？
+      - generic [ref=e108] [cursor=pointer]: 如何退出 Claude Code？
+      - generic [ref=e110] [cursor=pointer]: 如何更新 Claude Code？
+      - generic [ref=e112] [cursor=pointer]: 如何获得更多积分？

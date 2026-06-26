@@ -8,7 +8,7 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from app.overlay.window_interaction import set_window_click_through
+from app.overlay.window_interaction import set_window_click_through, set_window_excluded_from_capture
 from app.state.group_state import ScreenRegion
 
 WINDOW_MARGIN = 12
@@ -47,6 +47,7 @@ class OcrTextWindowWidget(QWidget):
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        set_window_excluded_from_capture(self, True)
         self.setMouseTracking(True)
 
         self.group_badge = QLabel(self)
@@ -159,6 +160,7 @@ class OcrTextWindowWidget(QWidget):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        set_window_excluded_from_capture(self, True)
         set_window_click_through(self, False)
 
     def paintEvent(self, event: QPaintEvent) -> None:

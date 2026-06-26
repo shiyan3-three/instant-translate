@@ -1,0 +1,48 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - heading "🚀 AnyRouter" [level=1] [ref=e4]
+    - paragraph [ref=e5]: Claude Code 中转站 · 零门槛 · 免费 $50
+    - generic [ref=e6]:
+      - strong [ref=e7]: 🎊 限时福利：注册即送 $50 免费额度
+      - text: 无需信用卡，无需付费，立即体验最新 AI 编程助手
+    - link "立即注册使用" [ref=e8] [cursor=pointer]:
+      - /url: https://anyrouter.top/
+  - generic [ref=e9]:
+    - navigation [ref=e10]:
+      - generic [ref=e11]:
+        - generic [ref=e12] [cursor=pointer]: 限时福利
+        - generic [ref=e13] [cursor=pointer]: 平台特色
+        - generic [ref=e14] [cursor=pointer]: 快速开始
+        - generic [ref=e15] [cursor=pointer]: 使用教程
+        - generic [ref=e16] [cursor=pointer]: 高级功能
+        - generic [ref=e17] [cursor=pointer]: 命令参考
+        - generic [ref=e18] [cursor=pointer]: 常见问题
+    - text: BASH BASH
+    - generic [ref=e76]:
+      - heading "📖 使用教程" [level=2] [ref=e77]
+      - heading "两种交互方式任你选" [level=3] [ref=e78]
+      - generic [ref=e79]:
+        - text: BASH
+        - generic [ref=e80]: "# 启动交互模式 claude # 以初始查询启动 claude \"解释这个项目\" # 运行单个命令并退出 claude -p \"这个函数做什么？\" # 处理管道内容 cat logs.txt | claude -p \"分析这些错误\""
+      - heading "选择你的 AI 模型" [level=3] [ref=e81]
+      - paragraph [ref=e82]: Claude Code 支持 Claude 4 Opus 与 Claude 4 Sonnet 两个模型。
+      - generic [ref=e83]:
+        - strong [ref=e84]: 💡 省钱小贴士
+        - text: ：对于日常任务，推荐使用 Claude 4 Sonnet，计费倍率仅为 Claude 4 Opus 的 1/5；对于有挑战性的任务，可以尝试更为智能的 Claude 4 Opus。
+      - generic [ref=e85]:
+        - text: BASH
+        - generic [ref=e86]: /model
+      - heading "IDE 集成" [level=3] [ref=e87]
+      - paragraph [ref=e88]: 不用再在终端和编辑器之间来回切换了！Claude Code 现在支持 VSCode 与 JetBrains。
+      - generic [ref=e89]:
+        - generic [ref=e90]:
+          - heading "VSCode 用户" [level=4] [ref=e91]
+          - paragraph [ref=e92]: 在 VSCode 的内置终端唤起 Claude Code，插件将被自动安装
+        - generic [ref=e93]:
+          - heading "JetBrains 用户" [level=4] [ref=e94]
+          - paragraph [ref=e95]: 需要手动下载插件
+      - heading "恢复对话" [level=3] [ref=e96]
+      - generic [ref=e97]:
+        - text: BASH
+        - generic [ref=e98]: "# 立即恢复最近的对话 claude --continue # 选择特定对话 claude --resume"
+    - text: BASH BASH BASH
