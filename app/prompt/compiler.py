@@ -68,7 +68,10 @@ class PromptCompiler:
             "You optimize translation prompt rules for an OCR-based desktop translator. "
             "Return only concise supplemental rules, glossary entries, style guidance, and fixed expressions. "
             "Preserve the user's original intent exactly. "
-            "Do not weaken, replace, or override the fixed template layer or user constraints."
+            "Do not weaken, replace, or override the fixed template layer or user constraints. "
+            "Always include as the first supplemental rule: produce a natural translation that faithfully conveys "
+            "the original meaning with natural word order and appropriate omission of subjects/pronouns, "
+            "then apply formatting constraints. Translation must not be a mechanical character-by-character substitution."
         )
         user_prompt = (
             "User constraint layer:\n"

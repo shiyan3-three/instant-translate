@@ -49,6 +49,7 @@ class PromptOptimizer:
                 base_url=ai.base_url,
                 api_key=ai.api_key,
                 model=model,
+                timeout_seconds=600.0,
             )
         )
 

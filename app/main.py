@@ -12,7 +12,7 @@ from app.feedback.store import FeedbackStore
 from app.gui.main_window import MainWindow
 from app.gui.settings_window import SettingsWindow
 from app.gui.tray_icon import TrayIconController
-from app.hotkeys import GlobalHotkeyService
+from app.hotkeys import GlobalHotkeyService, HotkeyMap
 from app.overlay.edit_mode_controller import EditModeController
 from app.overlay.selection_manager import SelectionWorkflowController
 from app.settings import AppSettings
@@ -40,6 +40,10 @@ def build_application_context() -> ApplicationContext:
     settings = AppSettings.load()
     return ApplicationContext(
         settings=settings,
+        hotkeys=HotkeyMap(
+            create_selection=settings.hotkey_create_selection,
+            toggle_edit_mode=settings.hotkey_toggle_edit_mode,
+        ),
         default_source_language=settings.default_source_language,
         default_target_language=settings.default_target_language,
     )
@@ -85,8 +89,23 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
                 selection_workflow._upsert_selection_box(gid, region)
 
     main_window.default_language_changed.connect(_apply_default_language)
+    main_window.compiled_prompt_saved.connect(selection_workflow.reload_translation_agents)
     hotkeys.create_selection_triggered.connect(selection_workflow.request_new_selection)
     hotkeys.toggle_edit_mode_triggered.connect(selection_workflow.toggle_edit_mode)
+
+    def _on_hotkeys_save(create_key: str, edit_key: str) -> None:
+        new_map = HotkeyMap(create_selection=create_key, toggle_edit_mode=edit_key)
+        success, msg = hotkeys.re_register(new_map)
+        if success:
+            context.settings.hotkey_create_selection = create_key
+            context.settings.hotkey_toggle_edit_mode = edit_key
+            context.settings.save()
+            context.hotkeys = new_map
+            main_window.show_hotkey_result(True, "已保存并生效")
+        else:
+            main_window.show_hotkey_result(False, msg)
+
+    main_window.hotkeys_save_requested.connect(_on_hotkeys_save)
 
     return DesktopShell(
         app=app,

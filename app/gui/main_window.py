@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -207,6 +208,10 @@ class TemplatePage(QWidget):
     """Unified translation template: language pair + constraints + knowledge references."""
 
     language_changed = Signal(str, str)
+    compiled_prompt_saved = Signal()
+    ai_work_started = Signal()
+    ai_work_finished = Signal()
+    _ai_work_done = Signal(dict, object)
 
     def __init__(
         self,
@@ -348,24 +353,25 @@ class TemplatePage(QWidget):
         _prevent_horizontal_growth(self._compiled_path)
         layout.addWidget(self._compiled_path)
 
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        self._preview_btn = QPushButton("生成预览")
+        self._preview_btn.setObjectName("secondaryButton")
+        self._preview_btn.clicked.connect(self._on_preview)
+        self._save_btn = QPushButton("保存并启用")
+        self._save_btn.setObjectName("primaryButton")
+        self._save_btn.clicked.connect(self._on_save)
+        btn_row.addWidget(self._preview_btn)
+        btn_row.addWidget(self._save_btn)
+        btn_row.addStretch(1)
+        layout.addLayout(btn_row)
+
         self._save_status = QLabel("")
         self._save_status.setObjectName("hintLabel")
         self._save_status.setWordWrap(True)
         _prevent_horizontal_growth(self._save_status)
-
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        preview_btn = QPushButton("生成预览")
-        preview_btn.setObjectName("secondaryButton")
-        preview_btn.clicked.connect(self._on_preview)
-        save_btn = QPushButton("保存并启用")
-        save_btn.setObjectName("primaryButton")
-        save_btn.clicked.connect(self._on_save)
-        btn_row.addWidget(preview_btn)
-        btn_row.addWidget(save_btn)
-        btn_row.addWidget(self._save_status)
-        btn_row.addStretch(1)
-        layout.addLayout(btn_row)
+        self._save_status.setMaximumHeight(30)
+        layout.addWidget(self._save_status)
 
         layout.addStretch(1)
 
@@ -374,6 +380,8 @@ class TemplatePage(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
+
+        self._ai_work_done.connect(self._on_ai_work_done)
 
     # Language methods
     def _on_swap(self) -> None:
@@ -448,9 +456,14 @@ class TemplatePage(QWidget):
         constraints = PromptConstraints(text=self._constraints_text)
         references = self._collect_knowledge_references()
 
-        result_holder: dict = {}
+        self._save_status.setText("正在优化提示词...")
+        self._save_status.setStyleSheet("color: #fbbf24; font-size: 12px;")
+        self._preview_btn.setEnabled(False)
+        self._save_btn.setEnabled(False)
+        self.ai_work_started.emit()
 
-        def _do_work() -> None:
+        def _run() -> None:
+            result_holder: dict = {}
             try:
                 rules = self._optimizer.optimize(settings, constraints, references)
                 result_holder["optimized"] = rules
@@ -474,14 +487,14 @@ class TemplatePage(QWidget):
                     constraints,
                     references=references,
                 )
+            self._ai_work_done.emit(result_holder, settings)
 
-        needs_progress = bool(self._settings and self._settings.ai.base_url)
-        if needs_progress:
-            self._save_status.setText("正在优化提示词...")
-            self._save_status.setStyleSheet("color: #fbbf24; font-size: 12px;")
-            QApplication.processEvents()
+        threading.Thread(target=_run, daemon=True).start()
 
-        _do_work()
+    def _on_ai_work_done(self, result_holder: dict, settings: object) -> None:
+        self.ai_work_finished.emit()
+        self._preview_btn.setEnabled(True)
+        self._save_btn.setEnabled(True)
         self._finish_save(result_holder, settings)
 
     def _finish_save(self, result_holder: dict, settings: AppSettings) -> None:
@@ -525,6 +538,7 @@ class TemplatePage(QWidget):
             else:
                 self._save_status.setText("已保存并启用 ✓")
                 self._save_status.setStyleSheet("color: #4ade80; font-size: 12px;")
+            self.compiled_prompt_saved.emit()
         except Exception as exc:
             self._save_status.setText(f"保存失败: {exc}")
             self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
@@ -552,14 +566,32 @@ class TemplatePage(QWidget):
         return "\n\n".join(parts)
 
     def _confirm_compiled_prompt_with_dialog(self, content: str) -> bool:
-        confirmed = QMessageBox.question(
-            self,
-            "Compiled Prompt Preview",
-            f"{content}\n\nConfirm and enable this compiled prompt?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        return confirmed == QMessageBox.StandardButton.Yes
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Compiled Prompt Preview")
+        dlg.setFixedSize(600, 420)
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        viewer = QPlainTextEdit()
+        viewer.setReadOnly(True)
+        viewer.setPlainText(content)
+        layout.addWidget(viewer)
+
+        hint = QLabel("Confirm and enable this compiled prompt?")
+        layout.addWidget(hint)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        yes_btn = QPushButton("Yes")
+        no_btn = QPushButton("No")
+        no_btn.setDefault(True)
+        btn_row.addWidget(yes_btn)
+        btn_row.addWidget(no_btn)
+        layout.addLayout(btn_row)
+
+        yes_btn.clicked.connect(lambda: dlg.done(1))
+        no_btn.clicked.connect(lambda: dlg.done(0))
+        return dlg.exec() == 1
 
 
 class ModelPage(QWidget):
@@ -797,14 +829,14 @@ class PromptPage(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
-        preview_btn = QPushButton("生成预览")
-        preview_btn.setObjectName("secondaryButton")
-        preview_btn.clicked.connect(self._on_preview)
-        save_btn = QPushButton("保存并启用")
-        save_btn.setObjectName("primaryButton")
-        save_btn.clicked.connect(self._on_save)
-        btn_row.addWidget(preview_btn)
-        btn_row.addWidget(save_btn)
+        self._preview_btn = QPushButton("生成预览")
+        self._preview_btn.setObjectName("secondaryButton")
+        self._preview_btn.clicked.connect(self._on_preview)
+        self._save_btn = QPushButton("保存并启用")
+        self._save_btn.setObjectName("primaryButton")
+        self._save_btn.clicked.connect(self._on_save)
+        btn_row.addWidget(self._preview_btn)
+        btn_row.addWidget(self._save_btn)
         btn_row.addWidget(self._save_status)
         btn_row.addStretch(1)
 
@@ -996,14 +1028,32 @@ class PromptPage(QWidget):
         return "\n\n".join(parts)
 
     def _confirm_compiled_prompt_with_dialog(self, content: str) -> bool:
-        confirmed = QMessageBox.question(
-            self,
-            "Compiled Prompt Preview",
-            f"{content}\n\nConfirm and enable this compiled prompt?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        return confirmed == QMessageBox.StandardButton.Yes
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Compiled Prompt Preview")
+        dlg.setFixedSize(600, 420)
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        viewer = QPlainTextEdit()
+        viewer.setReadOnly(True)
+        viewer.setPlainText(content)
+        layout.addWidget(viewer)
+
+        hint = QLabel("Confirm and enable this compiled prompt?")
+        layout.addWidget(hint)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        yes_btn = QPushButton("Yes")
+        no_btn = QPushButton("No")
+        no_btn.setDefault(True)
+        btn_row.addWidget(yes_btn)
+        btn_row.addWidget(no_btn)
+        layout.addLayout(btn_row)
+
+        yes_btn.clicked.connect(lambda: dlg.done(1))
+        no_btn.clicked.connect(lambda: dlg.done(0))
+        return dlg.exec() == 1
 
 
 class KeywordTagEditor(QWidget):
@@ -1119,6 +1169,10 @@ class KeywordTagEditor(QWidget):
 class FeedbackPage(QWidget):
     """Review bad translations and turn accepted fixes into local memory."""
 
+    ai_work_started = Signal()
+    ai_work_finished = Signal()
+    _ai_work_done = Signal(dict)
+
     def __init__(
         self,
         feedback_store: FeedbackStore,
@@ -1132,6 +1186,9 @@ class FeedbackPage(QWidget):
         self._settings = settings
         self._optimizer = optimizer or FeedbackOptimizer()
         self._records: list[FeedbackRecord] = []
+        self._ai_optimizing = False
+        self._ai_job_id = 0
+        self._ai_work_done.connect(self._on_ai_work_done)
 
         title = QLabel("优化翻译")
         title.setObjectName("pageTitle")
@@ -1143,15 +1200,15 @@ class FeedbackPage(QWidget):
         _prevent_horizontal_growth(self._feedback_combo)
         self._feedback_combo.currentIndexChanged.connect(self._on_feedback_selected)
 
-        refresh_btn = QPushButton("刷新")
-        refresh_btn.setObjectName("secondaryButton")
-        refresh_btn.setMinimumSize(92, 36)
-        refresh_btn.clicked.connect(self.refresh)
+        self._refresh_button = QPushButton("刷新")
+        self._refresh_button.setObjectName("secondaryButton")
+        self._refresh_button.setMinimumSize(92, 36)
+        self._refresh_button.clicked.connect(self.refresh)
 
         picker_row = QHBoxLayout()
         picker_row.addWidget(QLabel("待处理"))
         picker_row.addWidget(self._feedback_combo, 1)
-        picker_row.addWidget(refresh_btn)
+        picker_row.addWidget(self._refresh_button)
 
         self._source_text = QPlainTextEdit()
         self._source_text.setReadOnly(True)
@@ -1184,7 +1241,7 @@ class FeedbackPage(QWidget):
         ):
             _configure_wrapping_text_edit(text_area)
             text_area.setSizePolicy(
-                QSizePolicy.Policy.Ignored,
+                QSizePolicy.Policy.Expanding,
                 QSizePolicy.Policy.MinimumExpanding,
             )
 
@@ -1260,7 +1317,11 @@ class FeedbackPage(QWidget):
     def refresh(self, preserve_current: bool = False) -> None:
         """Reload pending feedback from local storage."""
 
-        current_id = self._feedback_combo.currentData() if preserve_current else None
+        current_id = (
+            self._feedback_combo.currentData()
+            if preserve_current or self._ai_optimizing
+            else None
+        )
         self._records = self._feedback_store.list_feedback(status="pending")
         self._feedback_combo.blockSignals(True)
         self._feedback_combo.clear()
@@ -1302,6 +1363,7 @@ class FeedbackPage(QWidget):
         self._status_label.setText(f"已载入 {record.summary()}")
 
     def _set_actions_enabled(self, enabled: bool) -> None:
+        enabled = enabled and not self._ai_optimizing
         for widget in (
             self._save_note_button,
             self._ai_optimize_button,
@@ -1352,14 +1414,53 @@ class FeedbackPage(QWidget):
 
     def _on_ai_optimize(self) -> None:
         record = self._sync_record_edits()
-        if record is None:
+        if record is None or self._ai_optimizing:
             return
+        self._ai_optimizing = True
+        self._ai_job_id += 1
+        job_id = self._ai_job_id
+        record_id = record.id
         self._status_label.setText("正在让思考模型优化...")
-        QApplication.processEvents()
-        try:
-            suggestion: FeedbackOptimization = self._optimizer.optimize(self._settings, record)
-        except TranslationError as exc:
-            self._status_label.setText(f"AI 优化失败：{exc}")
+        self._feedback_combo.setEnabled(False)
+        self._refresh_button.setEnabled(False)
+        self._set_actions_enabled(False)
+        self.ai_work_started.emit()
+
+        def _run() -> None:
+            payload: dict = {"job_id": job_id, "record_id": record_id}
+            try:
+                payload["suggestion"] = self._optimizer.optimize(self._settings, record)
+            except TranslationError as exc:
+                payload["error"] = str(exc)
+            except Exception as exc:
+                payload["error"] = str(exc)
+            self._ai_work_done.emit(payload)
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_ai_work_done(self, payload: dict) -> None:
+        if payload.get("job_id") != self._ai_job_id:
+            return
+
+        self._ai_optimizing = False
+        self._feedback_combo.setEnabled(True)
+        self._refresh_button.setEnabled(True)
+        self._set_actions_enabled(self._current_record() is not None)
+        self.ai_work_finished.emit()
+
+        error = payload.get("error")
+        if error:
+            self._status_label.setText(f"AI 优化失败：{error}")
+            return
+
+        record = self._current_record()
+        if record is None or record.id != payload.get("record_id"):
+            self._status_label.setText("AI 优化已完成，但原反馈条目已发生变化，请重新选择。")
+            return
+
+        suggestion = payload.get("suggestion")
+        if not isinstance(suggestion, FeedbackOptimization):
+            self._status_label.setText("AI 优化失败：返回结果无效。")
             return
         if suggestion.trigger or suggestion.trigger_options:
             self._set_keyword_options(suggestion.trigger_options, suggestion.trigger)
@@ -1409,7 +1510,7 @@ class FeedbackPage(QWidget):
 class SettingsPage(QWidget):
     """Shortcut configuration (persisted)."""
 
-    shortcuts_changed = Signal(str, str)
+    save_requested = Signal(str, str)
 
     def __init__(self, create_shortcut: str = "Ctrl+Shift+Z", edit_shortcut: str = "Ctrl+Shift+X", parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1417,7 +1518,7 @@ class SettingsPage(QWidget):
 
         title = QLabel("快捷键设置")
         title.setObjectName("pageTitle")
-        desc = QLabel("修改全局快捷键（重启后生效）")
+        desc = QLabel("修改全局快捷键（保存后即时生效）")
         desc.setObjectName("pageDesc")
 
         self._create_input = QLineEdit(create_shortcut)
@@ -1428,7 +1529,7 @@ class SettingsPage(QWidget):
         form.addRow("新建选择框", self._create_input)
         form.addRow("切换编辑模式", self._edit_input)
 
-        hint = QLabel("格式示例：Ctrl+Shift+Z、Alt+F1。修改后重启生效。")
+        hint = QLabel("格式示例：Ctrl+Shift+Z、Alt+F1。保存时自动检测是否被占用。")
         hint.setObjectName("hintLabel")
 
         self._save_status = QLabel("")
@@ -1442,9 +1543,6 @@ class SettingsPage(QWidget):
         btn_row.addWidget(self._save_status)
         btn_row.addStretch(1)
 
-        self._create_input.textChanged.connect(self._emit_change)
-        self._edit_input.textChanged.connect(self._emit_change)
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 32, 32, 32)
         layout.setSpacing(16)
@@ -1455,23 +1553,35 @@ class SettingsPage(QWidget):
         layout.addLayout(btn_row)
         layout.addStretch(1)
 
-    def _emit_change(self) -> None:
-        self.shortcuts_changed.emit(
-            self._create_input.text().strip() or "Ctrl+Shift+Z",
-            self._edit_input.text().strip() or "Ctrl+Shift+X",
-        )
-
     def _on_save(self) -> None:
+        create_key = self._create_input.text().strip()
+        edit_key = self._edit_input.text().strip()
+        if not create_key or not edit_key:
+            self._show_error("快捷键不能为空")
+            return
         try:
-            from app.settings import AppSettings
-            settings = AppSettings.load()
-            # Store shortcuts in prompt section for now (avoids schema change)
-            settings.save()
-            self._save_status.setText("已保存，重启后生效 ✓")
+            from app.hotkeys import GlobalHotkeyService
+            GlobalHotkeyService.parse_shortcut(create_key)
+            GlobalHotkeyService.parse_shortcut(edit_key)
+        except ValueError as exc:
+            self._show_error(str(exc))
+            return
+        if create_key.lower() == edit_key.lower():
+            self._show_error("两个快捷键不能相同")
+            return
+        self.save_requested.emit(create_key, edit_key)
+
+    def show_save_result(self, success: bool, message: str) -> None:
+        if success:
+            self._save_status.setText(f"{message} ✓")
             self._save_status.setStyleSheet("color: #4ade80; font-size: 12px;")
-        except Exception as exc:
-            self._save_status.setText(f"保存失败: {exc}")
+        else:
+            self._save_status.setText(message)
             self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
+
+    def _show_error(self, message: str) -> None:
+        self._save_status.setText(message)
+        self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
 
 
 # =========================================================================
@@ -1482,6 +1592,8 @@ class MainWindow(QMainWindow):
     """Sidebar-navigated control panel."""
 
     default_language_changed = Signal(str, str)
+    compiled_prompt_saved = Signal()
+    hotkeys_save_requested = Signal(str, str)
 
     def __init__(
         self,
@@ -1567,13 +1679,30 @@ class MainWindow(QMainWindow):
 
         # signals
         self._template_page.language_changed.connect(self._on_language_changed)
+        self._template_page.compiled_prompt_saved.connect(self.compiled_prompt_saved)
+        self._template_page.ai_work_started.connect(self._show_ai_progress)
+        self._template_page.ai_work_finished.connect(self._hide_ai_progress)
+        self._feedback_page.ai_work_started.connect(self._show_ai_progress)
+        self._feedback_page.ai_work_finished.connect(self._hide_ai_progress)
         self._model_page.config_changed.connect(self._on_model_changed)
-        self._settings_page.shortcuts_changed.connect(self._on_shortcuts_changed)
+        self._settings_page.save_requested.connect(self.hotkeys_save_requested)
 
         # status bar
         self._status = QStatusBar()
         self._status.setObjectName("appStatusBar")
-        self._status.showMessage("就绪 — Ctrl+Shift+Z 新建框选")
+        self._status.showMessage(f"就绪 — {context.hotkeys.create_selection} 新建框选")
+
+        self._ai_progress = QProgressBar()
+        self._ai_progress.setFixedWidth(180)
+        self._ai_progress.setFixedHeight(16)
+        self._ai_progress.setTextVisible(False)
+        self._ai_progress.setVisible(False)
+        self._status.addPermanentWidget(self._ai_progress)
+
+        self._ai_progress_timer = QTimer()
+        self._ai_progress_timer.setInterval(300)
+        self._ai_progress_timer.timeout.connect(self._tick_ai_progress)
+        self._ai_progress_value = 0
 
         # layout
         body = QHBoxLayout()
@@ -1644,9 +1773,32 @@ class MainWindow(QMainWindow):
         except Exception:
             pass  # save silently; test button handles feedback
 
-    def _on_shortcuts_changed(self, create_key: str, edit_key: str) -> None:
-        self._context.hotkeys.create_selection = create_key
-        self._context.hotkeys.toggle_edit_mode = edit_key
+    def show_hotkey_result(self, success: bool, message: str) -> None:
+        self._settings_page.show_save_result(success, message)
+        if success:
+            self._status.showMessage(f"快捷键已更新 — {self._context.hotkeys.create_selection} 新建框选", 3000)
+
+    # ------------------------------------------------------------------
+    # AI progress bar
+    # ------------------------------------------------------------------
+
+    def _show_ai_progress(self) -> None:
+        self._ai_progress_value = 0
+        self._ai_progress.setValue(0)
+        self._ai_progress.setVisible(True)
+        self._ai_progress_timer.start()
+
+    def _hide_ai_progress(self) -> None:
+        self._ai_progress_timer.stop()
+        self._ai_progress.setValue(100)
+        QTimer.singleShot(500, lambda: self._ai_progress.setVisible(False))
+
+    def _tick_ai_progress(self) -> None:
+        if self._ai_progress_value < 95:
+            self._ai_progress_value += 2
+            if self._ai_progress_value > 95:
+                self._ai_progress_value = 95
+            self._ai_progress.setValue(self._ai_progress_value)
 
     # ------------------------------------------------------------------
     # public
@@ -1846,6 +1998,16 @@ class MainWindow(QMainWindow):
             QPushButton#keywordTagButton:hover {
                 background: #1e3a8a;
                 color: white;
+            }
+
+            QProgressBar {
+                background: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 8px;
+            }
+            QProgressBar::chunk {
+                background: #2563eb;
+                border-radius: 7px;
             }
 
             QStatusBar#appStatusBar {

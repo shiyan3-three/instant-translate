@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QSizePolicy
+from PySide6.QtWidgets import QApplication, QSizePolicy
 
 from app.app_context import ApplicationContext
 from app.feedback.optimizer import FeedbackOptimization
@@ -118,6 +120,13 @@ class TemplatePageTests(unittest.TestCase):
 
             page._on_save()
 
+            # _on_save now runs in a background thread; process events until done
+            import time
+            deadline = time.monotonic() + 5.0
+            while not compiled_path.exists() and time.monotonic() < deadline:
+                QApplication.processEvents()
+                time.sleep(0.01)
+
             compiled = compiled_path.read_text(encoding="utf-8")
             self.assertIn("Fixed Template Layer", compiled)
             self.assertIn("Keep database terms literal.", compiled)
@@ -177,6 +186,13 @@ class TemplatePageTests(unittest.TestCase):
 
             page._on_save()
 
+            # _on_save now runs in a background thread; process events until done
+            import time
+            deadline = time.monotonic() + 5.0
+            while not compiled_path.exists() and time.monotonic() < deadline:
+                QApplication.processEvents()
+                time.sleep(0.01)
+
             compiled = compiled_path.read_text(encoding="utf-8")
             self.assertIn("Keep API terms literal.", compiled)
             self.assertIn("已保存并启用", page._save_status.text())
@@ -211,6 +227,14 @@ class FeedbackPageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.app = ensure_qapplication()
 
+    def _wait_for_ai(self, page: FeedbackPage, timeout: float = 2.0) -> None:
+        deadline = time.monotonic() + timeout
+        while page._ai_optimizing and time.monotonic() < deadline:
+            self.app.processEvents()
+            time.sleep(0.005)
+        self.app.processEvents()
+        self.assertFalse(page._ai_optimizing, "feedback AI optimization did not finish")
+
     def test_ai_suggestion_can_be_confirmed_into_local_memory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = FeedbackStore(tmp)
@@ -235,6 +259,7 @@ class FeedbackPageTests(unittest.TestCase):
 
             page._note_text.setPlainText("原译文误解了考试类型。")
             page._on_ai_optimize()
+            self._wait_for_ai(page)
             page._on_confirm()
 
             self.assertEqual(page._feedback_combo.count(), 0)
@@ -293,6 +318,7 @@ class FeedbackPageTests(unittest.TestCase):
             ))
 
             page._on_ai_optimize()
+            self._wait_for_ai(page)
             self.assertEqual(
                 page._keyword_editor.keywords(),
                 ["单元测试用例", "跑完", "测试用例"],
@@ -358,6 +384,39 @@ class FeedbackPageTests(unittest.TestCase):
             self.assertEqual(len(rules), 1)
             self.assertEqual(rules[0].preferred_translation, "")
 
+    def test_ai_optimization_runs_without_blocking_gui_thread(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            store.add_feedback(
+                group_id=1,
+                source_language="中文",
+                target_language="日本語",
+                ocr_text="高考马上开始",
+                translation_text="高校の試験がまもなく始まる",
+            )
+            optimizer = BlockingFeedbackOptimizer(
+                FeedbackOptimization(
+                    trigger="高考",
+                    trigger_options=["高考"],
+                    rule="按中国大学入学考试语境翻译。",
+                )
+            )
+            page = FeedbackPage(store, AppSettings(), optimizer=optimizer)
+
+            started_at = time.perf_counter()
+            page._on_ai_optimize()
+            elapsed = time.perf_counter() - started_at
+
+            self.assertLess(elapsed, 0.2)
+            self.assertTrue(page._ai_optimizing)
+            self.assertFalse(page._ai_optimize_button.isEnabled())
+
+            optimizer.release.set()
+            self._wait_for_ai(page)
+
+            self.assertEqual(page._keyword_editor.keywords(), ["高考"])
+            self.assertTrue(page._ai_optimize_button.isEnabled())
+
     def test_main_window_refresh_runtime_state_updates_feedback_page(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = FeedbackStore(tmp)
@@ -385,6 +444,20 @@ class FakeFeedbackOptimizer:
 
     def optimize(self, settings, record):
         self.calls.append((settings, record))
+        return self.result
+
+
+class BlockingFeedbackOptimizer(FakeFeedbackOptimizer):
+    """Feedback optimizer that stays busy until the test releases it."""
+
+    def __init__(self, result: FeedbackOptimization) -> None:
+        super().__init__(result)
+        self.release = threading.Event()
+
+    def optimize(self, settings, record):
+        self.calls.append((settings, record))
+        if not self.release.wait(timeout=2.0):
+            raise RuntimeError("test optimizer release timed out")
         return self.result
 
 

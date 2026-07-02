@@ -167,6 +167,46 @@ class GlobalHotkeyService(QObject):
         self._app.removeNativeEventFilter(self._event_filter)
         self._running = False
 
+    def re_register(self, new_hotkeys: HotkeyMap) -> tuple[bool, str]:
+        """Re-register with new hotkey mappings. Rolls back on failure.
+
+        Returns (True, "") on success, (False, error_message) on failure.
+        On failure the previous hotkeys are restored and re-registered.
+        """
+
+        was_running = self._running
+        old_hotkeys = self._hotkeys
+        old_bindings = self._bindings
+
+        if was_running:
+            self.stop()
+
+        self._hotkeys = new_hotkeys
+        try:
+            self._bindings = self._build_bindings(new_hotkeys)
+        except ValueError as exc:
+            self._hotkeys = old_hotkeys
+            self._bindings = old_bindings
+            if was_running:
+                try:
+                    self.start()
+                except RuntimeError:
+                    pass
+            return False, str(exc)
+
+        try:
+            self.start()
+            return True, ""
+        except RuntimeError as exc:
+            self._hotkeys = old_hotkeys
+            self._bindings = old_bindings
+            if was_running:
+                try:
+                    self.start()
+                except RuntimeError:
+                    pass
+            return False, str(exc)
+
     def _dispatch_hotkey(self, identifier: int) -> None:
         from app.logger import get_debug_logger
 

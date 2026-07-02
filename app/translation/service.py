@@ -93,6 +93,7 @@ class TranslationService:
         self,
         settings: AppSettings,
         max_workers: int = 3,
+        max_concurrent_api_calls: int = 2,
         session_store: AgentSessionStore | None = None,
         feedback_store: FeedbackStore | None = None,
     ) -> None:
@@ -102,7 +103,14 @@ class TranslationService:
         self._groups: dict[int, GroupContext] = {}
         self._agents: dict[int, TranslationAgent] = {}
         self._agent_meta: dict[int, AgentRuntimeMeta] = {}
+        # Registry operations are short and global; network work is guarded by
+        # one lock per group so independent selection groups can translate in
+        # parallel without mutating the same Agent session concurrently.
         self._agent_lock = threading.RLock()
+        self._group_agent_locks: dict[int, threading.RLock] = {}
+        self._api_slots = threading.BoundedSemaphore(
+            max(1, min(max_workers, max_concurrent_api_calls))
+        )
         self._session_store = session_store or AgentSessionStore()
         self._feedback_store = feedback_store or FeedbackStore()
 
@@ -184,9 +192,11 @@ class TranslationService:
     def reset_agent(self, group_id: int) -> None:
         """Destroy the Agent session for one group so a new one is created on next translation."""
 
-        with self._agent_lock:
-            self._agents.pop(group_id, None)
-            self._agent_meta.pop(group_id, None)
+        group_lock = self._agent_lock_for(group_id)
+        with group_lock:
+            with self._agent_lock:
+                self._agents.pop(group_id, None)
+                self._agent_meta.pop(group_id, None)
 
     def shutdown(self) -> None:
         """Shut down the background thread pool (best-effort, no wait)."""
@@ -204,15 +214,26 @@ class TranslationService:
                 return
 
         try:
-            with self._agent_lock:
+            group_lock = self._agent_lock_for(request.group_id)
+            with group_lock:
                 with self._lock:
                     ctx = self._ensure_group(request.group_id)
                     if self._is_stale_request(request, ctx):
                         return
 
-                agent = self._ensure_agent(request.group_id, request.source_language, request.target_language)
-                memory_hints = self._memory_hints_for_request(request)
-                text = agent.translate(request.ocr_text, memory_hints=memory_hints)
+                get_debug_logger().debug("[G%d] Waiting for API slot", request.group_id)
+                with self._api_slots:
+                    get_debug_logger().debug("[G%d] API slot acquired", request.group_id)
+                    try:
+                        agent = self._ensure_agent(
+                            request.group_id,
+                            request.source_language,
+                            request.target_language,
+                        )
+                        memory_hints = self._memory_hints_for_request(request)
+                        text = agent.translate(request.ocr_text, memory_hints=memory_hints)
+                    finally:
+                        get_debug_logger().debug("[G%d] API slot released", request.group_id)
                 self._save_agent_session(request.group_id, agent)
 
             with self._lock:
@@ -240,9 +261,12 @@ class TranslationService:
             )
 
     def _ensure_agent(self, group_id: int, source: str = "English", target: str = "中文") -> TranslationAgent:
-        with self._agent_lock:
-            if group_id in self._agents:
-                return self._agents[group_id]
+        group_lock = self._agent_lock_for(group_id)
+        with group_lock:
+            with self._agent_lock:
+                existing = self._agents.get(group_id)
+            if existing is not None:
+                return existing
             ai = self._settings.ai
             fast_model = ai.fast_model_name
             thinking_model = ai.thinking_model_name or fast_model
@@ -302,18 +326,20 @@ class TranslationService:
                     len(getattr(agent, "messages", [])),
                     prompt_hash[:12],
                 )
-            self._agents[group_id] = agent
-            self._agent_meta[group_id] = AgentRuntimeMeta(
-                source_language=source,
-                target_language=target,
-                prompt_hash=prompt_hash,
-                fast_model=fast_model,
-                thinking_model=thinking_model,
-            )
+            with self._agent_lock:
+                self._agents[group_id] = agent
+                self._agent_meta[group_id] = AgentRuntimeMeta(
+                    source_language=source,
+                    target_language=target,
+                    prompt_hash=prompt_hash,
+                    fast_model=fast_model,
+                    thinking_model=thinking_model,
+                )
             return agent
 
     def _save_agent_session(self, group_id: int, agent: TranslationAgent) -> None:
-        meta = self._agent_meta.get(group_id)
+        with self._agent_lock:
+            meta = self._agent_meta.get(group_id)
         if meta is None:
             return
         self._session_store.save(
@@ -339,6 +365,16 @@ class TranslationService:
             len(agent.messages),
             meta.prompt_hash[:12],
         )
+
+    def _agent_lock_for(self, group_id: int) -> threading.RLock:
+        """Return the stable per-group lock used for Agent session mutation."""
+
+        with self._agent_lock:
+            lock = self._group_agent_locks.get(group_id)
+            if lock is None:
+                lock = threading.RLock()
+                self._group_agent_locks[group_id] = lock
+            return lock
 
     @staticmethod
     def _is_stale_request(request: TranslationRequest, ctx: GroupContext) -> bool:

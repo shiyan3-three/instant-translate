@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -322,6 +323,63 @@ class TranslationServiceAgentPerGroupTests(unittest.TestCase):
 
         self.assertEqual(len(store.save_calls), 1)
         self.assertEqual(store.save_calls[0][1], messages)
+
+    def test_different_groups_translate_concurrently_with_api_limit(self) -> None:
+        service = TranslationService(
+            AppSettings(),
+            max_workers=3,
+            max_concurrent_api_calls=2,
+        )
+        gate = threading.Event()
+        two_active = threading.Event()
+        all_done = threading.Event()
+        counter_lock = threading.Lock()
+        state = {"active": 0, "max_active": 0}
+        results = []
+
+        class BlockingAgent:
+            messages = []
+
+            def translate(self, text: str, memory_hints=None) -> str:
+                with counter_lock:
+                    state["active"] += 1
+                    state["max_active"] = max(state["max_active"], state["active"])
+                    if state["active"] >= 2:
+                        two_active.set()
+                try:
+                    if not gate.wait(timeout=2.0):
+                        raise TranslationError("test gate timed out")
+                    return f"translated: {text}"
+                finally:
+                    with counter_lock:
+                        state["active"] -= 1
+
+        fake_agent = BlockingAgent()
+        service._ensure_agent = lambda group_id, source, target: fake_agent
+
+        def on_result(result) -> None:
+            with counter_lock:
+                results.append(result)
+                if len(results) == 3:
+                    all_done.set()
+
+        try:
+            for group_id in (1, 2, 3):
+                service.request_translation(
+                    group_id,
+                    f"text {group_id}",
+                    on_result,
+                )
+
+            self.assertTrue(two_active.wait(timeout=1.0), "different groups did not overlap")
+            self.assertEqual(state["max_active"], 2)
+            gate.set()
+            self.assertTrue(all_done.wait(timeout=2.0))
+            self.assertEqual(len(results), 3)
+            self.assertTrue(all(result.error is None for result in results))
+        finally:
+            gate.set()
+            service.shutdown()
 
 
 if __name__ == "__main__":

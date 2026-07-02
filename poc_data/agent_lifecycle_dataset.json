@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "status": "approved",
+  "name": "shared-pro-flash-agent-lifecycle",
+  "scenario": {
+    "id": "real_user_run_tests_preference",
+    "provenance": "user_confirmed_feedback",
+    "initial_source": "明天，跑完所有的单元测试用例。",
+    "feedback": "测试语境中的“跑完”表示把测试实施或执行完，不是物理上的跑动。以后相似表达优先使用“じっしする”或“じっこうする”。",
+    "accepted_translation": "あした  すべての  [たんたいてすとけえす]を  じっししおえます",
+    "raw_vs_handoff_source": "今天下午把回归测试全部跑完。",
+    "thinking_mode_source": "性能测试也已经全部跑完了。",
+    "after_thinking_source": "安全测试还没有跑完。",
+    "preference_required_any": ["じっし", "じっこう"],
+    "preference_forbidden": ["うごかし", "はしり"],
+    "after_thinking_required_any": ["ない", "ません", "まだ"]
+  }
+}

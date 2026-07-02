@@ -76,6 +76,8 @@ class AppSettings:
     prompt: PromptSettings = field(default_factory=PromptSettings)
     default_source_language: str = "English"
     default_target_language: str = "中文"
+    hotkey_create_selection: str = "Ctrl+Shift+Z"
+    hotkey_toggle_edit_mode: str = "Ctrl+Shift+X"
 
     # ------------------------------------------------------------------
     # persistence
@@ -114,6 +116,8 @@ class AppSettings:
                 ),
                 default_source_language=data.get("default_source_language", "English"),
                 default_target_language=data.get("default_target_language", "中文"),
+                hotkey_create_selection=data.get("hotkey_create_selection", "Ctrl+Shift+Z"),
+                hotkey_toggle_edit_mode=data.get("hotkey_toggle_edit_mode", "Ctrl+Shift+X"),
             )
         except (json.JSONDecodeError, OSError) as exc:
             from app.logger import get_logger
@@ -129,6 +133,8 @@ class AppSettings:
             "prompt": asdict(self.prompt),
             "default_source_language": self.default_source_language,
             "default_target_language": self.default_target_language,
+            "hotkey_create_selection": self.hotkey_create_selection,
+            "hotkey_toggle_edit_mode": self.hotkey_toggle_edit_mode,
         }
         file_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False),

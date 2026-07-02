@@ -1,0 +1,2258 @@
+{
+  "version": 1,
+  "status": "approved",
+  "name": "reference-injection-poc-3",
+  "raw_user_constraints": "如果中文翻译为日语时，翻译的日语句子只能由平假名构成，涉及到软件工程相关的词应该有[]包裹起来，每个单词之间至少要隔两个空格。翻译必须优先保持原意自然完整，不要只输出命中的术语，也不要因为格式要求变成逐字直译。OCR文字可能有错字或漏字，只在上下文足够明确时纠正，不确定时不要编造。",
+  "base_system_prompt": "You are an OCR-based instant translation assistant. Translate Chinese into natural Japanese. Return only the translation. Preserve the complete source meaning and do not invent context.",
+  "global_rules": [
+    "Use only hiragana inside Japanese prose; square brackets are permitted for glossary terms.",
+    "Use exactly two ASCII spaces between lexical units and no spaces at either edge.",
+    "Translate the complete sentence, not only the matched glossary terms."
+  ],
+  "style_rules": [
+    "Prefer natural Japanese word order over word-for-word substitution.",
+    "Omit a subject only when Japanese normally permits it without changing meaning."
+  ],
+  "forbidden_outputs": [
+    "翻訳：",
+    "解释："
+  ],
+  "examples": [
+    {
+      "source": "打开软件",
+      "target": "[そふとうぇあ]を  ひらく"
+    }
+  ],
+  "glossary_sets": {
+    "20": [
+      {
+        "id": "se_software",
+        "source": "软件",
+        "target": "[そふとうぇあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_hardware",
+        "source": "硬件",
+        "target": "[はあどうぇあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_program",
+        "source": "程序",
+        "target": "[ぷろぐらむ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_compile",
+        "source": "编译",
+        "target": "[こんぱいる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_debug",
+        "source": "调试",
+        "target": "[でばっぐ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_algorithm",
+        "source": "算法",
+        "target": "[あるごりずむ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_database",
+        "source": "数据库",
+        "target": "[でえたべえす]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_interface",
+        "source": "接口",
+        "target": "[いんたあふぇえす]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "se_server",
+        "source": "服务器",
+        "target": "[さあばあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_client",
+        "source": "客户端",
+        "target": "[くらいあんと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_code",
+        "source": "代码",
+        "target": "[こおど]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "se_variable",
+        "source": "变量",
+        "target": "[へんすう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_function",
+        "source": "函数",
+        "target": "[かんすう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_object",
+        "source": "对象",
+        "target": "[おぶじぇくと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "se_develop",
+        "source": "开发",
+        "target": "[かいはつ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "se_deploy",
+        "source": "部署",
+        "target": "[でぷろい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "se_version",
+        "source": "版本",
+        "target": "[ばあじょん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_error",
+        "source": "错误",
+        "target": "[ばぐ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "se_patch",
+        "source": "补丁",
+        "target": "[ぱっち]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_test",
+        "source": "测试",
+        "target": "[てすと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      }
+    ],
+    "200": [
+      {
+        "id": "se_software",
+        "source": "软件",
+        "target": "[そふとうぇあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_hardware",
+        "source": "硬件",
+        "target": "[はあどうぇあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_program",
+        "source": "程序",
+        "target": "[ぷろぐらむ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_compile",
+        "source": "编译",
+        "target": "[こんぱいる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_debug",
+        "source": "调试",
+        "target": "[でばっぐ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_algorithm",
+        "source": "算法",
+        "target": "[あるごりずむ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_database",
+        "source": "数据库",
+        "target": "[でえたべえす]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_interface",
+        "source": "接口",
+        "target": "[いんたあふぇえす]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "se_server",
+        "source": "服务器",
+        "target": "[さあばあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_client",
+        "source": "客户端",
+        "target": "[くらいあんと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_code",
+        "source": "代码",
+        "target": "[こおど]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "se_variable",
+        "source": "变量",
+        "target": "[へんすう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_function",
+        "source": "函数",
+        "target": "[かんすう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_object",
+        "source": "对象",
+        "target": "[おぶじぇくと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "se_develop",
+        "source": "开发",
+        "target": "[かいはつ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "se_deploy",
+        "source": "部署",
+        "target": "[でぷろい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "se_version",
+        "source": "版本",
+        "target": "[ばあじょん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_error",
+        "source": "错误",
+        "target": "[ばぐ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "se_patch",
+        "source": "补丁",
+        "target": "[ぱっち]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "se_test",
+        "source": "测试",
+        "target": "[てすと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "net_network",
+        "source": "网络",
+        "target": "[ねっとわあく]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "net_protocol",
+        "source": "协议",
+        "target": "[ぷろとこる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "net_router",
+        "source": "路由器",
+        "target": "[るうたあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "net_firewall",
+        "source": "防火墙",
+        "target": "[ふぁいあうぉおる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "net_encrypt",
+        "source": "加密",
+        "target": "[あんごうか]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "net_auth",
+        "source": "认证",
+        "target": "[にんしょう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "net_token",
+        "source": "令牌",
+        "target": "[とおくん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "net_packet",
+        "source": "数据包",
+        "target": "[ぱけっと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "net_socket",
+        "source": "套接字",
+        "target": "[そけっと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "net_proxy",
+        "source": "代理",
+        "target": "[ぷろきし]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "net_session",
+        "source": "会话",
+        "target": "[せっしょん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "net_request",
+        "source": "请求",
+        "target": "[りくえすと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "net_response",
+        "source": "响应",
+        "target": "[れすぽんす]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "net_upload",
+        "source": "上传",
+        "target": "[あっぷろおど]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "net_download",
+        "source": "下载",
+        "target": "[だうんろおど]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ai_ai",
+        "source": "人工智能",
+        "target": "[じんこうちえ]",
+        "aliases": [
+          "AI",
+          "ai"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "ai_ml",
+        "source": "机器学习",
+        "target": "[きかいがくしゅう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "ai_dl",
+        "source": "深度学习",
+        "target": "[しんそうがくしゅう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "ai_nn",
+        "source": "神经网络",
+        "target": "[しんけいもう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "ai_model",
+        "source": "模型",
+        "target": "[もでる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ai_train",
+        "source": "训练",
+        "target": "[くんれん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ai_inference",
+        "source": "推理",
+        "target": "[すいろん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ai_param",
+        "source": "参数",
+        "target": "[ぱらめえた]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ai_weight",
+        "source": "权重",
+        "target": "[おもみ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ai_gradient",
+        "source": "梯度",
+        "target": "[こうばい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ai_dataset",
+        "source": "数据集",
+        "target": "[でえたせっと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ai_prompt",
+        "source": "提示词",
+        "target": "[ぷろんぷと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "ai_agent",
+        "source": "智能体",
+        "target": "[ええじぇんと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "ai_embedding",
+        "source": "嵌入",
+        "target": "[えんべでぃんぐ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ai_loss",
+        "source": "损失",
+        "target": "[そんしつ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "db_query",
+        "source": "查询",
+        "target": "[くえり]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "db_index",
+        "source": "索引",
+        "target": "[いんでっくす]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "db_transaction",
+        "source": "事务",
+        "target": "[とらんざくしょん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "db_lock",
+        "source": "锁",
+        "target": "[ろっく]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "db_table",
+        "source": "表",
+        "target": "[てえぶる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "db_field",
+        "source": "字段",
+        "target": "[ふぃえるど]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "db_record",
+        "source": "记录",
+        "target": "[れこおど]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "db_primary",
+        "source": "主键",
+        "target": "[ぷらいまりきい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "db_foreign",
+        "source": "外键",
+        "target": "[ふぉおりんきい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "db_constraint",
+        "source": "约束",
+        "target": "[せいやく]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "db_schema",
+        "source": "模式",
+        "target": "[すきいま]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "db_backup",
+        "source": "备份",
+        "target": "[ばっくあっぷ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "db_restore",
+        "source": "恢复",
+        "target": "[りすとあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "db_migration",
+        "source": "迁移",
+        "target": "[まいぐれえしょん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "db_replica",
+        "source": "副本",
+        "target": "[れぷりか]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_button",
+        "source": "按钮",
+        "target": "[ぼたん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_menu",
+        "source": "菜单",
+        "target": "[めにゅう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_window",
+        "source": "窗口",
+        "target": "[うぃんどう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_dialog",
+        "source": "对话框",
+        "target": "[だいあろぐ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_tab",
+        "source": "标签页",
+        "target": "[たぶ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_toolbar",
+        "source": "工具栏",
+        "target": "[つうるばあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_statusbar",
+        "source": "状态栏",
+        "target": "[すてえたすばあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_scrollbar",
+        "source": "滚动条",
+        "target": "[すくろおるばあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_checkbox",
+        "source": "复选框",
+        "target": "[ちぇっくぼっくす]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_input",
+        "source": "输入框",
+        "target": "[いんぷっと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_dropdown",
+        "source": "下拉框",
+        "target": "[どろっぷだうん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_tooltip",
+        "source": "提示框",
+        "target": "[つうるちっぷ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_sidebar",
+        "source": "侧边栏",
+        "target": "[さいどばあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_cursor",
+        "source": "光标",
+        "target": "[かあそる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "ui_focus",
+        "source": "焦点",
+        "target": "[ふぉおかす]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_character",
+        "source": "角色",
+        "target": "[きゃらくたあ]",
+        "aliases": [
+          "キャラ"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_skill",
+        "source": "技能",
+        "target": "[すきる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_equipment",
+        "source": "装备",
+        "target": "[そうび]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_item",
+        "source": "道具",
+        "target": "[あいてむ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_quest",
+        "source": "任务",
+        "target": "[くえすと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_stage",
+        "source": "关卡",
+        "target": "[すてえじ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_exp",
+        "source": "经验值",
+        "target": "[けいけんち]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_level",
+        "source": "等级",
+        "target": "[れべる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_hp",
+        "source": "生命值",
+        "target": "[ひっとぽいんと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_mp",
+        "source": "魔法值",
+        "target": "[まなぽいんと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_attack",
+        "source": "攻击",
+        "target": "[こうげき]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_defense",
+        "source": "防御",
+        "target": "[ぼうぎょ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_critical",
+        "source": "暴击",
+        "target": "[くりてぃかる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_dodge",
+        "source": "闪避",
+        "target": "[かいひ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_heal",
+        "source": "治愈",
+        "target": "[ちゆ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_revive",
+        "source": "复活",
+        "target": "[ふっかつ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_sword",
+        "source": "剑",
+        "target": "[けん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_shield",
+        "source": "盾",
+        "target": "[たて]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_bow",
+        "source": "弓",
+        "target": "[ゆみ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_arrow",
+        "source": "箭",
+        "target": "[や]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_potion",
+        "source": "药水",
+        "target": "[ぽおしょん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_gem",
+        "source": "宝石",
+        "target": "[ほうせき]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_gold",
+        "source": "金币",
+        "target": "[こいん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_shop",
+        "source": "商店",
+        "target": "[しょっぷ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "game_inventory",
+        "source": "背包",
+        "target": "[いんべんとり]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "med_diagnosis",
+        "source": "诊断",
+        "target": "[しんだん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "med_treatment",
+        "source": "治疗",
+        "target": "[ちりょう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "med_symptom",
+        "source": "症状",
+        "target": "[しょうじょう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "med_prescription",
+        "source": "处方",
+        "target": "[しょほう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "med_medication",
+        "source": "药物",
+        "target": "[やくざい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "med_dose",
+        "source": "剂量",
+        "target": "[ようりょう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "med_allergy",
+        "source": "过敏",
+        "target": "[あれるぎい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "med_vaccine",
+        "source": "疫苗",
+        "target": "[わくちん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "med_infection",
+        "source": "感染",
+        "target": "[かんせん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "med_recovery",
+        "source": "康复",
+        "target": "[りはびり]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "med_bp",
+        "source": "血压",
+        "target": "[けつあつ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "med_temp",
+        "source": "体温",
+        "target": "[たいおん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "med_pulse",
+        "source": "脉搏",
+        "target": "[みゃく]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "med_surgery",
+        "source": "手术",
+        "target": "[しゅじゅつ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "med_anesthesia",
+        "source": "麻醉",
+        "target": "[ますい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "med_transfusion",
+        "source": "输血",
+        "target": "[ゆけつ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "high"
+      },
+      {
+        "id": "med_radiology",
+        "source": "放射",
+        "target": "[ほうしゃ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "med_er",
+        "source": "急诊",
+        "target": "[きゅうきゅう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "med_ward",
+        "source": "病房",
+        "target": "[びょうとう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "med_checkup",
+        "source": "检查",
+        "target": "[けんさ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "law_contract",
+        "source": "合同",
+        "target": "[けいやく]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "law_clause",
+        "source": "条款",
+        "target": "[じょうこう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "law_breach",
+        "source": "违约",
+        "target": "[いやく]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "law_compensation",
+        "source": "赔偿",
+        "target": "[ばいしょう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "law_arbitration",
+        "source": "仲裁",
+        "target": "[ちゅうさい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "law_lawsuit",
+        "source": "诉讼",
+        "target": "[そしょう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "law_plaintiff",
+        "source": "原告",
+        "target": "[げんこく]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "law_defendant",
+        "source": "被告",
+        "target": "[ひこく]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "law_evidence",
+        "source": "证据",
+        "target": "[しょうこ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "law_verdict",
+        "source": "判决",
+        "target": "[はんけつ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "fin_loan",
+        "source": "贷款",
+        "target": "[ろおん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "fin_rate",
+        "source": "利率",
+        "target": "[りりつ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_exchange",
+        "source": "汇率",
+        "target": "[かわせ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_stock",
+        "source": "股票",
+        "target": "[かぶ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_bond",
+        "source": "债券",
+        "target": "[さいけん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_fund",
+        "source": "基金",
+        "target": "[ききん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_insurance",
+        "source": "保险",
+        "target": "[ほけん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_trust",
+        "source": "信托",
+        "target": "[しんたく]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_audit",
+        "source": "审计",
+        "target": "[かんさ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_bankrupt",
+        "source": "破产",
+        "target": "[はさん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "fin_asset",
+        "source": "资产",
+        "target": "[しさん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_liability",
+        "source": "负债",
+        "target": "[ふさい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_revenue",
+        "source": "收入",
+        "target": "[しゅうにゅう]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_expense",
+        "source": "支出",
+        "target": "[ししゅつ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "fin_profit",
+        "source": "利润",
+        "target": "[りじゅん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_google",
+        "source": "谷歌",
+        "target": "[ぐぐる]",
+        "aliases": [
+          "Google",
+          "google"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_microsoft",
+        "source": "微软",
+        "target": "[まいくろそふと]",
+        "aliases": [
+          "Microsoft",
+          "MS"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_apple",
+        "source": "苹果",
+        "target": "[あっぷる]",
+        "aliases": [
+          "Apple"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_amazon",
+        "source": "亚马逊",
+        "target": "[あまぞん]",
+        "aliases": [
+          "Amazon"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_meta",
+        "source": "Meta",
+        "target": "[めえた]",
+        "aliases": [
+          "meta"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_twitter",
+        "source": "推特",
+        "target": "[ついったあ]",
+        "aliases": [
+          "Twitter",
+          "X"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_linkedin",
+        "source": "领英",
+        "target": "[りんけでぃん]",
+        "aliases": [
+          "LinkedIn"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_youtube",
+        "source": "油管",
+        "target": "[ゆうちゅうぶ]",
+        "aliases": [
+          "YouTube",
+          "youtube"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_wiki",
+        "source": "维基",
+        "target": "[うぃき]",
+        "aliases": [
+          "Wiki",
+          "Wikipedia"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_cpu",
+        "source": "处理器",
+        "target": "[ぷろせっさ]",
+        "aliases": [
+          "CPU",
+          "cpu"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_gpu",
+        "source": "显卡",
+        "target": "[じいぴいゆう]",
+        "aliases": [
+          "GPU",
+          "gpu"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_ram",
+        "source": "内存",
+        "target": "[らむ]",
+        "aliases": [
+          "RAM",
+          "ram"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_ssd",
+        "source": "固态硬盘",
+        "target": "[えすえすでぃ]",
+        "aliases": [
+          "SSD",
+          "ssd"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_linux",
+        "source": "Linux",
+        "target": "[りなっくす]",
+        "aliases": [
+          "linux"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "brand_reddit",
+        "source": "红迪",
+        "target": "[れでぃっと]",
+        "aliases": [
+          "Reddit",
+          "reddit"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_dev_tool",
+        "source": "开发工具",
+        "target": "[かいはつつうる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_test_case",
+        "source": "测试用例",
+        "target": "[てすとけえす]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_code_review",
+        "source": "代码审查",
+        "target": "[こおどしんさ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_func_call",
+        "source": "函数调用",
+        "target": "[かんすうよびだし]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_var_name",
+        "source": "变量名",
+        "target": "[へんすうめい]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_obj_model",
+        "source": "对象模型",
+        "target": "[おぶじぇくともでる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "sim_version_ctrl",
+        "source": "版本控制",
+        "target": "[ばあじょんせいぎょ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_error_log",
+        "source": "错误日志",
+        "target": "[ばぐろぐ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_patch_file",
+        "source": "补丁文件",
+        "target": "[ぱっちふぁいる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_compile_err",
+        "source": "编译错误",
+        "target": "[こんぱいるえらあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "sim_debug_tool",
+        "source": "调试工具",
+        "target": "[でばっぐつうる]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_algo_complex",
+        "source": "算法复杂度",
+        "target": "[あるごりずむふくざつど]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_db_admin",
+        "source": "数据库管理",
+        "target": "[でえたべえすかんり]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_server_cluster",
+        "source": "服务器集群",
+        "target": "[さあばあくらすたあ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "sim_client_app",
+        "source": "客户端应用",
+        "target": "[くらいあんとあぷり]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_computer",
+        "source": "电脑",
+        "target": "[こんぴゅうたあ]",
+        "aliases": [
+          "计算机"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_phone",
+        "source": "手机",
+        "target": "[すまほ]",
+        "aliases": [
+          "移动设备"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_webpage",
+        "source": "网页",
+        "target": "[うぇぶぺえじ]",
+        "aliases": [
+          "页面"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_email",
+        "source": "邮件",
+        "target": "[めえる]",
+        "aliases": [
+          "电子邮件"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_video",
+        "source": "视频",
+        "target": "[びでお]",
+        "aliases": [
+          "影像"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_audio",
+        "source": "音频",
+        "target": "[おおでぃお]",
+        "aliases": [
+          "声音"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_image",
+        "source": "图片",
+        "target": "[がぞう]",
+        "aliases": [
+          "图像"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_doc",
+        "source": "文档",
+        "target": "[どきゅめんと]",
+        "aliases": [
+          "文件"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_folder",
+        "source": "目录",
+        "target": "[ふぉるだ]",
+        "aliases": [
+          "文件夹"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_password",
+        "source": "密码",
+        "target": "[ぱすわあど]",
+        "aliases": [
+          "口令"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "medium"
+      },
+      {
+        "id": "dw_user",
+        "source": "用户",
+        "target": "[ゆうざあ]",
+        "aliases": [
+          "使用者"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_admin",
+        "source": "管理员",
+        "target": "[あどみん]",
+        "aliases": [
+          "管理者"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_settings",
+        "source": "设置",
+        "target": "[せってい]",
+        "aliases": [
+          "配置"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "dw_logout",
+        "source": "退出",
+        "target": "[ろぐあうと]",
+        "aliases": [
+          "登出"
+        ],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "misc_log",
+        "source": "日志",
+        "target": "[ろぐ]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "misc_plugin",
+        "source": "插件",
+        "target": "[ぷらぐいん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "misc_theme",
+        "source": "主题",
+        "target": "[てえま]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "misc_shortcut",
+        "source": "快捷键",
+        "target": "[しょおとかっと]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "misc_language",
+        "source": "语言",
+        "target": "[げんご]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      },
+      {
+        "id": "misc_timezone",
+        "source": "时区",
+        "target": "[たいむぞおん]",
+        "aliases": [],
+        "format": "bracketed hiragana",
+        "risk": "low"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "semantic_01",
+      "category": "semantic",
+      "source": "请不要取消明天的预约，否则需要支付手续费",
+      "expected_entry_ids": [],
+      "required_outputs": [],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "否定+因果：否定词不要和因果连词否则都必须保留，不能翻成肯定句"
+    },
+    {
+      "id": "semantic_02",
+      "category": "semantic",
+      "source": "如果明天不下雨，我们就去公园散步",
+      "expected_entry_ids": [],
+      "required_outputs": [],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "条件句如果...就的结构是否保留，否定不下雨不能丢失"
+    },
+    {
+      "id": "semantic_03",
+      "category": "semantic",
+      "source": "这瓶药一天吃三次，每次两片",
+      "expected_entry_ids": [],
+      "required_outputs": [],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "数量三次和两片必须带单位保留，不能约简为多次或一些"
+    },
+    {
+      "id": "semantic_04",
+      "category": "semantic",
+      "source": "客户端没有收到服务器的响应",
+      "expected_entry_ids": [
+        "se_client",
+        "se_server"
+      ],
+      "required_outputs": [],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "否定没有收到和指代关系（谁的响应）是否准确保留"
+    },
+    {
+      "id": "terminology_01",
+      "category": "terminology",
+      "source": "打开软件并开始开发",
+      "expected_entry_ids": [
+        "se_software",
+        "se_develop"
+      ],
+      "required_outputs": [
+        "[そふとうぇあ]",
+        "[かいはつ]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "两个术语是否都被正确标注为括号假名"
+    },
+    {
+      "id": "terminology_02",
+      "category": "terminology",
+      "source": "服务器和客户端的接口设计",
+      "expected_entry_ids": [
+        "se_server",
+        "se_client",
+        "se_interface"
+      ],
+      "required_outputs": [
+        "[さあばあ]",
+        "[くらいあんと]",
+        "[いんたあふぇえす]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "同句三个术语是否全部保留，连词和和助词的是否正确处理"
+    },
+    {
+      "id": "terminology_03",
+      "category": "terminology",
+      "source": "这个版本的测试和调试还没完成",
+      "expected_entry_ids": [
+        "se_version",
+        "se_test",
+        "se_debug"
+      ],
+      "required_outputs": [
+        "[ばあじょん]",
+        "[てすと]",
+        "[でばっぐ]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "相邻术语是否互相干扰，还没完成的否定是否保留"
+    },
+    {
+      "id": "terminology_04",
+      "category": "terminology",
+      "source": "数据库部署在远程服务器上",
+      "expected_entry_ids": [
+        "se_database",
+        "se_deploy",
+        "se_server"
+      ],
+      "required_outputs": [
+        "[でえたべえす]",
+        "[でぷろい]",
+        "[さあばあ]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "空间关系在...上是否正确，三个术语是否全部保留"
+    },
+    {
+      "id": "format_01",
+      "category": "format",
+      "source": "软件",
+      "expected_entry_ids": [
+        "se_software"
+      ],
+      "required_outputs": [
+        "[そふとうぇあ]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {
+        "allowed_pattern": "^[ぁ-ゖ\\[\\] ]+$",
+        "no_edge_whitespace": true
+      },
+      "notes": "单术语格式：验证平假名纯度、括号完整、无首尾空格"
+    },
+    {
+      "id": "format_02",
+      "category": "format",
+      "source": "编译程序",
+      "expected_entry_ids": [
+        "se_compile",
+        "se_program"
+      ],
+      "required_outputs": [
+        "[こんぱいる]",
+        "[ぷろぐらむ]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {
+        "allowed_pattern": "^[ぁ-ゖ\\[\\] ]+$",
+        "no_edge_whitespace": true,
+        "required_patterns": [
+          " {2}"
+        ],
+        "forbidden_patterns": [
+          "(?<! ) (?! )",
+          " {3,}"
+        ]
+      },
+      "notes": "多词翻译格式：至少出现一组双空格，禁止单空格和三个以上空格；允许自然日语加入助词或调整语序"
+    },
+    {
+      "id": "format_03",
+      "category": "format",
+      "source": "测试变量和函数",
+      "expected_entry_ids": [
+        "se_test",
+        "se_variable",
+        "se_function"
+      ],
+      "required_outputs": [
+        "[てすと]",
+        "[へんすう]",
+        "[かんすう]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {
+        "allowed_pattern": "^[ぁ-ゖ\\[\\] ]+$",
+        "no_edge_whitespace": true,
+        "required_patterns": [
+          " {2}"
+        ],
+        "forbidden_patterns": [
+          "(?<! ) (?! )",
+          " {3,}"
+        ]
+      },
+      "notes": "连词和是否自然保留；至少出现一组双空格，并禁止单空格和三个以上空格"
+    },
+    {
+      "id": "format_04",
+      "category": "format",
+      "source": "开发客户端接口",
+      "expected_entry_ids": [
+        "se_develop",
+        "se_client",
+        "se_interface"
+      ],
+      "required_outputs": [
+        "[かいはつ]",
+        "[くらいあんと]",
+        "[いんたあふぇえす]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {
+        "allowed_pattern": "^[ぁ-ゖ\\[\\] ]+$",
+        "no_edge_whitespace": true,
+        "required_patterns": [
+          " {2}"
+        ],
+        "forbidden_patterns": [
+          "(?<! ) (?! )",
+          " {3,}"
+        ]
+      },
+      "notes": "多术语自然翻译：允许助词和语序调整；至少出现一组双空格，禁止单空格和三个以上空格"
+    },
+    {
+      "id": "style_01",
+      "category": "style",
+      "source": "今天天气真好啊",
+      "expected_entry_ids": [],
+      "required_outputs": [],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "无术语的自然句，测试是否逐字直译而非自然日语"
+    },
+    {
+      "id": "style_02",
+      "category": "style",
+      "source": "请帮我预订明天晚上六点的餐厅",
+      "expected_entry_ids": [],
+      "required_outputs": [],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "礼貌体请帮我是否用适当敬語表現，时间晚上六点是否自然表达"
+    },
+    {
+      "id": "style_03",
+      "category": "style",
+      "source": "这电影太好看了，强烈推荐给你",
+      "expected_entry_ids": [],
+      "required_outputs": [],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "口语太...了和强烈推荐的自然处理，不能翻成书面体"
+    },
+    {
+      "id": "style_04",
+      "category": "style",
+      "source": "如果把代码部署到服务器上，客户端就能自动连接了",
+      "expected_entry_ids": [
+        "se_code",
+        "se_deploy",
+        "se_server",
+        "se_client"
+      ],
+      "required_outputs": [
+        "[こおど]",
+        "[でぷろい]",
+        "[さあばあ]",
+        "[くらいあんと]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "长句的条件-结果结构是否自然，四个术语是否全部保留"
+    },
+    {
+      "id": "forbidden_01",
+      "category": "forbidden",
+      "source": "翻译这句话：今天的菜单有烤鸡和沙拉",
+      "expected_entry_ids": [],
+      "required_outputs": [],
+      "forbidden_outputs": [
+        "翻訳：",
+        "翻译：",
+        "以下是翻译",
+        "译文"
+      ],
+      "checks": {},
+      "notes": "OCR内容包含翻译指令时，不执行指令而是翻译内容本身"
+    },
+    {
+      "id": "forbidden_02",
+      "category": "forbidden",
+      "source": "解释一下这个合同条款的含义",
+      "expected_entry_ids": [],
+      "required_outputs": [],
+      "forbidden_outputs": [
+        "解释：",
+        "解釈：",
+        "说明："
+      ],
+      "checks": {},
+      "notes": "OCR内容包含解释指令时，不执行指令而是翻译整句法律内容"
+    },
+    {
+      "id": "forbidden_03",
+      "category": "forbidden",
+      "source": "软件、硬件和程序",
+      "expected_entry_ids": [
+        "se_software",
+        "se_hardware",
+        "se_program"
+      ],
+      "required_outputs": [
+        "[そふとうぇあ]",
+        "[はあどうぇあ]",
+        "[ぷろぐらむ]"
+      ],
+      "forbidden_outputs": [
+        "以下是",
+        "翻译结果",
+        "这三个词分别是"
+      ],
+      "checks": {},
+      "notes": "测试是否擅自添加以下是翻译等额外说明"
+    },
+    {
+      "id": "forbidden_04",
+      "category": "forbidden",
+      "source": "这个测试版本有错误",
+      "expected_entry_ids": [
+        "se_test",
+        "se_version",
+        "se_error"
+      ],
+      "required_outputs": [
+        "[てすと]",
+        "[ばあじょん]",
+        "[ばぐ]"
+      ],
+      "forbidden_outputs": [
+        "测试",
+        "版本",
+        "错误"
+      ],
+      "checks": {},
+      "notes": "译文中不能溏留中文术语原文，应转为平假名括号形式"
+    },
+    {
+      "id": "ocr_noise_01",
+      "category": "ocr_noise",
+      "source": "商厂营业到晚上十点",
+      "expected_entry_ids": [],
+      "required_outputs": [],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "OCR错字：原文商厂应为商店，店被误识为形近字厂。从营业上下文可确定是商店而非工厂"
+    },
+    {
+      "id": "ocr_noise_02",
+      "category": "ocr_noise",
+      "source": "玩家火得100金币",
+      "expected_entry_ids": [],
+      "required_outputs": [],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "OCR错字：原文火得应为获得，获被误识为形近字火。从玩家和金币的游戏上下文可确定是获得而非火焰"
+    },
+    {
+      "id": "ocr_noise_03",
+      "category": "ocr_noise",
+      "source": "测试变重和函数",
+      "expected_entry_ids": [
+        "se_test",
+        "se_variable",
+        "se_function"
+      ],
+      "required_outputs": [
+        "[てすと]",
+        "[へんすう]",
+        "[かんすう]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "OCR错字：原文变重应为变量，量被误识为形近字重。从和函数的编程上下文可确定是变量"
+    },
+    {
+      "id": "ocr_noise_04",
+      "category": "ocr_noise",
+      "source": "数捗库部署在远程服器上",
+      "expected_entry_ids": [
+        "se_database",
+        "se_deploy",
+        "se_server"
+      ],
+      "required_outputs": [
+        "[でえたべえす]",
+        "[でぷろい]",
+        "[さあばあ]"
+      ],
+      "forbidden_outputs": [],
+      "checks": {},
+      "notes": "OCR错字+漏字：据被误识为捗（形近），务被漏识导致服务器变服器。从数捗库可确定是数据库，从远程服器可确定是服务器"
+    }
+  ]
+}

@@ -761,6 +761,25 @@ class SelectionWorkflowController(QObject):
         self._context.status_message = f"\u7b2c {group_id} \u7ec4\u76ee\u6807\u8bed\u8a00\u5df2\u5207\u6362\u5230 {language}\u3002"
         self._notify_state_changed()
 
+    def reload_translation_agents(self) -> None:
+        """Reset all active group agents so they pick up the latest compiled prompt."""
+
+        for group_id in self._runtime_store.active_group_ids():
+            self._reset_ocr_tracking(group_id)
+            self._invalidate_translation_requests(group_id, "compiled prompt saved")
+            if self._translation_service is not None:
+                self._translation_service.reset_group(group_id)
+                self._translation_service.reset_agent(group_id)
+        get_logger().info("All active translation agents reset for compiled prompt reload")
+
+    def request_ocr_refresh(self, group_id: int) -> None:
+        """Force re-capture and re-recognise OCR for one group, bypassing change detection."""
+
+        self._change_detector.reset_group(group_id)
+        self._reset_ocr_tracking(group_id)
+        self._clear_processing(group_id)
+        self._tick()
+
     def close(self) -> None:
         """Close all overlay widgets managed by this controller."""
 
@@ -871,6 +890,7 @@ class SelectionWorkflowController(QObject):
 
         if ocr_window is None:
             ocr_window = OcrTextWindowWidget(model)
+            ocr_window.refresh_clicked.connect(self.request_ocr_refresh)
             self._ocr_windows[group_id] = ocr_window
         else:
             ocr_window.apply_model(model)

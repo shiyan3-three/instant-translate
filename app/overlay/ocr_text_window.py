@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import QPoint, QRect, QRectF, Qt
+from PySide6.QtCore import QPoint, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -31,6 +31,8 @@ class OcrTextWindowModel:
 
 class OcrTextWindowWidget(QWidget):
     """Render the latest cleaned OCR text for one selection group."""
+
+    refresh_clicked = Signal(int)
 
     def __init__(self, model: OcrTextWindowModel, parent: QWidget | None = None) -> None:
         flags = (
@@ -61,6 +63,11 @@ class OcrTextWindowWidget(QWidget):
         self.copy_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.copy_button.clicked.connect(self.copy_text)
 
+        self.refresh_button = QPushButton("\u5237\u65b0")
+        self.refresh_button.setObjectName("ocrRefreshButton")
+        self.refresh_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.refresh_button.clicked.connect(lambda: self.refresh_clicked.emit(self.model.group_id))
+
         self.ocr_label = QLabel(self)
         self.ocr_label.setObjectName("ocrBody")
         self.ocr_label.setWordWrap(True)
@@ -71,6 +78,7 @@ class OcrTextWindowWidget(QWidget):
         header_row.setSpacing(8)
         header_row.addWidget(self.group_badge, alignment=Qt.AlignmentFlag.AlignLeft)
         header_row.addWidget(self.title_label, stretch=1)
+        header_row.addWidget(self.refresh_button, alignment=Qt.AlignmentFlag.AlignRight)
         header_row.addWidget(self.copy_button, alignment=Qt.AlignmentFlag.AlignRight)
 
         layout = QVBoxLayout(self)
@@ -133,6 +141,7 @@ class OcrTextWindowWidget(QWidget):
         if (
             event.button() == Qt.MouseButton.LeftButton
             and not self.copy_button.geometry().contains(event.position().toPoint())
+            and not self.refresh_button.geometry().contains(event.position().toPoint())
         ):
             self._dragging = True
             self._drag_origin_global = event.globalPosition().toPoint()
@@ -216,6 +225,21 @@ class OcrTextWindowWidget(QWidget):
                 background: rgba(255, 255, 255, 0.2);
             }
             QPushButton#ocrCopyButton:pressed {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton#ocrRefreshButton {
+                background: rgba(255, 255, 255, 0.12);
+                color: white;
+                border: 1px solid rgba(226, 232, 240, 0.28);
+                border-radius: 7px;
+                padding: 3px 10px;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            QPushButton#ocrRefreshButton:hover {
+                background: rgba(255, 255, 255, 0.2);
+            }
+            QPushButton#ocrRefreshButton:pressed {
                 background: rgba(255, 255, 255, 0.1);
             }
             """

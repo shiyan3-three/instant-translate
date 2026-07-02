@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "status": "frozen_poc",
+  "name": "visible-pro-strategy-transfer",
+  "description": "A held-out benchmark for testing whether a Pro-generated visible translation playbook improves Flash beyond the same raw startup brief.",
+  "startup_brief": "The user mainly translates short Chinese OCR messages from software development, testing, deployment, and incident diagnosis into natural Japanese, but ordinary daily-language sentences also occur. Domain verbs such as 跑、复现、上线、回滚、合并、返回、引起 must be interpreted by context rather than translated literally. Preserve negation, conditions, time limits, cause, contrast, sequence, counters, and recommendation strength. The output contract remains the confirmed hiragana, glossary-bracketing, and double-space rules in the system message. The fast model should produce only the translation.",
+  "cases": [
+    {
+      "id": "software_run_regression",
+      "category": "domain_semantics",
+      "source": "今天下午把回归测试全部跑完。",
+      "review_focus": "Interpret 跑完 as completing test execution and use a natural Japanese regression-test expression.",
+      "fixture_translation": "きょうの  ごご  [りぐれっしょんてすと]を  すべて  じっししおえます",
+      "required_all": ["てすと"],
+      "required_any": [["じっし", "じっこう", "おえ"]],
+      "forbidden": ["うごかし", "はしり"]
+    },
+    {
+      "id": "software_reproduce_online",
+      "category": "domain_semantics",
+      "source": "这个问题只在线上环境复现，本地一直正常。",
+      "review_focus": "Preserve the production-only versus local-normal contrast and the technical sense of reproduce.",
+      "fixture_translation": "この  もんだいは  ほんばんかんきょうでだけ  さいげんし  ろおかるでは  ずっと  せいじょうです",
+      "required_all": ["さいげん"],
+      "required_any": [["ほんばん", "しょうよう"], ["ろおかる", "ろうかる"], ["せいじょう", "もんだいない"]],
+      "forbidden": []
+    },
+    {
+      "id": "software_patch_then_restart",
+      "category": "relation_semantics",
+      "source": "补丁部署完成以后，再重启服务器。",
+      "review_focus": "Preserve the completion-before-restart sequence and the correct object relation.",
+      "fixture_translation": "[ぱっち]の  [でぷろい]が  かんりょうした  あとで  [さあばあ]を  さいきどうしてください",
+      "required_all": ["ぱっち", "でぷろい", "さあばあ", "さいきどう"],
+      "required_any": [["あと", "のち"]],
+      "forbidden": []
+    },
+    {
+      "id": "software_not_interface",
+      "category": "relation_semantics",
+      "source": "不是接口的问题，先检查数据库连接。",
+      "review_focus": "Keep the negation, then the instruction to check the database connection first.",
+      "fixture_translation": "[いんたあふぇえす]の  もんだいでは  ありません  まず  [でえたべえす]への  せつぞくを  かくにんしてください",
+      "required_all": ["いんたあふぇえす", "でえたべえす", "せつぞく"],
+      "required_any": [["ない", "ありません", "ではなく"]],
+      "forbidden": []
+    },
+    {
+      "id": "software_release_rollback",
+      "category": "relation_semantics",
+      "source": "如果今晚发布失败，马上回滚到上一个版本。",
+      "review_focus": "Preserve the condition, urgency, rollback action, and previous-version destination.",
+      "fixture_translation": "こんやの  りりいすが  しっぱいしたら  すぐに  ひとつまえの  [ばあじょん]へ  ろおるばっくしてください",
+      "required_all": ["しっぱい", "ろおるばっく", "ばあじょん"],
+      "required_any": [["たら", "なら", "ば"], ["すぐ", "ただち"]],
+      "forbidden": []
+    },
+    {
+      "id": "software_no_merge_before_tests",
+      "category": "relation_semantics",
+      "source": "单元测试还没跑完，不要合并代码。",
+      "review_focus": "Preserve incomplete testing and the prohibition against merging code.",
+      "fixture_translation": "[たんたいてすと]が  まだ  おわっていないので  [こおど]を  まあじしないでください",
+      "required_all": ["てすと", "こおど"],
+      "required_any": [["ない", "いません", "まだ"], ["まあじ", "とうごう"]],
+      "forbidden": ["うごかし", "はしり"]
+    },
+    {
+      "id": "software_request_response_time",
+      "category": "operational_naturalness",
+      "source": "日志上传以后，把请求和响应的时间对一下。",
+      "review_focus": "Use a natural operational expression for comparing request and response timestamps after upload.",
+      "fixture_translation": "ろぐを  [あっぷろおど]した  あとで  [りくえすと]と  [れすぽんす]の  じこくを  つきあわせてください",
+      "required_all": ["あっぷろおど", "りくえすと", "れすぽんす"],
+      "required_any": [["じこく", "じかん"], ["つきあわせ", "くらべ", "かくにん"]],
+      "forbidden": []
+    },
+    {
+      "id": "software_timeout_but_response",
+      "category": "relation_semantics",
+      "source": "客户端超时了，但服务器其实已经返回响应。",
+      "review_focus": "Keep the contrast: the client timed out although the server had already returned a response.",
+      "fixture_translation": "[くらいあんと]は  たいむあうとしましたが  [さあばあ]は  じつは  すでに  [れすぽんす]を  かえしています",
+      "required_all": ["くらいあんと", "さあばあ", "れすぽんす"],
+      "required_any": [["たいむあうと", "じかんぎれ"], ["すでに", "もう"]],
+      "forbidden": []
+    },
+    {
+      "id": "general_medicine_counter",
+      "category": "general_safeguard",
+      "source": "这瓶药一天吃三次，每次两片。",
+      "review_focus": "Use the natural medicine counter and preserve both frequencies.",
+      "fixture_translation": "この  くすりは  いちにちに  さんかい  いちどに  にじょうずつ  のみます",
+      "required_all": ["さんかい", "にじょう", "のみ"],
+      "required_any": [],
+      "forbidden": ["さんまい", "たべ"]
+    },
+    {
+      "id": "general_condition_walk",
+      "category": "general_safeguard",
+      "source": "如果周末不下雨，就去河边散步。",
+      "review_focus": "Preserve the weather condition and use a natural expression for taking a walk by the river.",
+      "fixture_translation": "しゅうまつに  あめが  ふらなければ  かわべを  さんぽします",
+      "required_all": ["さんぽ"],
+      "required_any": [["ふらなければ", "ふらなかったら"]],
+      "forbidden": ["さんぽにいく"]
+    },
+    {
+      "id": "general_evening_booking",
+      "category": "general_safeguard",
+      "source": "请预订后天晚上七点的会议室。",
+      "review_focus": "Do not omit the day, evening qualifier, time, or meeting-room object.",
+      "fixture_translation": "あさっての  よる  しちじの  かいぎしつを  よやくしてください",
+      "required_all": ["あさって", "よる", "しちじ", "かいぎしつ", "よやく"],
+      "required_any": [],
+      "forbidden": []
+    },
+    {
+      "id": "general_strong_recommendation",
+      "category": "general_safeguard",
+      "source": "这部电影太好看了，强烈推荐给你。",
+      "review_focus": "Preserve strong enthusiasm with a natural Japanese recommendation rather than literal force wording.",
+      "fixture_translation": "この  えいがは  とても  おもしろいので  ぜひ  みてください",
+      "required_all": ["えいが"],
+      "required_any": [["ぜひ", "つよく"], ["すすめ", "みてください"]],
+      "forbidden": ["きょうれつ"]
+    }
+  ]
+}

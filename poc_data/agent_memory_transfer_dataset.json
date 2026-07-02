@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "status": "approved",
+  "name": "agent-memory-feedback-transfer-poc",
+  "description": "Two user-confirmed feedback records plus six project-curated corrections derived from observed POC failures. Transfer queries are hidden from the Pro memory compiler.",
+  "episodes": [
+    {
+      "id": "user_run_tests",
+      "provenance": "user_confirmed_feedback",
+      "evidence_note": "OCR、错误译文和用户备注来自本机 FeedbackStore；接受译文仅按本 POC 共用的平假名/双空格输出契约做了表面规范化，保留用户确认的“じっし”语义选择。",
+      "learning_source": "明天，跑完所有的单元测试用例。",
+      "bad_translation": "あした  すべての  ゆにっとてすとようれいを  うごかしおわる",
+      "feedback": "测试语境中的“跑完”表示把测试实施或执行完，不是物理上的跑动。以后相似表达优先使用“じっしする”或“じっこうする”。",
+      "accepted_translation": "あした  すべての  [たんたいてすとけえす]を  じっししおえます",
+      "transfer_source": "今天下午把回归测试全部跑完。",
+      "expectations": {
+        "required_all": [],
+        "required_any": [["じっし", "じっこう"]],
+        "forbidden": ["はしる", "うごかし"]
+      }
+    },
+    {
+      "id": "user_integration_test",
+      "provenance": "user_confirmed_feedback",
+      "evidence_note": "OCR、错误译文和用户备注来自本机 FeedbackStore；接受译文仅按本 POC 共用的平假名/双空格输出契约做了表面规范化，保留用户确认的“とうごうてすと”术语选择。",
+      "learning_source": "昨天把系统环境配置好了，还有把集成测试跑完了。",
+      "bad_translation": "きのう  しすてむかんきょうの  せっていを  おえました  いんてぐれえしょんてすとも  はしりおわりました",
+      "feedback": "“集成测试”使用日语软件工程中的自然术语“とうごうてすと”，不要音译为“いんてぐれえしょんてすと”。",
+      "accepted_translation": "きのう  [しすてむ]の  かんきょうを  せっていしおわって  [とうごうてすと]も  じっこうしおえました",
+      "transfer_source": "集成测试明天开始。",
+      "expectations": {
+        "required_all": ["とうごうてすと"],
+        "required_any": [],
+        "forbidden": ["いんてぐれえしょん"]
+      }
+    },
+    {
+      "id": "curated_deployment_relation",
+      "provenance": "project_curated_from_poc_failure",
+      "learning_source": "数据库部署在远程服务器上。",
+      "bad_translation": "[でえたべえす]を  [でぷろい]する  [さあばあ]の  うえで",
+      "feedback": "这里表达部署后的状态：数据库是被部署到远程服务器上的。数据库是对象，服务器是位置，不能把服务器翻成执行部署的主体，也不能漏掉远程含义。",
+      "accepted_translation": "[でえたべえす]は  えんかくの  [さあばあ]に  [でぷろい]されています",
+      "transfer_source": "应用部署在云服务器上。",
+      "expectations": {
+        "required_all": ["でぷろい", "されて", "さあばあ"],
+        "required_any": [["あぷり", "あぷりけえしょん"]],
+        "forbidden": []
+      }
+    },
+    {
+      "id": "curated_medicine_counter",
+      "provenance": "project_curated_from_poc_failure",
+      "learning_source": "这瓶药一天吃三次，每次两片。",
+      "bad_translation": "この  くすりを  いちにちに  さんかい  のんで  いっかいに  にまいずつ  のむ",
+      "feedback": "药片的计数使用“じょう”，服药使用“のむ”；不要使用纸张等薄片的量词“まい”，也不要用“たべる”。",
+      "accepted_translation": "この  くすりは  いちにちに  さんかい  いちどに  にじょうずつ  のみます",
+      "transfer_source": "这种药每天吃两次，每次三片。",
+      "expectations": {
+        "required_all": ["さんじょう", "のみ"],
+        "required_any": [],
+        "forbidden": ["さんまい", "たべ"]
+      }
+    },
+    {
+      "id": "curated_condition_walk",
+      "provenance": "project_curated_from_poc_failure",
+      "learning_source": "如果明天不下雨，我们就去公园散步。",
+      "bad_translation": "あした  あめが  ふらなかったら  わたしたちは  こうえんに  さんぽに  いきます",
+      "feedback": "保留条件与结果，同时使用自然搭配“こうえんを さんぽする”或“さんぽしに いく”，不要使用生硬的“こうえんに さんぽに いく”。",
+      "accepted_translation": "あした  あめが  ふらなければ  こうえんを  さんぽします",
+      "transfer_source": "如果周末不下雨，就去河边散步。",
+      "expectations": {
+        "required_all": ["さんぽ"],
+        "required_any": [["ふらなければ", "ふらなかったら"]],
+        "forbidden": ["さんぽにいく"]
+      }
+    },
+    {
+      "id": "curated_time_completeness",
+      "provenance": "project_curated_from_poc_failure",
+      "learning_source": "请帮我预订明天晚上六点的餐厅。",
+      "bad_translation": "あしたの  ろくじに  れすとらんを  よやくして  ください",
+      "feedback": "不得省略原文明确给出的时间限定。“晚上六点”必须保留“晚上”，翻译为“よる ろくじ”。",
+      "accepted_translation": "あしたの  よる  ろくじに  れすとらんを  よやくして  ください",
+      "transfer_source": "请预订后天晚上七点的会议室。",
+      "expectations": {
+        "required_all": ["よる", "しちじ", "よやく"],
+        "required_any": [],
+        "forbidden": []
+      }
+    },
+    {
+      "id": "curated_strong_recommendation",
+      "provenance": "project_curated_from_poc_failure",
+      "learning_source": "这电影太好看了，强烈推荐给你。",
+      "bad_translation": "この  えいがは  とても  おもしろかったので  きょうれつに  おすすめします",
+      "feedback": "“强烈推荐”在自然日语中使用“ぜひ おすすめする”或“つよく おすすめする”，不要逐字翻译成“きょうれつに”。",
+      "accepted_translation": "この  えいがは  とても  おもしろいので  ぜひ  おすすめします",
+      "transfer_source": "这本书非常好，强烈推荐。",
+      "expectations": {
+        "required_all": ["おすすめ"],
+        "required_any": [["ぜひ", "つよく"]],
+        "forbidden": ["きょうれつ"]
+      }
+    },
+    {
+      "id": "curated_ocr_variable",
+      "provenance": "project_curated_from_poc_failure",
+      "learning_source": "测试变重和函数。",
+      "bad_translation": "[てすと]  おもみと  [かんすう]",
+      "feedback": "软件上下文中的 OCR 文本“变重”是“变量”的识别错误，应结合“测试、函数、初始值”等上下文译为“へんすう”，不能译为重量“おもみ”。",
+      "accepted_translation": "[へんすう]と  [かんすう]を  [てすと]します",
+      "transfer_source": "请检查变重的初始值。",
+      "expectations": {
+        "required_all": ["へんすう", "しょきち"],
+        "required_any": [],
+        "forbidden": ["おもみ"]
+      }
+    }
+  ]
+}
