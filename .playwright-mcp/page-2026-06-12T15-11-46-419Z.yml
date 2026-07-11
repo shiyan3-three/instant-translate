@@ -1,6 +1,0 @@
-- generic [active] [ref=e1]:
-  - generic [ref=e7]:
-    - heading "登录" [level=1] [ref=e8]
-    - paragraph [ref=e9]: 本站需要通过 LinuxDo OAuth 才能访问，点击下方按钮后将跳转到授权页面。
-    - button "使用 LinuxDo 登录" [ref=e11] [cursor=pointer]
-  - alert [ref=e12]
