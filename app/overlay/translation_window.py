@@ -15,6 +15,12 @@ WINDOW_MARGIN = 12
 SCREEN_MARGIN = 8
 DEFAULT_HEIGHT = 132
 MIN_WINDOW_WIDTH = 260
+MAX_DYNAMIC_WINDOW_WIDTH = 700
+MAX_DYNAMIC_WINDOW_HEIGHT = 360
+TEXT_WIDTH_PADDING = 56
+TEXT_UNIT_WIDTH = 13
+TEXT_HEIGHT_PADDING = 52
+TEXT_LINE_HEIGHT = 22
 
 
 @dataclass
@@ -117,12 +123,18 @@ class TranslationWindowWidget(QWidget):
         self.setMinimumSize(MIN_WINDOW_WIDTH, 60)
 
     @staticmethod
-    def compute_geometry(region: ScreenRegion, screen: QRect, preferred_dock: str) -> QRect:
+    def compute_geometry(
+        region: ScreenRegion,
+        screen: QRect,
+        preferred_dock: str,
+        text: str = "",
+    ) -> QRect:
         """Return a translation-window geometry matched to one region."""
 
         available_width = max(80, screen.width() - SCREEN_MARGIN * 2)
-        width = min(max(region.width, MIN_WINDOW_WIDTH), available_width)
-        height = DEFAULT_HEIGHT
+        available_height = max(80, screen.height() - SCREEN_MARGIN * 2)
+        width = TranslationWindowWidget._preferred_width(region.width, available_width, text)
+        height = TranslationWindowWidget._preferred_height(width, available_height, text)
 
         left_bound = screen.x() + SCREEN_MARGIN
         right_bound = screen.x() + screen.width() - width - SCREEN_MARGIN
@@ -161,6 +173,57 @@ class TranslationWindowWidget(QWidget):
         if y > bottom_bound:
             y = clamp_y(region.y - height - WINDOW_MARGIN)
         return QRect(x, y, width, height)
+
+    @staticmethod
+    def _preferred_width(region_width: int, available_width: int, text: str) -> int:
+        base_width = min(max(region_width, MIN_WINDOW_WIDTH), available_width)
+        if not text.strip():
+            return base_width
+
+        dynamic_cap = min(
+            available_width,
+            max(
+                base_width,
+                min(MAX_DYNAMIC_WINDOW_WIDTH, int(available_width * 0.72)),
+            ),
+        )
+        estimated_width = TranslationWindowWidget._estimate_text_width(text)
+        return min(max(base_width, estimated_width), dynamic_cap)
+
+    @staticmethod
+    def _estimate_text_width(text: str) -> int:
+        visual_units = max(
+            TranslationWindowWidget._visual_units(line)
+            for line in text.splitlines() or [text]
+        )
+        return int(visual_units * TEXT_UNIT_WIDTH) + TEXT_WIDTH_PADDING
+
+    @staticmethod
+    def _preferred_height(width: int, available_height: int, text: str) -> int:
+        if not text.strip():
+            return min(DEFAULT_HEIGHT, available_height)
+
+        body_width = max(1, width - TEXT_WIDTH_PADDING)
+        units_per_line = max(1.0, body_width / TEXT_UNIT_WIDTH)
+        visual_lines = 0
+        for line in text.splitlines() or [text]:
+            units = TranslationWindowWidget._visual_units(line)
+            visual_lines += max(1, int((units + units_per_line - 1) // units_per_line))
+        estimated_height = TEXT_HEIGHT_PADDING + visual_lines * TEXT_LINE_HEIGHT
+        dynamic_cap = min(available_height, MAX_DYNAMIC_WINDOW_HEIGHT)
+        return min(max(DEFAULT_HEIGHT, estimated_height), dynamic_cap)
+
+    @staticmethod
+    def _visual_units(text: str) -> float:
+        units = 0.0
+        for ch in text:
+            if ch.isspace():
+                units += 0.35
+            elif ch.isascii():
+                units += 0.65
+            else:
+                units += 1.0
+        return units
 
     @property
     def dock_controls_visible(self) -> bool:
@@ -274,7 +337,7 @@ class TranslationWindowWidget(QWidget):
             QLabel#translationBody {{
                 color: #1e293b;
                 border: none;
-                font-size: 18px;
+                font-size: 14px;
                 line-height: 1.5;
                 background: transparent;
             }}

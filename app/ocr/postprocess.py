@@ -6,9 +6,31 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 
-_TOOLBAR_WORDS = ("重选", "暂停", "继续", "删除")
+_TOOLBAR_WORDS = (
+    "重选",
+    "暂停",
+    "继续",
+    "删除",
+    "翻译有误",
+    "OCR",
+    "中文",
+    "日本語",
+    "日本语",
+    "English",
+    "上",
+    "下",
+    "左",
+    "右",
+)
 _WHITESPACE_RE = re.compile(r"[ \t\f\v]+")
 _SIZE_BADGE_RE = re.compile(r"\d{2,5}\s*[xX\u00d7\u8133]\s*\d{1,5}|\d{1,5}\s*[xX\u00d7\u8133]\s*\d{2,5}")
+_SEARCH_BAR_RE = re.compile(r"^(?:[Qq]\s*)?(?:搜索|搜寻|搜尋|Search)$", re.I)
+_LANGUAGE_PAIR_RE = re.compile(
+    r"^(?:中文|中国語|Chinese|English|日本語|日本语|Japanese|英语|英文|日语|日文)"
+    r"\s*(?:=>|->|→|到|to)\s*"
+    r"(?:中文|中国語|Chinese|English|日本語|日本语|Japanese|英语|英文|日语|日文)$",
+    re.I,
+)
 _CONTENT_RE = re.compile(r"[A-Za-z0-9\u3040-\u30ff\u3400-\u9fff]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 _CJK_RE = re.compile(r"[\u3400-\u9fff]")
@@ -36,6 +58,10 @@ def normalize_ocr_text(raw_text: str) -> str:
         if not line:
             continue
         if _is_toolbar_noise(line):
+            continue
+        if _is_search_bar_noise(line):
+            continue
+        if _is_language_pair_noise(line):
             continue
         if _is_social_metric_noise(line):
             continue
@@ -121,6 +147,20 @@ def _is_social_metric_noise(line: str) -> bool:
 
     compact = re.sub(r"\s+", "", line)
     return bool(compact) and bool(_SOCIAL_METRIC_RE.match(compact))
+
+
+def _is_search_bar_noise(line: str) -> bool:
+    """Detect short search-box labels accidentally captured near the selection."""
+
+    compact = re.sub(r"\s+", "", line)
+    return bool(compact) and bool(_SEARCH_BAR_RE.match(compact))
+
+
+def _is_language_pair_noise(line: str) -> bool:
+    """Detect the app's own language-pair label when the translation box is captured."""
+
+    compact = re.sub(r"\s+", "", line)
+    return bool(compact) and bool(_LANGUAGE_PAIR_RE.match(compact))
 
 
 def _split_toolbar_words(compact: str) -> list[str]:

@@ -32,7 +32,12 @@ class ScreenCaptureService:
         if not region.is_valid():
             raise ValueError("screen region is too small to capture")
 
-        pixmap = screen.grabWindow(0, region.x, region.y, region.width, region.height)
+        # ScreenRegion uses virtual-desktop coordinates, while QScreen.grabWindow
+        # expects coordinates relative to the selected screen.
+        geometry = screen.geometry()
+        local_x = region.x - geometry.x()
+        local_y = region.y - geometry.y()
+        pixmap = screen.grabWindow(0, local_x, local_y, region.width, region.height)
         image = pixmap.toImage().convertToFormat(QImage.Format.Format_RGBA8888)
         return self.frame_from_image(image)
 

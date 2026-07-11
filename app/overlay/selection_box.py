@@ -298,6 +298,12 @@ class SelectionBoxWidget(QWidget):
         return 4 if self._editable else 2
 
     @property
+    def capture_margin(self) -> int:
+        """Pixels reserved outside the captured content for the outline."""
+
+        return self.outline_width
+
+    @property
     def toolbar_visible(self) -> bool:
         """Expose toolbar visibility for tests and diagnostics."""
 
@@ -326,7 +332,13 @@ class SelectionBoxWidget(QWidget):
 
         self.model = model
         self._toolbar_sized = False  # toolbar content may have changed size
-        self.setGeometry(model.x, model.y, model.width, model.height)
+        margin = self.capture_margin
+        self.setGeometry(
+            model.x - margin,
+            model.y - margin,
+            model.width + margin * 2,
+            model.height + margin * 2,
+        )
         self.group_badge.setText(str(model.group_id))
         self.size_badge.setText(self.format_dimensions(model.width, model.height))
         self.toolbar_panel.set_paused(model.paused)
@@ -342,6 +354,10 @@ class SelectionBoxWidget(QWidget):
         # Skip toolbar flicker but always apply visual state on first call
         changed = self._editable != enabled
         self._editable = enabled
+        if changed:
+            # The thicker edit outline still remains outside the OCR content.
+            self._last_applied_state = None
+            self.apply_model(self.model)
         # OCR captures the same rectangle as this widget. Keep all badge chrome
         # hidden in every mode so group numbers and size labels never become
         # source text. The group is still visible via accent color, toolbar, and
@@ -453,15 +469,16 @@ class SelectionBoxWidget(QWidget):
             delta = event.globalPosition().toPoint() - self._drag_origin_global
             geo = QRect(self._drag_origin_geometry)
             edge = self._resize_edge
+            min_outer_size = self._MIN_SIZE + self.capture_margin * 2
 
             if "left" in edge:
-                geo.setLeft(min(geo.left() + delta.x(), geo.right() - self._MIN_SIZE))
+                geo.setLeft(min(geo.left() + delta.x(), geo.right() - min_outer_size))
             elif "right" in edge:
-                geo.setRight(max(geo.right() + delta.x(), geo.left() + self._MIN_SIZE))
+                geo.setRight(max(geo.right() + delta.x(), geo.left() + min_outer_size))
             if "top" in edge:
-                geo.setTop(min(geo.top() + delta.y(), geo.bottom() - self._MIN_SIZE))
+                geo.setTop(min(geo.top() + delta.y(), geo.bottom() - min_outer_size))
             elif "bottom" in edge:
-                geo.setBottom(max(geo.bottom() + delta.y(), geo.top() + self._MIN_SIZE))
+                geo.setBottom(max(geo.bottom() + delta.y(), geo.top() + min_outer_size))
 
             self.setGeometry(geo)
             event.accept()
@@ -500,7 +517,14 @@ class SelectionBoxWidget(QWidget):
             self.releaseMouse()
             self._update_overlay_geometry()
             g = self.geometry()
-            self.resized.emit(self.model.group_id, g.x(), g.y(), g.width(), g.height())
+            margin = self.capture_margin
+            self.resized.emit(
+                self.model.group_id,
+                g.x() + margin,
+                g.y() + margin,
+                max(self._MIN_SIZE, g.width() - margin * 2),
+                max(self._MIN_SIZE, g.height() - margin * 2),
+            )
             event.accept()
             return
 
@@ -508,7 +532,12 @@ class SelectionBoxWidget(QWidget):
             self._dragging = False
             self.releaseMouse()
             self._update_toolbar_position()
-            self.moved.emit(self.model.group_id, self.x(), self.y())
+            margin = self.capture_margin
+            self.moved.emit(
+                self.model.group_id,
+                self.x() + margin,
+                self.y() + margin,
+            )
             event.accept()
             return
 

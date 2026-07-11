@@ -6,6 +6,7 @@ Tries PaddleOCR first (best accuracy for CJK), falls back to Tesseract.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -76,6 +77,8 @@ class OcrEngine:
         self._preprocess_config = preprocess_config
         self._backend = None  # "paddle" | "tesseract" | None
         self._engines: dict[str, object] = {}
+        self._warmed_languages: set[str] = set()
+        self._engine_lock = threading.RLock()
 
     # ------------------------------------------------------------------
     # public API
@@ -87,10 +90,35 @@ class OcrEngine:
         Safe to call from a background thread.  If the backend is
         already initialised for this language, this is a no-op.
         """
+        lang_code = self._PADDLE_LANG_MAP.get(source_language, "en")
         try:
-            self._ensure_engine(source_language)
+            with self._engine_lock:
+                if self._backend == "paddle" and lang_code in self._warmed_languages:
+                    from app.logger import get_debug_logger
+                    get_debug_logger().debug("OCR inference warmup skipped: cached lang=%s", lang_code)
+                    return
+
+                self._ensure_engine(source_language)
+                if self._backend != "paddle" or lang_code in self._warmed_languages:
+                    return
+
+                # Constructing PaddleOCR does not initialise all inference
+                # kernels.  A tiny real pass moves the multi-second cold cost
+                # into the existing background warm-up thread.
+                from PIL import Image, ImageDraw
+
+                image = Image.new("RGB", (96, 32), "white")
+                ImageDraw.Draw(image).text((4, 7), "ABC", fill="black")
+                self._run_paddle(image, source_language)
+                self._warmed_languages.add(lang_code)
+                from app.logger import get_debug_logger
+                get_debug_logger().debug("OCR inference warmup complete: lang=%s", lang_code)
         except RuntimeError:
             pass  # no backend available — logged inside _ensure_engine
+        except Exception as exc:
+            # Warm-up is an optimisation; a failure must not disable normal OCR.
+            from app.logger import get_debug_logger
+            get_debug_logger().warning("OCR inference warmup failed: %s", exc)
 
     def recognise(
         self,
@@ -135,13 +163,14 @@ class OcrEngine:
     # ------------------------------------------------------------------
 
     def _run_ocr(self, image, source_language: str) -> OcrResult:
-        self._ensure_engine(source_language)
+        with self._engine_lock:
+            self._ensure_engine(source_language)
 
-        if self._backend == "paddle":
-            return self._run_paddle(image, source_language)
-        if self._backend == "tesseract":
-            return self._run_tesseract(image, source_language)
-        return OcrResult()
+            if self._backend == "paddle":
+                return self._run_paddle(image, source_language)
+            if self._backend == "tesseract":
+                return self._run_tesseract(image, source_language)
+            return OcrResult()
 
     def _run_paddle(self, image, source_language: str) -> OcrResult:
         lang_code = self._PADDLE_LANG_MAP.get(source_language, "en")
@@ -217,7 +246,7 @@ class OcrEngine:
         # Diagnostic logging
         from app.logger import get_debug_logger
         get_debug_logger().debug(
-            "OCR warmup: backend=%s lang=%s cached_langs=%s instance_id=%s",
+            "OCR engine ensure: backend=%s lang=%s cached_langs=%s instance_id=%s",
             self._backend, lang_code, list(self._engines.keys()), id(self)
         )
 

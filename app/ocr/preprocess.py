@@ -19,6 +19,10 @@ class PreprocessConfig:
     binarize_threshold: int = 128
     upscale_factor: float = 1.0
     invert: bool = False
+    small_region_min_height: int = 96
+    small_region_horizontal_padding: int = 12
+    small_region_upscale_below_height: int = 72
+    small_region_upscale_factor: float = 2.0
 
 
 class ImagePreprocessor:
@@ -39,6 +43,20 @@ class ImagePreprocessor:
         """Run the full preprocessing pipeline on one captured region image."""
 
         cfg = config or self._default_config
+        _, original_height = image.size
+
+        if original_height < cfg.small_region_min_height:
+            vertical_padding = max(0, cfg.small_region_min_height - original_height)
+            top = vertical_padding // 2
+            bottom = vertical_padding - top
+            left = max(0, cfg.small_region_horizontal_padding)
+            right = left
+            fill = (255, 255, 255, 255) if image.mode == "RGBA" else "white"
+            image = ImageOps.expand(
+                image,
+                border=(left, top, right, bottom),
+                fill=fill,
+            )
 
         if cfg.grayscale:
             image = image.convert("L")
@@ -60,10 +78,14 @@ class ImagePreprocessor:
         if cfg.invert:
             image = ImageOps.invert(image)
 
-        if cfg.upscale_factor > 1.0:
+        upscale_factor = cfg.upscale_factor
+        if original_height < cfg.small_region_upscale_below_height:
+            upscale_factor = max(upscale_factor, cfg.small_region_upscale_factor)
+
+        if upscale_factor > 1.0:
             w, h = image.size
             image = image.resize(
-                (int(w * cfg.upscale_factor), int(h * cfg.upscale_factor)),
+                (int(w * upscale_factor), int(h * upscale_factor)),
                 Image.LANCZOS,
             )
 
