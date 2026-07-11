@@ -7,9 +7,10 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QSizePolicy
+from PySide6.QtWidgets import QApplication, QMessageBox, QSizePolicy
 
 from app.app_context import ApplicationContext
 from app.feedback.optimizer import FeedbackOptimization
@@ -88,6 +89,41 @@ class SettingsWindowTests(unittest.TestCase):
             self.assertEqual(reference_dir, Path(tmp) / "prompts" / "references")
             self.assertTrue(reference_dir.exists())
 
+    def test_settings_window_reference_preview_and_candidate_export(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = PromptStorage(config_dir=Path(tmp))
+            storage.save_compiled_prompt(
+                "# Instant Translate Compiled Prompt\n\n"
+                "## AI Optimization Layer\n"
+                "数据库 -> [でえたべえす]\n\n"
+                "## Knowledge Reference Layer\n"
+                "No knowledge references.\n",
+                "prompts/compiled-prompt.md",
+            )
+            reference_path = Path(tmp) / "terms.md"
+            reference_path.write_text("## Glossary\nAPI -> [えーぴーあい]\n", encoding="utf-8")
+            settings = AppSettings()
+            settings.prompt.compiled_prompt_path = "prompts/compiled-prompt.md"
+            settings.prompt.knowledge_reference_paths = [str(reference_path)]
+            window = SettingsWindow(settings)
+            window._prompt_storage = storage
+
+            preview = window._build_reference_preview()
+            with patch(
+                "app.gui.settings_window.QMessageBox.question",
+                return_value=QMessageBox.StandardButton.Yes,
+            ):
+                window._on_export_ai_reference_candidates()
+
+            candidate_path = Path(tmp) / "prompts" / "references" / "ai-optimization-candidates.md"
+
+        self.assertIn("API -> [えーぴーあい]", preview)
+        listed = [
+            window.knowledge_reference_list.item(i).text()
+            for i in range(window.knowledge_reference_list.count())
+        ]
+        self.assertIn(str(candidate_path), listed)
+
 
 class TemplatePageTests(unittest.TestCase):
     """Verify the template page enables compiled prompts."""
@@ -128,9 +164,11 @@ class TemplatePageTests(unittest.TestCase):
                 time.sleep(0.01)
 
             compiled = compiled_path.read_text(encoding="utf-8")
+            policy_path = compiled_path.with_suffix(".policy.json")
             self.assertIn("Fixed Template Layer", compiled)
             self.assertIn("Keep database terms literal.", compiled)
             self.assertIn("Optimized glossary rules", compiled)
+            self.assertTrue(policy_path.exists())
             self.assertEqual(settings.prompt.constraints_text, "Keep database terms literal.")
             self.assertEqual(settings.prompt.compiled_prompt_path, "prompts/compiled-prompt.md")
             self.assertEqual(page._compiled_path.text(), "prompts/compiled-prompt.md")
@@ -148,6 +186,63 @@ class TemplatePageTests(unittest.TestCase):
 
             self.assertEqual(reference_dir, Path(tmp) / "prompts" / "references")
             self.assertTrue(reference_dir.exists())
+
+    def test_reference_preview_shows_parsed_terms_style_and_risk(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reference_path = Path(tmp) / "terms.md"
+            reference_path.write_text(
+                "## Glossary\n"
+                "API -> [えーぴーあい]\n"
+                "## Style\n"
+                "- keep natural word order\n"
+                "## Risk\n"
+                "risk: triggers: API; only wrap API as a technical term\n",
+                encoding="utf-8",
+            )
+            page = TemplatePage(
+                knowledge_paths=[str(reference_path)],
+                prompt_storage=PromptStorage(config_dir=Path(tmp)),
+                confirm_compiled_prompt=lambda content: True,
+                save_settings=lambda: None,
+            )
+
+            preview = page._build_reference_preview()
+
+        self.assertIn("术语 1 条", preview)
+        self.assertIn("API -> [えーぴーあい]", preview)
+        self.assertIn("keep natural word order", preview)
+        self.assertIn("only wrap API", preview)
+
+    def test_export_ai_candidates_can_be_confirmed_into_knowledge_list(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = PromptStorage(config_dir=Path(tmp))
+            storage.save_compiled_prompt(
+                "# Instant Translate Compiled Prompt\n\n"
+                "## AI Optimization Layer\n"
+                "| Source | Target |\n"
+                "|--------|--------|\n"
+                "| 软件 | [そふとうぇあ] |\n\n"
+                "## Knowledge Reference Layer\n"
+                "No knowledge references.\n",
+                "prompts/compiled-prompt.md",
+            )
+            page = TemplatePage(
+                compiled_prompt_path="prompts/compiled-prompt.md",
+                prompt_storage=storage,
+                confirm_compiled_prompt=lambda content: True,
+                save_settings=lambda: None,
+            )
+
+            with patch(
+                "app.gui.main_window.QMessageBox.question",
+                return_value=QMessageBox.StandardButton.Yes,
+            ):
+                page._on_export_ai_reference_candidates()
+
+            candidate_path = Path(tmp) / "prompts" / "references" / "ai-optimization-candidates.md"
+
+        self.assertIn(str(candidate_path), page._knowledge_paths)
+        self.assertIn("ai-optimization-candidates.md", page._knowledge_list.toPlainText())
 
     def test_long_template_content_does_not_force_horizontal_growth(self) -> None:
         long_constraints = "术语约束：" + "非常长的提示词内容" * 80
@@ -334,6 +429,44 @@ class FeedbackPageTests(unittest.TestCase):
             )
             self.assertEqual(len(rules), 1)
             self.assertEqual(rules[0].trigger, "软件测试")
+
+    def test_ai_improved_translation_without_keyword_saves_exact_example(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            source = "邻居闹到很晚，小李被吵到了。"
+            expected = "りさん は となりの ひと に おそく まで さわがれました"
+            store.add_feedback(
+                group_id=1,
+                source_language="中文",
+                target_language="日本語",
+                ocr_text=source,
+                translation_text="りさん は となりの ひと を うるさく しました",
+            )
+            page = FeedbackPage(store, AppSettings(), optimizer=FakeFeedbackOptimizer(
+                FeedbackOptimization(
+                    trigger="",
+                    trigger_options=[],
+                    rule="遇到相同例句时，按用户确认译文处理。",
+                    improved_translation=expected,
+                )
+            ))
+
+            page._on_ai_optimize()
+            self._wait_for_ai(page)
+
+            self.assertEqual(page._keyword_editor.keywords(), [])
+            self.assertEqual(page._corrected_translation_text.toPlainText(), expected)
+
+            page._on_confirm()
+
+            rules = store.match_memory_rules(
+                source,
+                source_language="中文",
+                target_language="日本語",
+            )
+            self.assertEqual(len(rules), 1)
+            self.assertEqual(rules[0].trigger, source)
+            self.assertEqual(rules[0].preferred_translation, expected)
 
     def test_confirmed_memory_matches_any_keyword_tag(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

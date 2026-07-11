@@ -9,7 +9,7 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from poc_agent_memory_transfer import (
+from poc.poc_agent_memory_transfer import (
     TransferPocError,
     build_common_system,
     build_compiler_source,
@@ -25,12 +25,12 @@ from poc_agent_memory_transfer import (
     validate_compiled_memory,
     write_blind_review,
 )
-from poc_reference_injection import load_dataset
+from poc.poc_reference_injection import load_dataset
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TRANSFER_PATH = ROOT / "poc_data" / "agent_memory_transfer_dataset.json"
-TRANSLATION_PATH = ROOT / "poc_data" / "reference_poc_dataset.json"
+TRANSFER_PATH = ROOT / "poc" / "data" / "agent_memory_transfer_dataset.json"
+TRANSLATION_PATH = ROOT / "poc" / "data" / "reference_poc_dataset.json"
 
 
 class TransferDatasetTests(unittest.TestCase):

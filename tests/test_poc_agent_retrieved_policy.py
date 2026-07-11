@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from poc_agent_retrieved_policy import (
+from poc.poc_agent_retrieved_policy import (
     GROUPS,
     RetrievedPolicyError,
     build_retrieved_messages,
@@ -20,7 +20,7 @@ from poc_agent_retrieved_policy import (
     run,
     select_policy_rules,
 )
-from poc_agent_strategy_transfer import (
+from poc.poc_agent_strategy_transfer import (
     build_bootstrap_turn,
     build_session_system,
     load_strategy_dataset,
@@ -30,8 +30,8 @@ from poc_agent_strategy_transfer import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASET_PATH = ROOT / "poc_data" / "agent_strategy_transfer_dataset.json"
-TRANSLATION_PATH = ROOT / "poc_data" / "reference_poc_dataset.json"
+DATASET_PATH = ROOT / "poc" / "data" / "agent_strategy_transfer_dataset.json"
+TRANSLATION_PATH = ROOT / "poc" / "data" / "reference_poc_dataset.json"
 
 
 class RetrievedPolicyCompilationTests(unittest.TestCase):

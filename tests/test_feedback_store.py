@@ -90,5 +90,59 @@ class FeedbackStoreTests(unittest.TestCase):
             self.assertIn("跑完 / 单元测试用例 / 测试用例", matches[0].as_prompt_hint())
 
 
+    def test_reapproving_feedback_updates_existing_memory_rule(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1,
+                source_language="中文",
+                target_language="日本語",
+                ocr_text="把测试全部跑完",
+                translation_text="wrong",
+            )
+            first = store.approve_feedback(
+                record.id,
+                trigger="跑完",
+                rule="按执行测试的语境翻译",
+            )
+            second = store.approve_feedback(
+                record.id,
+                trigger="测试跑完",
+                rule="优先表达执行完成",
+            )
+
+            self.assertEqual(first.id, second.id)
+            self.assertEqual(len(store.list_memory_rules()), 1)
+            self.assertEqual(store.list_memory_rules()[0].trigger, "测试跑完")
+
+    def test_more_specific_memory_rule_is_returned_first(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            broad = store.add_feedback(
+                group_id=1,
+                source_language="中文",
+                target_language="日本語",
+                ocr_text="测试",
+                translation_text="wrong",
+            )
+            specific = store.add_feedback(
+                group_id=1,
+                source_language="中文",
+                target_language="日本語",
+                ocr_text="回归测试跑完",
+                translation_text="wrong",
+            )
+            store.approve_feedback(broad.id, trigger="测试", rule="broad")
+            store.approve_feedback(specific.id, trigger="回归测试", rule="specific")
+
+            matches = store.match_memory_rules(
+                "今天把回归测试跑完",
+                source_language="中文",
+                target_language="日本語",
+            )
+
+            self.assertEqual([item.rule for item in matches[:2]], ["specific", "broad"])
+
+
 if __name__ == "__main__":
     unittest.main()

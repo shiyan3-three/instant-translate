@@ -9,7 +9,7 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from poc_agent_memory import (
+from poc.poc_agent_memory import (
     AgentMemoryError,
     build_agent_request,
     build_memory_source,
@@ -21,11 +21,11 @@ from poc_agent_memory import (
     validate_agent_memory,
     write_blind_review,
 )
-from poc_reference_injection import load_dataset
+from poc.poc_reference_injection import load_dataset
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASET_PATH = ROOT / "poc_data" / "reference_poc_dataset.json"
+DATASET_PATH = ROOT / "poc" / "data" / "reference_poc_dataset.json"
 
 
 class AgentMemoryValidationTests(unittest.TestCase):

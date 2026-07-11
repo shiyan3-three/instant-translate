@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from poc_agent_memory import make_dry_run_memory
-from poc_agent_memory_canary import (
+from poc.poc_agent_memory import make_dry_run_memory
+from poc.poc_agent_memory_canary import (
     CANARY_CASE_IDS,
     build_typed_agent_request,
     evaluate_strict_constraints,
@@ -17,11 +17,11 @@ from poc_agent_memory_canary import (
     semantic_type,
     write_blind_review,
 )
-from poc_reference_injection import load_dataset
+from poc.poc_reference_injection import load_dataset
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASET_PATH = ROOT / "poc_data" / "reference_poc_dataset.json"
+DATASET_PATH = ROOT / "poc" / "data" / "reference_poc_dataset.json"
 
 
 class TypedReferenceTests(unittest.TestCase):

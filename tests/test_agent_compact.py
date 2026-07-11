@@ -57,15 +57,15 @@ class TestAgentCompact(unittest.TestCase):
         # Check last message is from the most recent translations
         self.assertEqual(self.agent.messages[-1]["content"], "Translation 14")
     
-    def test_conflict_handling_in_system_prompt(self):
-        """Test that absolute constraints get a conflict handling clause."""
+    def test_hard_constraints_are_not_weakened_by_ascii_fallback(self):
+        """Absolute user rules must not gain an implicit preserve-source exception."""
         with patch.object(self.agent._thinking_client, 'chat', return_value="Confirmed"):
             self.agent.digest_rules("Original prompt：输出只能使用平假名。")
             
-            # Check system message contains conflict handling
+            # The previous fallback contradicted hiragana-only output.
             system_msg = self.agent.messages[0]["content"]
-            self.assertIn("无法转换", system_msg)
-            self.assertIn("英文、数字、符号", system_msg)
+            self.assertNotIn("无法转换", system_msg)
+            self.assertNotIn("英文、数字、符号", system_msg)
             self.assertIn("Original prompt", system_msg)
 
 

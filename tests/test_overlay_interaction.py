@@ -98,11 +98,14 @@ class OverlayInteractionTests(unittest.TestCase):
             Qt.KeyboardModifier.NoModifier,
         )
 
+        moved = []
+        widget.moved.connect(lambda group_id, x, y: moved.append((group_id, x, y)))
         widget.mousePressEvent(press_event)
         widget.mouseMoveEvent(move_event)
         widget.mouseReleaseEvent(release_event)
 
-        self.assertEqual((widget.x(), widget.y()), (120, 120))
+        self.assertEqual((widget.x(), widget.y()), (116, 116))
+        self.assertEqual(moved, [(1, 120, 120)])
         widget.close()
 
     def test_translation_window_toggles_input_passthrough_with_edit_mode(self) -> None:

@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "status": "frozen_poc",
+  "name": "runtime-profile-completeness-zero-pro-flash-ab",
+  "description": "Sixteen held-out Chinese OCR sentences for testing one short completeness-only confirmed RuntimeProfile without Pro calls.",
+  "cases": [
+    {
+      "id": "rpc_01",
+      "scope": "runtime_regression",
+      "category": "negation_not_yet",
+      "source": "审核结果尚未写入记录，因此现在不能关闭页面。",
+      "review_focus": "Preserve both the not-yet state and the resulting prohibition.",
+      "fixture_translation": "しんさ  けっか  は  まだ  きろく  に  かきこまれて  いない  ため  いま  ぺえじ  を  とじる  こと  は  できない"
+    },
+    {
+      "id": "rpc_02",
+      "scope": "runtime_regression",
+      "category": "if_negative_condition",
+      "source": "如果校验没有完成，就不要发送确认通知。",
+      "review_focus": "Preserve the negative condition and do-not-send action.",
+      "fixture_translation": "もし  けんしょう  が  おわって  いなければ  かくにん  つうち  を  おくらないで  ください"
+    },
+    {
+      "id": "rpc_03",
+      "scope": "runtime_regression",
+      "category": "unless_otherwise",
+      "source": "除非负责人今天批准，否则变更不会生效。",
+      "review_focus": "Preserve the unless condition, responsible subject, deadline, and negative consequence.",
+      "fixture_translation": "せきにんしゃ  が  きょう  しょうにん  しない  かぎり  へんこう  は  ゆうこう  に  ならない"
+    },
+    {
+      "id": "rpc_04",
+      "scope": "runtime_regression",
+      "category": "already_still_continuing",
+      "source": "报告已经生成，但签名检查仍然一直运行。",
+      "review_focus": "Keep completed report generation separate from the still-continuing signature check.",
+      "fixture_translation": "ほうこくしょ  は  すでに  せいせい  された  が  しょめい  ちぇっく  は  まだ  ずっと  うごいて  いる"
+    },
+    {
+      "id": "rpc_05",
+      "scope": "runtime_regression",
+      "category": "passive_temporal_order",
+      "source": "旧凭证被管理员撤销后，新凭证才被发放。",
+      "review_focus": "Preserve both passive relations and their temporal order.",
+      "fixture_translation": "ふるい  しょうめいしょ  が  かんりしゃ  に  むこう  に  された  あと  あたらしい  しょうめいしょ  が  はっこう  された"
+    },
+    {
+      "id": "rpc_06",
+      "scope": "runtime_regression",
+      "category": "subject_action_alignment",
+      "source": "值班人员通知开发者暂停服务，开发者随后执行了操作。",
+      "review_focus": "Do not swap who notified and who actually paused the service.",
+      "fixture_translation": "とうばん  たんとうしゃ  が  かいはつしゃ  に  さあびす  の  ていし  を  つうち  し  そのあと  かいはつしゃ  が  そうさ  を  じっこう  した"
+    },
+    {
+      "id": "rpc_07",
+      "scope": "control",
+      "category": "daily_shopping",
+      "source": "回家以前，请顺路买一盒牛奶。",
+      "review_focus": "Keep the ordinary request concise and unchanged in meaning.",
+      "fixture_translation": "いえ  に  かえる  まえ  に  ついで  に  ぎゅうにゅう  を  ひとはこ  かって  ください"
+    },
+    {
+      "id": "rpc_08",
+      "scope": "control",
+      "category": "daily_location",
+      "source": "妹妹把钥匙放在玄关的小篮子里了。",
+      "review_focus": "Preserve the actor, object, and exact location without elaboration.",
+      "fixture_translation": "いもうと  は  かぎ  を  げんかん  の  ちいさな  かご  に  いれた"
+    },
+    {
+      "id": "rpc_09",
+      "scope": "control",
+      "category": "daily_plan",
+      "source": "明天下午三点，我们在图书馆门口见面。",
+      "review_focus": "Preserve the time, participants, and meeting place.",
+      "fixture_translation": "あした  の  ごご  さんじ  に  としょかん  の  いりぐち  で  あいましょう"
+    },
+    {
+      "id": "rpc_10",
+      "scope": "control",
+      "category": "daily_observation",
+      "source": "院子里的花昨晚被风吹倒了两盆。",
+      "review_focus": "Preserve the passive cause, last-night time, and quantity.",
+      "fixture_translation": "にわ  の  はな  は  ゆうべ  かぜ  に  ふかれて  ふたはち  たおれた"
+    },
+    {
+      "id": "rpc_11",
+      "scope": "lexical_trap",
+      "category": "configuration_file_reference",
+      "source": "请比较配置快照与当前配置文件，不要直接覆盖原文件。",
+      "review_focus": "Detect drift around configuration snapshot/file while preserving the prohibition.",
+      "fixture_translation": "⟦REF_0⟧  と  げんざい  の  せってい  ふぁいる  を  ひかく  し  もとの  ふぁいる  を  そのまま  うわがき  しないで  ください"
+    },
+    {
+      "id": "rpc_12",
+      "scope": "lexical_trap",
+      "category": "background_task_queue_reference",
+      "source": "调度批次进入队列以后，后台任务只提交了一次。",
+      "review_focus": "Detect drift around queue, background task, submit, and the exactly-once quantity.",
+      "fixture_translation": "⟦REF_0⟧  が  きゅう  に  はいった  あと  はいけい  たすく  は  いちど  だけ  そうしん  した"
+    },
+    {
+      "id": "rpc_13",
+      "scope": "lexical_trap",
+      "category": "connection_timeout_memory",
+      "source": "午夜窗口内连接发生超时，但客户端没有再次提交请求。",
+      "review_focus": "Detect lexical drift around connection, timeout, client, submit, and negation.",
+      "fixture_translation": "しんや  の  じかんたい  に  せつぞく  が  たいむあうと  した  が  くらいあんと  は  りくえすと  を  さいそうしん  しなかった"
+    },
+    {
+      "id": "rpc_14",
+      "scope": "lexical_trap",
+      "category": "fallback_connection_memory",
+      "source": "备用链路已经连接成功，主连接却仍然处于超时状态。",
+      "review_focus": "Keep fallback and primary connection states distinct without choosing terminology for the model.",
+      "fixture_translation": "よび  けいろ  は  すでに  せつぞく  に  せいこう  した  が  しゅ  せつぞく  は  まだ  たいむあうと  の  じょうたい  に  ある"
+    },
+    {
+      "id": "rpc_15",
+      "scope": "reference_memory",
+      "category": "reference_and_condition",
+      "source": "审计批次没有完成时，不得归档这份记录。",
+      "review_focus": "Exercise an isolated Reference hit while preserving condition and prohibition.",
+      "fixture_translation": "⟦REF_0⟧  が  おわって  いない  とき  この  きろく  を  ほかん  して  は  ならない"
+    },
+    {
+      "id": "rpc_16",
+      "scope": "reference_memory",
+      "category": "memory_and_completion_state",
+      "source": "回放窗口已经关闭，但核对动作还没结束。",
+      "review_focus": "Exercise isolated Reference/Memory retrieval while separating completed and unfinished states.",
+      "fixture_translation": "⟦REF_0⟧  は  すでに  とじた  が  かくにん  さぎょう  は  まだ  おわって  いない"
+    }
+  ]
+}

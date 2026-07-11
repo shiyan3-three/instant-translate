@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import unittest
 
+from PySide6.QtGui import QImage
+
 from app.capture.change_detector import RegionChangeDetector
-from app.capture.screen_capture import CapturedRegionFrame
+from app.capture.screen_capture import CapturedRegionFrame, ScreenCaptureService
+from app.state.group_state import ScreenRegion
 
 
 class RegionChangeDetectorTests(unittest.TestCase):
@@ -78,3 +81,41 @@ class RegionChangeDetectorTests(unittest.TestCase):
     def _solid_frame(width: int, height: int, value: int) -> CapturedRegionFrame:
         pixel = bytes((value, value, value, 255))
         return CapturedRegionFrame(width=width, height=height, pixel_bytes=pixel * width * height)
+
+
+class ScreenCaptureServiceTests(unittest.TestCase):
+    def test_virtual_desktop_region_is_converted_to_screen_local_coordinates(self) -> None:
+        class Geometry:
+            @staticmethod
+            def x():
+                return -1920
+
+            @staticmethod
+            def y():
+                return 100
+
+        class Pixmap:
+            @staticmethod
+            def toImage():
+                image = QImage(30, 30, QImage.Format.Format_RGBA8888)
+                image.fill(0)
+                return image
+
+        class Screen:
+            def __init__(self):
+                self.args = None
+
+            @staticmethod
+            def geometry():
+                return Geometry()
+
+            def grabWindow(self, *args):
+                self.args = args
+                return Pixmap()
+
+        screen = Screen()
+        service = ScreenCaptureService()
+
+        service.capture(screen, ScreenRegion(-1900, 130, 30, 30))
+
+        self.assertEqual(screen.args, (0, 20, 30, 30, 30))

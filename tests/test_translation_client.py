@@ -86,6 +86,39 @@ class OpenAICompatibleClientTests(unittest.TestCase):
         payload = post.call_args.kwargs["json"]
         self.assertEqual(payload["thinking"], {"type": "enabled"})
 
+    def test_chat_logs_finish_reason_for_truncation_diagnosis(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {"content": "partial translation"},
+                }
+            ]
+        }
+
+        with patch("app.translation.client.httpx.post", return_value=response), patch(
+            "app.logger.get_debug_logger"
+        ) as debug_logger:
+            client = OpenAICompatibleClient(
+                ClientConfig(
+                    base_url="https://api.deepseek.test/v1",
+                    api_key="key",
+                    model="deepseek-v4-flash",
+                )
+            )
+            result = client.chat([{"role": "user", "content": "hello"}])
+
+        self.assertEqual(result, "partial translation")
+        debug_logger.return_value.debug.assert_any_call(
+            "API response structure: message_keys=%s content_len=%d reasoning_len=%d finish_reason=%r",
+            ["content"],
+            len("partial translation"),
+            0,
+            "length",
+        )
+
     def test_complete_rejects_reasoning_content_without_final_answer(self) -> None:
         response = Mock()
         response.raise_for_status.return_value = None

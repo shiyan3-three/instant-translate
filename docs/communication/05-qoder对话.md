@@ -4,7 +4,7 @@
 > 运行脚本：`poc_agent_bootstrap.py`（Version 2，single-owner term protocol）
 > Review 脚本：`poc_agent_bootstrap_review.py`
 > 模型：Bootstrap=deepseek-v4-pro(thinking), Translation=deepseek-v4-flash(thinking=disabled)
-> 数据集：`poc_data/reference_poc_dataset.json`（status=approved, 200 条术语, 24 cases × 3 groups = 72 请求）
+> 数据集：`poc/data/reference_poc_dataset.json`（status=approved, 200 条术语, 24 cases × 3 groups = 72 请求）
 > Run ID：2026-06-29T13:56:09.431462+00:00
 
 ---
@@ -120,7 +120,7 @@ Pro 调用一次（thinking=enabled），将完整 prompt/reference 包转为显
 - `ocr_guidance`：仅在意图明确时纠正 OCR 错误；翻译可用片段不虚构缺失部分；混合脚本转平假名
 - `risk_notes`：高歧义词需上下文判断；间距不应破坏搭配；OCR 缺失标点可能导致平淡语调；最长匹配优先避免重复括号
 
-状态文件可复用：`poc_agent_bootstrap.py --state logs/poc/agent-bootstrap-state-20260629-215521.json`
+状态文件可复用：`poc_agent_bootstrap.py --state poc/results/agent-bootstrap-state-20260629-215521.json`
 
 ---
 
@@ -211,9 +211,9 @@ Version 2 的 single-owner term protocol 对两组都有改善：RETRIEVAL_RAW �
 
 | 文件 | 说明 |
 |---|---|
-| `logs/poc/agent-bootstrap-20260629-215521.jsonl` | 完整请求/响应记录（1 metadata + 1 bootstrap + 72 results + 1 summary） |
-| `logs/poc/agent-bootstrap-state-20260629-215521.json` | Pro 编译的持久状态（可复用） |
-| `logs/poc/agent-bootstrap-blind-20260629-215521.jsonl` | 盲审文件（72 条，打乱顺序，无组名，已填入评分） |
-| `logs/poc/agent-bootstrap-review-summary-20260629-215521.json` | Review 脚本输出的验证后统计摘要 |
+| `poc/results/agent-bootstrap-20260629-215521.jsonl` | 完整请求/响应记录（1 metadata + 1 bootstrap + 72 results + 1 summary） |
+| `poc/results/agent-bootstrap-state-20260629-215521.json` | Pro 编译的持久状态（可复用） |
+| `poc/results/agent-bootstrap-blind-20260629-215521.jsonl` | 盲审文件（72 条，打乱顺序，无组名，已填入评分） |
+| `poc/results/agent-bootstrap-review-summary-20260629-215521.json` | Review 脚本输出的验证后统计摘要 |
 
 盲审文件中的 `semantic_fidelity_0_to_5` 和 `naturalness_0_to_5` 字段已逐条填写并通过 `poc_agent_bootstrap_review.py` 验证。组别归属在本文档第四节揭示。

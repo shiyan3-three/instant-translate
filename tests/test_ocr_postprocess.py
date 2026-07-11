@@ -22,6 +22,23 @@ class OcrPostprocessTests(unittest.TestCase):
 
         self.assertEqual(clean, "Hello world")
 
+    def test_normalize_removes_app_toolbar_language_and_feedback_noise(self) -> None:
+        raw = (
+            "中文 日本語 下 重选 OCR 翻译有误 暂停 删除\n"
+            "今天下午两点半，我准备把这份合同检查完。"
+        )
+
+        clean = normalize_ocr_text(raw)
+
+        self.assertEqual(clean, "今天下午两点半,我准备把这份合同检查完。")
+
+    def test_normalize_removes_search_box_and_language_pair_noise(self) -> None:
+        raw = "Q搜索\n中文 => 日本語\n明明没有提交申请，系统却显示已经审核通过。"
+
+        clean = normalize_ocr_text(raw)
+
+        self.assertEqual(clean, "明明没有提交申请,系统却显示已经审核通过。")
+
     def test_normalize_removes_unicode_multiplication_size_badge(self) -> None:
         raw = "1023 × 86\nこんにちは 世界"
 

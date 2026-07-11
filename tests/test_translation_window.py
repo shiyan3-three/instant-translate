@@ -45,6 +45,38 @@ class TranslationWindowWidgetTests(unittest.TestCase):
 
         self.assertEqual(geometry.width(), 260)
 
+    def test_compute_geometry_expands_width_for_long_translation_text(self) -> None:
+        region = ScreenRegion(120, 160, 320, 96)
+        screen = QRect(0, 0, 1920, 1080)
+        long_text = (
+            "この  [いんたあふぇえす]  は  すでに  せいこう  を  "
+            "へんきゃく  している  が  ぺえじ  は  まだ  ろおどちゅう  "
+            "を  ひょうじ  している"
+        )
+
+        geometry = TranslationWindowWidget.compute_geometry(region, screen, "bottom", long_text)
+
+        self.assertGreater(geometry.width(), region.width)
+        self.assertLessEqual(geometry.width(), 700)
+
+    def test_compute_geometry_expands_height_for_very_long_translation_text(self) -> None:
+        region = ScreenRegion(120, 160, 320, 96)
+        screen = QRect(0, 0, 1920, 1080)
+        very_long_text = "ながい  ほんやく  " * 80
+
+        geometry = TranslationWindowWidget.compute_geometry(region, screen, "bottom", very_long_text)
+
+        self.assertGreater(geometry.height(), 132)
+        self.assertLessEqual(geometry.height(), 360)
+
+    def test_compute_geometry_keeps_short_translation_near_region_width(self) -> None:
+        region = ScreenRegion(120, 160, 320, 96)
+        screen = QRect(0, 0, 1920, 1080)
+
+        geometry = TranslationWindowWidget.compute_geometry(region, screen, "bottom", "ありがとう")
+
+        self.assertEqual(geometry.width(), 320)
+
     def test_widget_shows_group_and_translation_text_in_normal_mode(self) -> None:
         model = TranslationWindowModel(
             group_id=2,
@@ -66,6 +98,8 @@ class TranslationWindowWidgetTests(unittest.TestCase):
         self.assertTrue(widget.language_pair_label.isHidden())
         self.assertFalse(widget.dock_controls_visible)
         self.assertFalse(widget.translation_label.isHidden())
+        self.assertIn("QLabel#translationBody", widget.styleSheet())
+        self.assertIn("font-size: 14px", widget.styleSheet())
 
     def test_edit_mode_reveals_language_pair_without_translation_toolbar(self) -> None:
         model = TranslationWindowModel(

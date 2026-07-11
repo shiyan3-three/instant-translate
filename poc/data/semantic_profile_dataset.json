@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "status": "frozen_poc",
+  "name": "agent-semantic-profile-runtime-regressions",
+  "description": "Blind A/B benchmark for comparing the current format-only Pro profile with a structured semantic Pro profile. No case source may enter either Pro compiler payload.",
+  "cases": [
+    {
+      "id": "sp_01",
+      "scope": "runtime_regression",
+      "category": "software_state",
+      "source": "服务器刚刚重启，后台任务还没有完全恢复。",
+      "review_focus": "Preserve the recent restart and incomplete recovery; use natural Japanese software terminology without inventing a fixed glossary term.",
+      "fixture_translation": "さあばあ  が  さいきどう  した  ばかり  で  はいけい  の  たすく  が  まだ  かんぜん  に  かいふく  して  いません"
+    },
+    {
+      "id": "sp_02",
+      "scope": "runtime_regression",
+      "category": "database_state",
+      "source": "这个页面显示成功了，但数据库里没有写入记录。",
+      "review_focus": "Keep the contrast between the successful UI display and the missing database record.",
+      "fixture_translation": "この  ぺえじ  は  せいこう  を  ひょうじ  した  が  でえたべえす  に  きろく  が  かきこまれて  いない"
+    },
+    {
+      "id": "sp_03",
+      "scope": "runtime_regression",
+      "category": "it_terminology",
+      "source": "请把 API 网关的超时时间从 30 秒改成 5 秒。",
+      "review_focus": "Use the standard Japanese IT concepts for API gateway, timeout, and changing a setting; preserve both numbers.",
+      "fixture_translation": "[ええぴいあい]  げえとうぇい  の  たいむあうと  を  さんじゅうびょう  から  ごびょう  に  へんこう  してください"
+    },
+    {
+      "id": "sp_04",
+      "scope": "runtime_regression",
+      "category": "causal_uncertainty",
+      "source": "缓存命中率突然下降，可能是配置文件没有加载。",
+      "review_focus": "Preserve sudden degradation and uncertainty; express configuration loading naturally.",
+      "fixture_translation": "きゃっしゅ  の  ひっとりつ  が  とつぜん  さがった  の  は  せっていふぁいる  が  よみこまれて  いない  ため  かもしれない"
+    },
+    {
+      "id": "sp_05",
+      "scope": "runtime_regression",
+      "category": "ui_disambiguation",
+      "source": "用户已经取消订单，界面却还显示正在支付。",
+      "review_focus": "Interpret 界面 as a software screen, not a physical interface boundary; preserve the unexpected contrast.",
+      "fixture_translation": "ゆうざあ  は  すでに  ちゅうもん  を  とりけした  のに  がめん  には  まだ  しはらいちゅう  と  ひょうじ  されている"
+    },
+    {
+      "id": "sp_06",
+      "scope": "runtime_regression",
+      "category": "conditional_action",
+      "source": "如果脚本执行失败，不要重复提交同一个请求。",
+      "review_focus": "Translate the condition and prohibition as one complete sentence; keep script/request concepts natural.",
+      "fixture_translation": "すくりぷと  の  じっこう  が  しっぱい  した  ばあい  おなじ  りくえすと  を  なんども  そうしん  しないで  ください"
+    },
+    {
+      "id": "sp_07",
+      "scope": "runtime_regression",
+      "category": "it_terminology",
+      "source": "这次更新只改了前端样式，没有影响核心逻辑。",
+      "review_focus": "Preserve frontend and core-logic concepts without shortening frontend to an unrelated word.",
+      "fixture_translation": "こんかい  の  こうしん  は  ふろんとえんど  の  すたいる  だけ  を  かえ  こあ  ろじっく  には  えいきょう  して  いない"
+    },
+    {
+      "id": "sp_08",
+      "scope": "runtime_regression",
+      "category": "software_state",
+      "source": "日志里显示任务完成了，实际上队列还在阻塞。",
+      "review_focus": "Use software meanings for task, queue, and blocked; preserve the actually/contrary relation.",
+      "fixture_translation": "ろぐ  では  たすく  が  かんりょう  した  と  ひょうじ  されている  が  じっさい  には  きゅう  が  まだ  ぶろっく  されている"
+    },
+    {
+      "id": "sp_09",
+      "scope": "control",
+      "category": "deadline",
+      "source": "明天下午三点前，把会议纪要整理完。",
+      "review_focus": "Preserve the deadline and completion requirement without adding software-domain terminology.",
+      "fixture_translation": "あした  の  ごご  さんじ  まで  に  かいぎ  の  ぎじろく  を  まとめて  ください"
+    },
+    {
+      "id": "sp_10",
+      "scope": "control",
+      "category": "sequence",
+      "source": "雨停以后，我们再去附近的商店。",
+      "review_focus": "Preserve the temporal sequence and natural suggestion.",
+      "fixture_translation": "あめ  が  やんだ  あと  で  ちかく  の  みせ  に  いきましょう"
+    },
+    {
+      "id": "sp_11",
+      "scope": "control",
+      "category": "action_sequence",
+      "source": "她把钥匙放在桌上，然后关掉了房间里的灯。",
+      "review_focus": "Preserve subject, object placement, and action order in natural Japanese.",
+      "fixture_translation": "かのじょ  は  かぎ  を  つくえ  の  うえ  に  おき  それから  へや  の  あかり  を  けした"
+    },
+    {
+      "id": "sp_12",
+      "scope": "control",
+      "category": "comparison",
+      "source": "这趟列车比预定时间晚了二十分钟。",
+      "review_focus": "Preserve the comparison and twenty-minute delay without software-domain bias.",
+      "fixture_translation": "この  れっしゃ  は  よてい  より  にじゅっぷん  おくれている"
+    }
+  ]
+}

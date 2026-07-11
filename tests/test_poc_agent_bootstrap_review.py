@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from poc_agent_bootstrap_review import ReviewError, aggregate_reviews, load_result_mapping
+from poc.poc_agent_bootstrap_review import ReviewError, aggregate_reviews, load_result_mapping
 
 
 class ReviewAggregationTests(unittest.TestCase):

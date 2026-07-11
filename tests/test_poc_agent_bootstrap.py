@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from poc_agent_bootstrap import (
+from poc.poc_agent_bootstrap import (
     BootstrapStateError,
     _load_state,
     _write_blind_review,
@@ -20,11 +20,11 @@ from poc_agent_bootstrap import (
     summarize,
     validate_bootstrap_state,
 )
-from poc_reference_injection import evaluate_response, load_dataset
+from poc.poc_reference_injection import evaluate_response, load_dataset
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASET_PATH = ROOT / "poc_data" / "reference_poc_dataset.json"
+DATASET_PATH = ROOT / "poc" / "data" / "reference_poc_dataset.json"
 
 
 class BootstrapStateTests(unittest.TestCase):

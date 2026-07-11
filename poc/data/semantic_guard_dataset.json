@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "status": "frozen_poc",
+  "name": "semantic-guard-production-regressions",
+  "description": "Frozen benchmark built from the 2026-07-03 production GUI failures. Pure numeric expressions are never technical terms and therefore must not be wrapped in square brackets.",
+  "training_incidents": [
+    {
+      "id": "ti_prepare_incomplete",
+      "source": "今天是2026年7月3日，我准备学习第42课。",
+      "bad": "きょう  は  にせんにじゅうろくねん  しちがつ  みっか  です  わたし  は  だい  よんじゅうに  か  を  べんきょう  する  じゅんび  を",
+      "diagnosis": "The source expresses a plan to study, but the output ends with じゅんび を and has no governing predicate. Analogous 准备 constructions must preserve the intended plan or preparation and finish with a complete Japanese predicate."
+    },
+    {
+      "id": "ti_mingming_contrast",
+      "source": "小李明明把书放在桌子上。",
+      "bad": "りいさん  は  ほん  を  つくえ  の  うえ  に  おいた  はず  なのに",
+      "diagnosis": "The visible source contains no explicit following contradiction, yet the output adds an unsupported expectation and ends with なのに. 明明 must be resolved from the full sentence: preserve explicit contrast when present, but do not invent a dangling contrast when it is absent."
+    },
+    {
+      "id": "ti_numeric_hiragana",
+      "source": "商品原价是4.0元，成绩在70到80分之间。",
+      "bad": "しょうひん  の  もとの  ねだん  は  4.0  げん  で  せいせき  は  70  から  80  てん  の  あいだ  です",
+      "diagnosis": "Flash leaves ASCII digits in an output constrained to hiragana, which triggers a slow Pro retry. Pure numbers are not technical terms and must be rendered as context-appropriate hiragana readings without square brackets."
+    }
+  ],
+  "cases": [
+    {
+      "id": "sg_01",
+      "scope": "seen_regression",
+      "category": "incomplete_predicate",
+      "source": "今天是2026年7月3日，我准备学习第42课。",
+      "review_focus": "Preserve the date and study plan, and finish the 准备 clause with a complete predicate.",
+      "fixture_translation": "きょう  は  にせんにじゅうろくねん  しちがつ  みっか  です  わたし  は  だいよんじゅうにか  を  べんきょうする  よてい  です",
+      "required_all": ["きょう", "にせんにじゅうろくねん", "だいよんじゅうにか", "べんきょう"],
+      "required_any": [["よてい", "つもり", "べんきょうしよう"]],
+      "forbidden": ["じゅんび を"],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_02",
+      "scope": "seen_regression",
+      "category": "contrast_injection",
+      "source": "小李明明把书放在桌子上。",
+      "review_focus": "Treat 小李 as a person and do not invent an unfinished contrast after 明明.",
+      "fixture_translation": "りいさん  は  たしかに  ほん  を  つくえ  の  うえ  に  おきました",
+      "required_all": ["りいさん", "たしかに", "ほん", "つくえ", "おきました"],
+      "required_any": [],
+      "forbidden": ["はず", "なのに"],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_03",
+      "scope": "seen_regression",
+      "category": "numeric_reading",
+      "source": "商品原价是4.0元，成绩在70到80分之间。",
+      "review_focus": "Render the decimal and score range as hiragana without treating them as bracketed technical terms.",
+      "fixture_translation": "しょうひん  の  もとの  ねだん  は  よんてんぜろげん  で  せいせき  は  ななじゅってん  から  はちじゅってん  の  あいだ  です",
+      "required_all": ["よんてんぜろげん", "ななじゅってん", "はちじゅってん", "です"],
+      "required_any": [],
+      "forbidden": ["4.0", "70", "80"],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_04",
+      "scope": "held_out",
+      "category": "incomplete_predicate",
+      "source": "我准备明天开始学习第九课。",
+      "review_focus": "Generalize the 准备 lesson: express the plan to begin lesson nine tomorrow with a complete predicate.",
+      "fixture_translation": "わたし  は  あした  だいきゅうか  の  べんきょう  を  はじめる  よてい  です",
+      "required_all": ["あした", "だいきゅうか", "べんきょう", "はじめる"],
+      "required_any": [["よてい", "つもり"]],
+      "forbidden": ["じゅんび を"],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_05",
+      "scope": "held_out",
+      "category": "contrast_injection",
+      "source": "小王明明把钥匙放进抽屉了。",
+      "review_focus": "Generalize the person-name and 明明 rule without adding an unsupported contrast.",
+      "fixture_translation": "わんさん  は  たしかに  かぎ  を  ひきだし  の  なか  に  いれました",
+      "required_all": ["わんさん", "たしかに", "かぎ", "ひきだし", "いれました"],
+      "required_any": [],
+      "forbidden": ["はず", "なのに"],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_06",
+      "scope": "held_out",
+      "category": "explicit_contrast",
+      "source": "明明已经测试过了，为什么还会失败？",
+      "review_focus": "Preserve the rhetorical contradiction signalled by 明明 and 为什么, but still return a complete sentence.",
+      "fixture_translation": "たしかに  すでに  てすとした  のに  なぜ  まだ  しっぱいする  の  でしょう",
+      "required_all": ["てすと", "なぜ", "しっぱい"],
+      "required_any": [["のに", "それでも"]],
+      "forbidden": ["こんにちは"],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_07",
+      "scope": "held_out",
+      "category": "numeric_date",
+      "source": "会议定在2026年7月4日下午4点30分。",
+      "review_focus": "Preserve the full date and afternoon time using natural hiragana readings without ASCII digits.",
+      "fixture_translation": "かいぎ  は  にせんにじゅうろくねん  しちがつ  よっか  の  ごご  よじはん  に  よていされて  います",
+      "required_all": ["にせんにじゅうろくねん", "しちがつ", "よっか", "ごご", "よじはん"],
+      "required_any": [],
+      "forbidden": ["2026", "7", "4", "30"],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_08",
+      "scope": "held_out",
+      "category": "numeric_decimal",
+      "source": "温度保持在4.0度，误差不能超过0.5度。",
+      "review_focus": "Render both decimals, preserve the maximum-error constraint, and use no bracketed numeric pseudo-terms.",
+      "fixture_translation": "おんど  は  よんてんぜろど  に  たもち  ごさ  は  れいてんごど  を  こえては  いけません",
+      "required_all": ["よんてんぜろど", "れいてんごど", "こえては", "いけません"],
+      "required_any": [],
+      "forbidden": ["4.0", "0.5"],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_09",
+      "scope": "held_out",
+      "category": "numeric_duration",
+      "source": "完成这项工作大约需要3个小时。",
+      "review_focus": "Use a natural Japanese duration expression and convert the number to hiragana.",
+      "fixture_translation": "この  しごと  を  おえる  には  やく  さんじかん  かかります",
+      "required_all": ["しごと", "やく", "さんじかん", "かかります"],
+      "required_any": [],
+      "forbidden": ["3"],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_10",
+      "scope": "control",
+      "category": "explicit_contrast_control",
+      "source": "虽然测试通过了，但是现在还不能发布。",
+      "review_focus": "The guard must not erase an explicit contrast that is present in the source.",
+      "fixture_translation": "てすと  は  とおりました  が  いま  は  まだ  りりいす  できません",
+      "required_all": ["てすと", "とおりました", "まだ", "りりいす", "できません"],
+      "required_any": [["が", "けれど", "のに"]],
+      "forbidden": [],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_11",
+      "scope": "control",
+      "category": "condition_control",
+      "source": "如果今晚发布失败，马上回滚到上一个版本。",
+      "review_focus": "Preserve the failure condition, urgency, rollback action, and previous-version destination.",
+      "fixture_translation": "こんや  の  りりいす  が  しっぱいしたら  すぐ  に  ひとつまえ  の  ばあじょん  に  もどしてください",
+      "required_all": ["こんや", "しっぱいしたら", "すぐ", "ひとつまえ", "ばあじょん", "もどしてください"],
+      "required_any": [],
+      "forbidden": [],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    },
+    {
+      "id": "sg_12",
+      "scope": "control",
+      "category": "ordinary_sentence_control",
+      "source": "今天天气很好，我们下午去公园散步吧。",
+      "review_focus": "Keep a normal invitation natural and complete without unnecessary retrieved rules.",
+      "fixture_translation": "きょう  は  てんき  が  とても  よい  ので  ごご  こうえん  へ  さんぽ  に  いきましょう",
+      "required_all": ["きょう", "てんき", "ごご", "こうえん", "さんぽ", "いきましょう"],
+      "required_any": [],
+      "forbidden": [],
+      "expected_complete": true,
+      "expected_ascii_digit_free": true
+    }
+  ]
+}

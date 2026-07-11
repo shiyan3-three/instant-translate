@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "status": "frozen_poc",
+  "name": "agent-runtime-profile-projection",
+  "description": "Blind replacement-handoff benchmark. Evaluation sources are held out from both Pro payloads and contain no expected translations.",
+  "cases": [
+    {
+      "id": "rp_01",
+      "scope": "runtime_regression",
+      "category": "condition_and_negation",
+      "source": "如果健康检查没有通过，就不要切换到新的节点。",
+      "review_focus": "Preserve the failed condition and the prohibition against switching nodes.",
+      "fixture_translation": "へるす  ちぇっく  が  とおらなかった  ばあい  あたらしい  のおど  に  きりかえないで  ください"
+    },
+    {
+      "id": "rp_02",
+      "scope": "runtime_regression",
+      "category": "imperative",
+      "source": "请先保存当前设置，再关闭这个窗口。",
+      "review_focus": "Keep the command tone and the required order: save first, then close.",
+      "fixture_translation": "まず  げんざい  の  せってい  を  ほぞん  して  から  この  まど  を  とじて  ください"
+    },
+    {
+      "id": "rp_03",
+      "scope": "runtime_regression",
+      "category": "contrast",
+      "source": "通知显示上传成功，远端目录里却找不到文件。",
+      "review_focus": "Preserve the contradiction between the success notification and the missing remote file.",
+      "fixture_translation": "つうち  では  あっぷろおど  が  せいこう  した  と  ひょうじ  されている  のに  りもおと  の  ふぉるだ  には  ふぁいる  が  みつからない"
+    },
+    {
+      "id": "rp_04",
+      "scope": "runtime_regression",
+      "category": "causality",
+      "source": "由于权限校验失败，这次同步没有继续执行。",
+      "review_focus": "Keep the permission-check failure as the cause of synchronization stopping.",
+      "fixture_translation": "けんげん  の  かくにん  に  しっぱい  した  ため  こんかい  の  どうき  は  つづけて  じっこう  されなかった"
+    },
+    {
+      "id": "rp_05",
+      "scope": "runtime_regression",
+      "category": "ui_state",
+      "source": "用户已经退出登录，页面右上角仍然显示他的头像。",
+      "review_focus": "Preserve the stale UI state after logout and express the screen location naturally.",
+      "fixture_translation": "ゆうざあ  は  すでに  ろぐあうと  した  のに  ぺえじ  の  みぎうえ  には  まだ  その  あばたあ  が  ひょうじ  されている"
+    },
+    {
+      "id": "rp_06",
+      "scope": "runtime_regression",
+      "category": "timeout_and_configuration",
+      "source": "连接等待了十五秒后超时，请检查代理配置。",
+      "review_focus": "Preserve the fifteen-second timeout and interpret proxy configuration in software context.",
+      "fixture_translation": "せつぞく  は  じゅうごびょう  まった  あと  たいむあうと  した  ので  ぷろきしい  の  せってい  を  かくにん  して  ください"
+    },
+    {
+      "id": "rp_07",
+      "scope": "runtime_regression",
+      "category": "queue_and_task_state",
+      "source": "处理任务已经停止，但消息队列还在继续增长。",
+      "review_focus": "Preserve the stopped task, continuing queue growth, and contrast between them.",
+      "fixture_translation": "しょり  たすく  は  すでに  ていし  した  が  めっせえじ  きゅう  は  まだ  ふえつづけている"
+    },
+    {
+      "id": "rp_08",
+      "scope": "runtime_regression",
+      "category": "deadline_and_quantity",
+      "source": "请在今天六点之前完成三份报告的审核。",
+      "review_focus": "Preserve the deadline, quantity of three, review action, and command tone.",
+      "fixture_translation": "きょう  の  ろくじ  まで  に  さんつう  の  ほうこくしょ  の  しんさ  を  おえて  ください"
+    },
+    {
+      "id": "rp_09",
+      "scope": "control",
+      "category": "daily_action",
+      "source": "她把洗好的杯子放回柜子里。",
+      "review_focus": "Translate an ordinary completed household action naturally without software bias.",
+      "fixture_translation": "かのじょ  は  あらった  こっぷ  を  たな  に  もどした"
+    },
+    {
+      "id": "rp_10",
+      "scope": "control",
+      "category": "time_sequence",
+      "source": "吃完晚饭以后，我们一起去散步。",
+      "review_focus": "Preserve the after-dinner sequence and natural joint-action suggestion.",
+      "fixture_translation": "ばんごはん  を  たべおわった  あと  で  いっしょ  に  さんぽ  しましょう"
+    },
+    {
+      "id": "rp_11",
+      "scope": "control",
+      "category": "ordinary_request",
+      "source": "请把靠窗的那本蓝色笔记本递给我。",
+      "review_focus": "Preserve the request, object color, and location by the window.",
+      "fixture_translation": "まどぎわ  に  ある  あおい  のおと  を  わたして  ください"
+    },
+    {
+      "id": "rp_12",
+      "scope": "control",
+      "category": "simple_statement",
+      "source": "这家书店每周一上午十点开门。",
+      "review_focus": "Preserve the recurring weekday and opening time in a simple factual statement.",
+      "fixture_translation": "この  ほんや  は  まいしゅう  げつようび  の  ごぜん  じゅうじ  に  ひらく"
+    }
+  ]
+}

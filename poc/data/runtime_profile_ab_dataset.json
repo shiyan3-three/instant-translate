@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "status": "frozen_poc",
+  "name": "runtime-profile-zero-pro-flash-ab",
+  "description": "Held-out Chinese OCR sentences for a zero-Pro Flash A/B comparison of the current runtime and the same runtime with one confirmed local RuntimeProfile block.",
+  "cases": [
+    {
+      "id": "rpa_01",
+      "scope": "runtime_regression",
+      "category": "already_and_not_yet",
+      "source": "监控面板已经恢复正常，但告警记录还没有清除。",
+      "review_focus": "Preserve that recovery already happened while alert records have not yet been cleared.",
+      "fixture_translation": "かんし  がめん  は  すでに  せいじょう  に  もどった  が  けいほう  の  きろく  は  まだ  けされて  いない"
+    },
+    {
+      "id": "rpa_02",
+      "scope": "runtime_regression",
+      "category": "not_yet_and_still",
+      "source": "更新包还没下载完，安装任务仍然在等待。",
+      "review_focus": "Preserve incomplete downloading and the task that is still waiting.",
+      "fixture_translation": "こうしん  ふぁいる  は  まだ  だうんろおど  しおわって  おらず  いんすとおる  たすく  は  いまも  まっている"
+    },
+    {
+      "id": "rpa_03",
+      "scope": "runtime_regression",
+      "category": "stale_ui_state",
+      "source": "用户关闭了弹窗，界面上仍然显示加载状态。",
+      "review_focus": "Preserve the stale UI loading state after the user closed the popup.",
+      "fixture_translation": "ゆうざあ  が  ぽっぷあっぷ  を  とじた  のに  がめん  には  まだ  よみこみちゅう  と  ひょうじ  されている"
+    },
+    {
+      "id": "rpa_04",
+      "scope": "runtime_regression",
+      "category": "continuous_repetition",
+      "source": "这个服务从早上开始一直重复提交同一个任务。",
+      "review_focus": "Preserve continuous repetition since the morning and the same-task object.",
+      "fixture_translation": "この  さあびす  は  あさ  から  ずっと  おなじ  たすく  を  くりかえし  そうしん  している"
+    },
+    {
+      "id": "rpa_05",
+      "scope": "runtime_regression",
+      "category": "if_condition",
+      "source": "如果系统没有收到确认消息，就保持当前页面不变。",
+      "review_focus": "Preserve the negative condition and instruction to keep the current page unchanged.",
+      "fixture_translation": "もし  しすてむ  が  かくにん  めっせえじ  を  うけとらなければ  げんざい  の  ぺえじ  を  そのまま  に  して  ください"
+    },
+    {
+      "id": "rpa_06",
+      "scope": "runtime_regression",
+      "category": "as_long_as_condition",
+      "source": "只要队列里还有任务，处理程序就继续运行。",
+      "review_focus": "Preserve the as-long-as condition, remaining queue tasks, and continued execution.",
+      "fixture_translation": "きゅう  に  たすく  が  のこっている  かぎり  しょり  ぷろぐらむ  は  うごきつづける"
+    },
+    {
+      "id": "rpa_07",
+      "scope": "runtime_regression",
+      "category": "unless_and_timeout",
+      "source": "除非连接在十秒内恢复，否则这次请求会超时。",
+      "review_focus": "Preserve the unless condition, ten-second limit, and timeout consequence.",
+      "fixture_translation": "せつぞく  が  じゅうびょう  いない  に  もどらない  かぎり  こんかい  の  りくえすと  は  たいむあうと  する"
+    },
+    {
+      "id": "rpa_08",
+      "scope": "runtime_regression",
+      "category": "passive_relation",
+      "source": "配置文件被后台任务覆盖后，系统重新启动了服务。",
+      "review_focus": "Preserve the passive overwrite, temporal order, and subsequent service restart.",
+      "fixture_translation": "せってい  ふぁいる  が  はいけい  たすく  に  うわがき  された  あと  しすてむ  は  さあびす  を  さいきどう  した"
+    },
+    {
+      "id": "rpa_09",
+      "scope": "control",
+      "category": "ordinary_completed_action",
+      "source": "她已经把借来的雨伞还给邻居了。",
+      "review_focus": "Preserve an already-completed ordinary return action and its recipient.",
+      "fixture_translation": "かのじょ  は  かりた  かさ  を  すでに  となり  の  ひと  に  かえした"
+    },
+    {
+      "id": "rpa_10",
+      "scope": "control",
+      "category": "ordinary_condition",
+      "source": "只要天气晴朗，我们就去河边散步。",
+      "review_focus": "Translate an ordinary weather condition and planned walk naturally.",
+      "fixture_translation": "てんき  が  はれている  かぎり  わたしたち  は  かわべ  へ  さんぽ  に  いく"
+    },
+    {
+      "id": "rpa_11",
+      "scope": "control",
+      "category": "daily_sequence_request",
+      "source": "晚饭做好以后，请先叫孩子们洗手。",
+      "review_focus": "Preserve the after-dinner sequence and the request that children wash first.",
+      "fixture_translation": "ばんごはん  が  できた  あと  まず  こどもたち  に  て  を  あらう  よう  よんで  ください"
+    },
+    {
+      "id": "rpa_12",
+      "scope": "control",
+      "category": "ordinary_continuous_state",
+      "source": "那只猫一直趴在窗边看外面的鸟。",
+      "review_focus": "Preserve the cat's continuing posture and observation target.",
+      "fixture_translation": "その  ねこ  は  ずっと  まどべ  に  ねころんで  そと  の  とり  を  みている"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from poc_agent_retrieved_policy_judge import (
+from poc.poc_agent_retrieved_policy_judge import (
     BlindJudgeError,
     build_judge_payload_rows,
     load_anonymous_rows,

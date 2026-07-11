@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from poc_reference_injection import (
+from poc.poc_reference_injection import (
     GlossaryEntry,
     PocCase,
     PocDataset,

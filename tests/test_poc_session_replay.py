@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from poc_reference_injection import load_dataset
-from poc_session_replay import (
+from poc.poc_reference_injection import load_dataset
+from poc.poc_session_replay import (
     _DRY_PRO_CONTENT,
     SessionReplayError,
     build_rule_package,
@@ -23,7 +23,7 @@ from poc_session_replay import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASET_PATH = ROOT / "poc_data" / "reference_poc_dataset.json"
+DATASET_PATH = ROOT / "poc" / "data" / "reference_poc_dataset.json"
 
 
 class SessionMessageTests(unittest.TestCase):

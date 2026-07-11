@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from poc_agent_lifecycle import (
+from poc.poc_agent_lifecycle import (
     LifecyclePocError,
     build_session_system,
     evaluate_preference,
@@ -23,8 +23,8 @@ from poc_agent_lifecycle import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LIFECYCLE_PATH = ROOT / "poc_data" / "agent_lifecycle_dataset.json"
-TRANSLATION_PATH = ROOT / "poc_data" / "reference_poc_dataset.json"
+LIFECYCLE_PATH = ROOT / "poc" / "data" / "agent_lifecycle_dataset.json"
+TRANSLATION_PATH = ROOT / "poc" / "data" / "reference_poc_dataset.json"
 
 
 class LifecycleDataTests(unittest.TestCase):

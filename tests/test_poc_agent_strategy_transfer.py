@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from poc_agent_strategy_transfer import (
+from poc.poc_agent_strategy_transfer import (
     GROUPS,
     StrategyPocError,
     build_bootstrap_turn,
@@ -25,8 +25,8 @@ from poc_agent_strategy_transfer import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STRATEGY_PATH = ROOT / "poc_data" / "agent_strategy_transfer_dataset.json"
-TRANSLATION_PATH = ROOT / "poc_data" / "reference_poc_dataset.json"
+STRATEGY_PATH = ROOT / "poc" / "data" / "agent_strategy_transfer_dataset.json"
+TRANSLATION_PATH = ROOT / "poc" / "data" / "reference_poc_dataset.json"
 
 
 class StrategyDatasetTests(unittest.TestCase):
