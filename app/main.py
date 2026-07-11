@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QApplication
 from app.app_context import ApplicationContext
 from app.feedback.store import FeedbackStore
 from app.gui.main_window import MainWindow
-from app.gui.settings_window import SettingsWindow
 from app.gui.tray_icon import TrayIconController
 from app.hotkeys import GlobalHotkeyService, HotkeyMap
 from app.overlay.edit_mode_controller import EditModeController
@@ -26,7 +25,6 @@ class DesktopShell:
     app: QApplication
     context: ApplicationContext
     main_window: MainWindow
-    settings_window: SettingsWindow
     tray_icon: TrayIconController
     hotkeys: GlobalHotkeyService
     runtime_store: RuntimeStore
@@ -59,13 +57,12 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
     context = build_application_context()
     runtime_store = RuntimeStore()
     feedback_store = FeedbackStore()
-    settings_window = SettingsWindow(context.settings)
     main_window = MainWindow(
         context,
         runtime_store=runtime_store,
         feedback_store=feedback_store,
     )
-    tray_icon = TrayIconController(app, main_window, settings_window, main_window)
+    tray_icon = TrayIconController(app, main_window, parent=main_window)
     hotkeys = GlobalHotkeyService(app, context.hotkeys, main_window)
     selection_workflow = SelectionWorkflowController(
         app=app,
@@ -87,9 +84,11 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
             region = runtime_store.regions.get(gid)
             if region is not None:
                 selection_workflow._upsert_selection_box(gid, region)
+        selection_workflow.reload_translation_agents()
 
     main_window.default_language_changed.connect(_apply_default_language)
     main_window.compiled_prompt_saved.connect(selection_workflow.reload_translation_agents)
+    main_window.model_config_changed.connect(selection_workflow.reload_translation_agents)
     hotkeys.create_selection_triggered.connect(selection_workflow.request_new_selection)
     hotkeys.toggle_edit_mode_triggered.connect(selection_workflow.toggle_edit_mode)
 
@@ -111,7 +110,6 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
         app=app,
         context=context,
         main_window=main_window,
-        settings_window=settings_window,
         tray_icon=tray_icon,
         hotkeys=hotkeys,
         runtime_store=runtime_store,

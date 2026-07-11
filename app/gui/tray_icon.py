@@ -6,7 +6,6 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon, QWidget
 
 from app.gui.main_window import MainWindow
-from app.gui.settings_window import SettingsWindow
 
 
 class TrayIconController:
@@ -16,12 +15,11 @@ class TrayIconController:
         self,
         app: QApplication,
         main_window: MainWindow,
-        settings_window: SettingsWindow,
+        settings_window: QWidget | None = None,
         parent: QWidget | None = None,
     ) -> None:
         self._app = app
         self._main_window = main_window
-        self._settings_window = settings_window
 
         icon = main_window.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
         self.tray_icon = QSystemTrayIcon(icon, parent or main_window)
@@ -39,7 +37,7 @@ class TrayIconController:
         self.tray_icon.setContextMenu(self.menu)
 
         self.toggle_main_window_action.triggered.connect(self.toggle_main_window)
-        self.open_settings_action.triggered.connect(self._settings_window.show_window)
+        self.open_settings_action.triggered.connect(self._open_settings)
         self.exit_action.triggered.connect(self._app.quit)
         self.tray_icon.activated.connect(self._handle_activation)
 
@@ -56,6 +54,12 @@ class TrayIconController:
             self._main_window.hide()
         else:
             self._main_window.show_window()
+        self.refresh_main_window_action_text()
+
+    def _open_settings(self) -> None:
+        """Open the single current settings surface in the main window."""
+
+        self._main_window.show_window()
         self.refresh_main_window_action_text()
 
     def refresh_main_window_action_text(self) -> None:

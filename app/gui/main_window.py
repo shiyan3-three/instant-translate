@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 from pathlib import Path
 from collections.abc import Callable
@@ -336,8 +337,16 @@ class TemplatePage(QWidget):
         rm_know_btn = QPushButton("− 移除")
         rm_know_btn.setObjectName("secondaryButton")
         rm_know_btn.clicked.connect(self._on_remove_knowledge)
+        self._preview_refs_btn = QPushButton("预览解析")
+        self._preview_refs_btn.setObjectName("secondaryButton")
+        self._preview_refs_btn.clicked.connect(self._on_preview_references)
+        self._export_ai_refs_btn = QPushButton("导出AI候选")
+        self._export_ai_refs_btn.setObjectName("secondaryButton")
+        self._export_ai_refs_btn.clicked.connect(self._on_export_ai_reference_candidates)
         know_btn_row.addWidget(add_know_btn)
         know_btn_row.addWidget(rm_know_btn)
+        know_btn_row.addWidget(self._preview_refs_btn)
+        know_btn_row.addWidget(self._export_ai_refs_btn)
         know_btn_row.addStretch(1)
         layout.addLayout(know_btn_row)
 
@@ -411,12 +420,81 @@ class TemplatePage(QWidget):
     def _on_add_knowledge(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(self, "选择知识文档", str(self._knowledge_reference_dir()), "Markdown 文件 (*.md);;所有文件 (*)")
         if file_path:
-            self._knowledge_paths.append(file_path)
-            self._knowledge_list.setPlainText("\n".join(self._knowledge_paths))
+            self._add_knowledge_path(file_path)
 
     def _on_remove_knowledge(self) -> None:
         self._knowledge_paths.clear()
         self._knowledge_list.clear()
+
+    def _add_knowledge_path(self, file_path: str) -> bool:
+        path = str(file_path).strip()
+        if not path or path in self._knowledge_paths:
+            return False
+        self._knowledge_paths.append(path)
+        self._refresh_knowledge_list()
+        return True
+
+    def _refresh_knowledge_list(self) -> None:
+        self._knowledge_list.setPlainText("\n".join(self._knowledge_paths))
+
+    def _on_preview_references(self) -> None:
+        QMessageBox.information(self, "知识引用解析预览", self._build_reference_preview())
+
+    def _build_reference_preview(self) -> str:
+        if not self._knowledge_paths:
+            return "尚未添加知识引用文档。"
+        parts: list[str] = []
+        total_entries = 0
+        total_style = 0
+        total_risk = 0
+        for path in self._knowledge_paths:
+            package = self._prompt_storage.preview_reference_file(path)
+            total_entries += len(package.entries)
+            total_style += len(package.style_guidance)
+            total_risk += len(package.risk_notes)
+            lines = [f"文件：{path}"]
+            if package.entries:
+                lines.append("术语：")
+                for entry in package.entries[:12]:
+                    lines.append(f"  • {entry.source} -> {entry.target}")
+                if len(package.entries) > 12:
+                    lines.append(f"  • ... 另 {len(package.entries) - 12} 条")
+            if package.style_guidance:
+                lines.append("风格：")
+                lines.extend(f"  • {item}" for item in package.style_guidance[:6])
+            if package.risk_notes:
+                lines.append("风险/注意：")
+                lines.extend(f"  • {item}" for item in package.risk_notes[:6])
+            if package.is_empty:
+                lines.append("  （未解析出术语、风格或风险提示）")
+            parts.append("\n".join(lines))
+        summary = f"总计：术语 {total_entries} 条，风格 {total_style} 条，风险/注意 {total_risk} 条。"
+        return summary + "\n\n" + "\n\n".join(parts)
+
+    def _on_export_ai_reference_candidates(self) -> None:
+        candidate_path = self._prompt_storage.export_ai_optimization_reference_candidates(
+            self._compiled_path.text().strip() or "prompts/compiled-prompt.md"
+        )
+        if candidate_path is None:
+            QMessageBox.information(
+                self,
+                "没有候选术语",
+                "当前 compiled prompt 的 AI Optimization Layer 中没有可导出的术语候选。",
+            )
+            return
+        confirmed = QMessageBox.question(
+            self,
+            "导出AI候选术语",
+            f"已导出候选文件：\n{candidate_path}\n\n"
+            "这些术语来自 AI 生成内容，尚未被信任。是否现在加入知识引用列表？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirmed == QMessageBox.StandardButton.Yes:
+            added = self._add_knowledge_path(str(candidate_path))
+            if added:
+                self._save_status.setText("已加入候选知识引用，请预览确认后再保存启用。")
+                self._save_status.setStyleSheet("color: #fbbf24; font-size: 12px;")
 
     def _refresh_constraints_preview(self) -> None:
         text = self._constraints_text.strip()
@@ -511,7 +589,7 @@ class TemplatePage(QWidget):
             return
 
         optimized = result_holder.get("optimized", self._constraints_text)
-        user_preview = self._build_user_preview(optimized)
+        user_preview = self._build_user_preview(optimized, policy=compiled.policy)
         if not self._confirm_compiled_prompt(user_preview):
             self._save_status.setText("已取消")
             self._save_status.setStyleSheet("color: #94a3b8; font-size: 12px;")
@@ -521,6 +599,8 @@ class TemplatePage(QWidget):
             saved_path = self._prompt_storage.save_compiled_prompt(
                 compiled.content,
                 settings.prompt.compiled_prompt_path,
+                policy=compiled.policy,
+                reference_package=compiled.reference_package,
             )
             stored_path = self._prompt_storage.stored_compiled_prompt_path(
                 settings.prompt.compiled_prompt_path
@@ -553,7 +633,7 @@ class TemplatePage(QWidget):
     def _collect_knowledge_references(self) -> list[PromptKnowledgeReference]:
         return [PromptKnowledgeReference(path=path) for path in self._knowledge_paths]
 
-    def _build_user_preview(self, optimized: str = "") -> str:
+    def _build_user_preview(self, optimized: str = "", policy: dict | None = None) -> str:
         parts: list[str] = []
         c = optimized.strip() if optimized else self._constraints_text.strip()
         parts.append(f"约束层：\n{c if c else '（未填写）'}")
@@ -563,6 +643,11 @@ class TemplatePage(QWidget):
             parts.append(f"知识引用层（{len(refs)} 个文档）：\n" + "\n".join(f"  • {r}" for r in refs))
         else:
             parts.append("知识引用层：\n（未添加）")
+        if policy:
+            parts.append(
+                "本地声明式约束（仅执行这些白名单规则）：\n"
+                + json.dumps(policy, ensure_ascii=False, indent=2)
+            )
         return "\n\n".join(parts)
 
     def _confirm_compiled_prompt_with_dialog(self, content: str) -> bool:
@@ -598,6 +683,7 @@ class ModelPage(QWidget):
     """OpenAI-compatible API configuration with live test."""
 
     config_changed = Signal(str, str, str, str)
+    _test_done = Signal(bool, str)
 
     def __init__(
         self,
@@ -629,6 +715,7 @@ class ModelPage(QWidget):
         self._test_btn.setObjectName("secondaryButton")
         self._test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._test_btn.clicked.connect(self._on_test)
+        self._test_done.connect(self._show_result)
         self._test_status = QLabel("")
         self._test_status.setObjectName("hintLabel")
 
@@ -679,28 +766,32 @@ class ModelPage(QWidget):
         self._test_btn.setEnabled(False)
         self._test_status.setText("测试中...")
         self._test_status.setStyleSheet("color: #fbbf24; font-size: 12px;")
-        QApplication.processEvents()
+        threading.Thread(
+            target=self._run_connection_test,
+            args=(base, key, model or "deepseek-v4-flash"),
+            daemon=True,
+        ).start()
+
+    def _run_connection_test(self, base: str, key: str, model: str) -> None:
+        """Run the network probe away from the Qt event loop."""
 
         import time as _time
 
         ok, msg = False, ""
         t0 = _time.perf_counter()
         try:
-            client = OpenAICompatibleClient(ClientConfig(base_url=base, api_key=key, model=model or "deepseek-v4-flash"))
+            client = OpenAICompatibleClient(
+                ClientConfig(base_url=base, api_key=key, model=model)
+            )
             client.translate("You are a test.", "hello")
             elapsed = (_time.perf_counter() - t0) * 1000
             ok, msg = True, f"连接成功 ({elapsed:.0f}ms)"
-        except TranslationError as e:
+        except TranslationError as exc:
             elapsed = (_time.perf_counter() - t0) * 1000
-            msg = f"{e} ({elapsed:.0f}ms)"[:80]
-        except Exception as e:
-            msg = str(e)[:80]
-
-        self._test_btn.setEnabled(True)
-        self._test_status.setText(msg)
-        self._test_status.setStyleSheet(
-            f"color: {'#4ade80' if ok else '#f87171'}; font-size: 12px;"
-        )
+            msg = f"{exc} ({elapsed:.0f}ms)"[:80]
+        except Exception as exc:
+            msg = str(exc)[:80]
+        self._test_done.emit(ok, msg)
 
     def _show_result(self, ok: bool, msg: str) -> None:
         self._test_btn.setEnabled(True)
@@ -972,7 +1063,7 @@ class PromptPage(QWidget):
 
         # Confirm with optimized user layer (not raw input)
         optimized = result_holder.get("optimized", self._constraints_text)
-        user_preview = self._build_user_preview(optimized)
+        user_preview = self._build_user_preview(optimized, policy=compiled.policy)
         if not self._confirm_compiled_prompt(user_preview):
             self._save_status.setText("已取消")
             self._save_status.setStyleSheet("color: #94a3b8; font-size: 12px;")
@@ -982,6 +1073,8 @@ class PromptPage(QWidget):
             saved_path = self._prompt_storage.save_compiled_prompt(
                 compiled.content,
                 settings.prompt.compiled_prompt_path,
+                policy=compiled.policy,
+                reference_package=compiled.reference_package,
             )
             stored_path = self._prompt_storage.stored_compiled_prompt_path(
                 settings.prompt.compiled_prompt_path
@@ -1013,7 +1106,7 @@ class PromptPage(QWidget):
     def _collect_knowledge_references(self) -> list[PromptKnowledgeReference]:
         return [PromptKnowledgeReference(path=path) for path in self._knowledge_paths]
 
-    def _build_user_preview(self, optimized: str = "") -> str:
+    def _build_user_preview(self, optimized: str = "", policy: dict | None = None) -> str:
         """Build a two-layer preview: constraints + knowledge (no system template)."""
 
         parts: list[str] = []
@@ -1025,6 +1118,11 @@ class PromptPage(QWidget):
             parts.append(f"知识引用层（{len(refs)} 个文档）：\n" + "\n".join(f"  • {r}" for r in refs))
         else:
             parts.append("知识引用层：\n（未添加）")
+        if policy:
+            parts.append(
+                "本地声明式约束（仅执行这些白名单规则）：\n"
+                + json.dumps(policy, ensure_ascii=False, indent=2)
+            )
         return "\n\n".join(parts)
 
     def _confirm_compiled_prompt_with_dialog(self, content: str) -> bool:
@@ -1223,7 +1321,9 @@ class FeedbackPage(QWidget):
         self._note_text.setMinimumHeight(72)
 
         self._corrected_translation_text = QPlainTextEdit()
-        self._corrected_translation_text.setPlaceholderText("可选：你认可的译文。也可以先让 AI 优化后再确认。")
+        self._corrected_translation_text.setPlaceholderText(
+            "AI 优化后会把建议译文放在这里；请判断、修改后再确认。"
+        )
         self._corrected_translation_text.setMinimumHeight(82)
 
         self._keyword_editor = KeywordTagEditor()
@@ -1253,8 +1353,8 @@ class FeedbackPage(QWidget):
         form.addRow("OCR 原文", self._source_text)
         form.addRow("当前译文", self._current_translation_text)
         form.addRow("你的备注", self._note_text)
-        form.addRow("认可译文", self._corrected_translation_text)
-        form.addRow("关键词", self._keyword_editor)
+        form.addRow("优化后/认可译文", self._corrected_translation_text)
+        form.addRow("关键词（可选）", self._keyword_editor)
         form.addRow("记忆规则", self._rule_text)
 
         self._save_note_button = QPushButton("保存备注")
@@ -1468,29 +1568,37 @@ class FeedbackPage(QWidget):
             self._rule_text.setPlainText(suggestion.rule)
         if suggestion.improved_translation:
             self._corrected_translation_text.setPlainText(suggestion.improved_translation)
-        if self._keyword_text():
-            self._status_label.setText("AI 已给出关键词候选和优化建议，确认后才会写入本地记忆。")
+        has_improved_translation = bool(self._corrected_translation_text.toPlainText().strip())
+        if has_improved_translation and self._keyword_text():
+            self._status_label.setText("AI 已给出优化译文和关键词候选，请确认译文后再写入本地记忆。")
+        elif has_improved_translation:
+            self._status_label.setText("AI 已给出优化译文；如不需要关键词，可直接确认保存为例句记忆。")
+        elif self._keyword_text():
+            self._status_label.setText("AI 已给出关键词候选和规则，确认后才会写入本地记忆。")
         else:
-            self._status_label.setText("AI 已给出优化建议，但仍需手动输入关键词后再确认。")
+            self._status_label.setText("AI 已给出优化建议，请检查后补充译文、关键词或规则。")
 
     def _on_confirm(self) -> None:
         record = self._sync_record_edits()
         if record is None:
             return
         trigger = self._keyword_text()
+        preferred_translation = self._corrected_translation_text.toPlainText().strip()
+        if not trigger and preferred_translation:
+            trigger = record.ocr_text.strip()
         rule = self._rule_text.toPlainText().strip() or self._default_rule(record)
         if not trigger:
-            self._status_label.setText("请先选择或输入关键词；认可译文可以留空。")
+            self._status_label.setText("请先输入关键词，或填写认可译文以保存为例句记忆。")
             return
         if not rule:
-            self._status_label.setText("请先填写记忆规则，或让 AI 优化后再确认；认可译文可以留空。")
+            self._status_label.setText("请先填写记忆规则，或让 AI 优化后再确认。")
             return
         try:
             memory = self._feedback_store.approve_feedback(
                 record.id,
                 trigger=trigger,
                 rule=rule,
-                preferred_translation=self._corrected_translation_text.toPlainText().strip(),
+                preferred_translation=preferred_translation,
             )
         except (KeyError, ValueError) as exc:
             self._status_label.setText(f"确认失败：{exc}")
@@ -1593,6 +1701,7 @@ class MainWindow(QMainWindow):
 
     default_language_changed = Signal(str, str)
     compiled_prompt_saved = Signal()
+    model_config_changed = Signal()
     hotkeys_save_requested = Signal(str, str)
 
     def __init__(
@@ -1763,6 +1872,12 @@ class MainWindow(QMainWindow):
 
     def _on_model_changed(self, base_url: str, api_key: str, fast_model: str, thinking_model: str) -> None:
         s = self._context.settings
+        previous = (
+            s.ai.base_url,
+            s.ai.api_key,
+            s.ai.fast_model_name,
+            s.ai.thinking_model_name,
+        )
         s.ai.base_url = base_url
         s.ai.api_key = api_key
         s.ai.fast_model = fast_model
@@ -1772,6 +1887,9 @@ class MainWindow(QMainWindow):
             s.save()
         except Exception:
             pass  # save silently; test button handles feedback
+        current = (base_url, api_key, fast_model, thinking_model)
+        if current != previous:
+            self.model_config_changed.emit()
 
     def show_hotkey_result(self, success: bool, message: str) -> None:
         self._settings_page.show_save_result(success, message)

@@ -1,11 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+project_root = Path(SPECPATH).resolve()
+
 
 a = Analysis(
-    ['F:\\workSorfware\\forSelf\\instant-translate\\app\\main.py'],
-    pathex=['F:\\workSorfware\\forSelf\\instant-translate'],
+    [str(project_root / 'app' / 'main.py')],
+    pathex=[str(project_root)],
     binaries=[],
-    datas=[('F:\\workSorfware\\forSelf\\instant-translate\\app', 'app')],
+    datas=[(str(project_root / 'app'), 'app')],
     hiddenimports=['app.logger', 'paddle', 'paddleocr', 'PIL', 'httpx', 'pytesseract'],
     hookspath=[],
     hooksconfig={},

@@ -9,23 +9,25 @@ debug.log     — DEBUG+ level: everything including per-tick timing for perform
 from __future__ import annotations
 
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 
 
+def _application_root() -> Path:
+    """Return the source-project root, or the executable directory when frozen."""
+
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
 def _log_root() -> Path:
-    try:
-        import sys
+    """Keep runtime logs beside the project/application, never in AppData."""
 
-        if getattr(sys, "frozen", False):
-            root = Path(sys.executable).parent
-        else:
-            root = Path(__file__).resolve().parent.parent
-    except Exception:
-        root = Path.cwd()
-
-    (root / "logs").mkdir(parents=True, exist_ok=True)
-    return root / "logs"
+    root = _application_root() / ".tmp" / "runtime" / "logs"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def _get_log_path(log_type: str) -> Path:

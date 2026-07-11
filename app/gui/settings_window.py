@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -49,9 +50,13 @@ class SettingsWindow(QDialog):
 
         self.add_knowledge_button = QPushButton("\u6dfb\u52a0")
         self.remove_knowledge_button = QPushButton("\u5220\u9664")
+        self.preview_knowledge_button = QPushButton("预览解析")
+        self.export_ai_candidates_button = QPushButton("导出AI候选")
         knowledge_button_row = QHBoxLayout()
         knowledge_button_row.addWidget(self.add_knowledge_button)
         knowledge_button_row.addWidget(self.remove_knowledge_button)
+        knowledge_button_row.addWidget(self.preview_knowledge_button)
+        knowledge_button_row.addWidget(self.export_ai_candidates_button)
         knowledge_button_row.addStretch(1)
 
         self.compiled_prompt_path_input = QLineEdit()
@@ -126,6 +131,8 @@ class SettingsWindow(QDialog):
         self.preview_compiled_prompt_button.clicked.connect(self._on_preview)
         self.add_knowledge_button.clicked.connect(self._on_add_knowledge)
         self.remove_knowledge_button.clicked.connect(self._on_remove_knowledge)
+        self.preview_knowledge_button.clicked.connect(self._on_preview_references)
+        self.export_ai_candidates_button.clicked.connect(self._on_export_ai_reference_candidates)
 
     def _on_save(self) -> None:
         self._apply_form_to_settings()
@@ -182,7 +189,9 @@ class SettingsWindow(QDialog):
         confirmed = QMessageBox.question(
             self,
             "Compiled Prompt \u9884\u89c8",
-            f"{compiled.content}\n\n\u786e\u8ba4\u751f\u6210\u5e76\u5199\u5165 compiled prompt \u6587\u4ef6\u5417\uff1f",
+            f"{compiled.content}\n\nLocal Policy:\n"
+            f"{json.dumps(compiled.policy or {}, ensure_ascii=False, indent=2)}\n\n"
+            "\u786e\u8ba4\u751f\u6210\u5e76\u5199\u5165 compiled prompt \u6587\u4ef6\u5417\uff1f",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -193,6 +202,8 @@ class SettingsWindow(QDialog):
             saved_path = self._prompt_storage.save_compiled_prompt(
                 compiled.content,
                 self._settings.prompt.compiled_prompt_path,
+                policy=compiled.policy,
+                reference_package=compiled.reference_package,
             )
             stored_path = self._prompt_storage.stored_compiled_prompt_path(
                 self._settings.prompt.compiled_prompt_path
@@ -233,9 +244,81 @@ class SettingsWindow(QDialog):
             "Markdown \u6587\u4ef6 (*.md);;\u6240\u6709\u6587\u4ef6 (*)",
         )
         if file_path:
-            self.knowledge_reference_list.addItem(file_path)
+            self._add_knowledge_path(file_path)
 
     def _on_remove_knowledge(self) -> None:
         for item in self.knowledge_reference_list.selectedItems():
             row = self.knowledge_reference_list.row(item)
             self.knowledge_reference_list.takeItem(row)
+
+    def _add_knowledge_path(self, file_path: str) -> bool:
+        path = str(file_path).strip()
+        if not path:
+            return False
+        for i in range(self.knowledge_reference_list.count()):
+            item = self.knowledge_reference_list.item(i)
+            if item and item.text() == path:
+                return False
+        self.knowledge_reference_list.addItem(path)
+        return True
+
+    def _on_preview_references(self) -> None:
+        QMessageBox.information(self, "知识引用解析预览", self._build_reference_preview())
+
+    def _build_reference_preview(self) -> str:
+        paths = [
+            self.knowledge_reference_list.item(i).text()
+            for i in range(self.knowledge_reference_list.count())
+            if self.knowledge_reference_list.item(i)
+        ]
+        if not paths:
+            return "尚未添加知识引用文档。"
+        parts: list[str] = []
+        total_entries = 0
+        total_style = 0
+        total_risk = 0
+        for path in paths:
+            package = self._prompt_storage.preview_reference_file(path)
+            total_entries += len(package.entries)
+            total_style += len(package.style_guidance)
+            total_risk += len(package.risk_notes)
+            lines = [f"文件：{path}"]
+            if package.entries:
+                lines.append("术语：")
+                for entry in package.entries[:12]:
+                    lines.append(f"  • {entry.source} -> {entry.target}")
+                if len(package.entries) > 12:
+                    lines.append(f"  • ... 另 {len(package.entries) - 12} 条")
+            if package.style_guidance:
+                lines.append("风格：")
+                lines.extend(f"  • {item}" for item in package.style_guidance[:6])
+            if package.risk_notes:
+                lines.append("风险/注意：")
+                lines.extend(f"  • {item}" for item in package.risk_notes[:6])
+            if package.is_empty:
+                lines.append("  （未解析出术语、风格或风险提示）")
+            parts.append("\n".join(lines))
+        summary = f"总计：术语 {total_entries} 条，风格 {total_style} 条，风险/注意 {total_risk} 条。"
+        return summary + "\n\n" + "\n\n".join(parts)
+
+    def _on_export_ai_reference_candidates(self) -> None:
+        candidate_path = self._prompt_storage.export_ai_optimization_reference_candidates(
+            self.compiled_prompt_path_input.text().strip() or "prompts/compiled-prompt.md"
+        )
+        if candidate_path is None:
+            QMessageBox.information(
+                self,
+                "没有候选术语",
+                "当前 compiled prompt 的 AI Optimization Layer 中没有可导出的术语候选。",
+            )
+            return
+        confirmed = QMessageBox.question(
+            self,
+            "导出AI候选术语",
+            f"已导出候选文件：\n{candidate_path}\n\n"
+            "这些术语来自 AI 生成内容，尚未被信任。是否现在加入知识引用列表？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirmed == QMessageBox.StandardButton.Yes:
+            self._add_knowledge_path(str(candidate_path))
