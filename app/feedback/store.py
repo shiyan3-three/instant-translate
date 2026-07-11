@@ -6,6 +6,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -162,6 +163,7 @@ class FeedbackStore:
             self._root_dir = self._first_writable_root_dir()
         self._feedback_path = self._root_dir / "pending-feedback.json"
         self._memory_path = self._root_dir / "memory-rules.json"
+        self._lock = threading.RLock()
 
     @property
     def root_dir(self) -> Path:
@@ -177,24 +179,26 @@ class FeedbackStore:
         translation_text: str,
         note: str = "",
     ) -> FeedbackRecord:
-        record = FeedbackRecord.create(
-            group_id=group_id,
-            source_language=source_language,
-            target_language=target_language,
-            ocr_text=ocr_text,
-            translation_text=translation_text,
-            note=note,
-        )
-        records = self.list_feedback()
-        records.append(record)
-        self._write_feedback(records)
-        return record
+        with self._lock:
+            record = FeedbackRecord.create(
+                group_id=group_id,
+                source_language=source_language,
+                target_language=target_language,
+                ocr_text=ocr_text,
+                translation_text=translation_text,
+                note=note,
+            )
+            records = self.list_feedback()
+            records.append(record)
+            self._write_feedback(records)
+            return record
 
     def list_feedback(self, status: str | None = None) -> list[FeedbackRecord]:
-        records = [FeedbackRecord.from_dict(item) for item in self._read_list(self._feedback_path)]
-        if status is None:
-            return records
-        return [record for record in records if record.status == status]
+        with self._lock:
+            records = [FeedbackRecord.from_dict(item) for item in self._read_list(self._feedback_path)]
+            if status is None:
+                return records
+            return [record for record in records if record.status == status]
 
     def get_feedback(self, feedback_id: str) -> FeedbackRecord | None:
         for record in self.list_feedback():
@@ -210,30 +214,32 @@ class FeedbackStore:
         corrected_translation: str | None = None,
         status: str | None = None,
     ) -> FeedbackRecord | None:
-        records = self.list_feedback()
-        updated: FeedbackRecord | None = None
-        for record in records:
-            if record.id != feedback_id:
-                continue
-            if note is not None:
-                record.note = note
-            if corrected_translation is not None:
-                record.corrected_translation = corrected_translation
-            if status is not None:
-                record.status = status
-            record.updated_at = _now_iso()
-            updated = record
-            break
-        self._write_feedback(records)
-        return updated
+        with self._lock:
+            records = self.list_feedback()
+            updated: FeedbackRecord | None = None
+            for record in records:
+                if record.id != feedback_id:
+                    continue
+                if note is not None:
+                    record.note = note
+                if corrected_translation is not None:
+                    record.corrected_translation = corrected_translation
+                if status is not None:
+                    record.status = status
+                record.updated_at = _now_iso()
+                updated = record
+                break
+            self._write_feedback(records)
+            return updated
 
     def delete_feedback(self, feedback_id: str) -> bool:
-        records = self.list_feedback()
-        kept = [record for record in records if record.id != feedback_id]
-        if len(kept) == len(records):
-            return False
-        self._write_feedback(kept)
-        return True
+        with self._lock:
+            records = self.list_feedback()
+            kept = [record for record in records if record.id != feedback_id]
+            if len(kept) == len(records):
+                return False
+            self._write_feedback(kept)
+            return True
 
     def approve_feedback(
         self,
@@ -243,42 +249,57 @@ class FeedbackStore:
         rule: str,
         preferred_translation: str = "",
     ) -> MemoryRule:
-        records = self.list_feedback()
-        record = next((item for item in records if item.id == feedback_id), None)
-        if record is None:
-            raise KeyError(f"feedback not found: {feedback_id}")
-        trigger = trigger.strip()
-        rule = rule.strip()
-        if not trigger:
-            raise ValueError("trigger is required")
-        if not rule:
-            raise ValueError("rule is required")
+        with self._lock:
+            records = self.list_feedback()
+            record = next((item for item in records if item.id == feedback_id), None)
+            if record is None:
+                raise KeyError(f"feedback not found: {feedback_id}")
+            trigger = trigger.strip()
+            rule = rule.strip()
+            if not trigger:
+                raise ValueError("trigger is required")
+            if not rule:
+                raise ValueError("rule is required")
 
-        memory = MemoryRule.create(
-            source_language=record.source_language,
-            target_language=record.target_language,
-            trigger=trigger,
-            rule=rule,
-            example_source=record.ocr_text,
-            preferred_translation=preferred_translation.strip() or record.corrected_translation.strip(),
-            source_feedback_id=record.id,
-        )
-        memories = self.list_memory_rules(enabled_only=False)
-        memories.append(memory)
-        self._write_memory_rules(memories)
+            memories = self.list_memory_rules(enabled_only=False)
+            memory = next(
+                (item for item in memories if item.id == record.memory_rule_id),
+                None,
+            )
+            preferred = preferred_translation.strip() or record.corrected_translation.strip()
+            if memory is None:
+                memory = MemoryRule.create(
+                    source_language=record.source_language,
+                    target_language=record.target_language,
+                    trigger=trigger,
+                    rule=rule,
+                    example_source=record.ocr_text,
+                    preferred_translation=preferred,
+                    source_feedback_id=record.id,
+                )
+                memories.append(memory)
+            else:
+                memory.trigger = trigger
+                memory.rule = rule
+                memory.example_source = record.ocr_text
+                memory.preferred_translation = preferred
+                memory.enabled = True
+                memory.updated_at = _now_iso()
+            self._write_memory_rules(memories)
 
-        record.status = "confirmed"
-        record.memory_rule_id = memory.id
-        record.corrected_translation = memory.preferred_translation
-        record.updated_at = _now_iso()
-        self._write_feedback(records)
-        return memory
+            record.status = "confirmed"
+            record.memory_rule_id = memory.id
+            record.corrected_translation = memory.preferred_translation
+            record.updated_at = _now_iso()
+            self._write_feedback(records)
+            return memory
 
     def list_memory_rules(self, enabled_only: bool = True) -> list[MemoryRule]:
-        rules = [MemoryRule.from_dict(item) for item in self._read_list(self._memory_path)]
-        if enabled_only:
-            return [rule for rule in rules if rule.enabled]
-        return rules
+        with self._lock:
+            rules = [MemoryRule.from_dict(item) for item in self._read_list(self._memory_path)]
+            if enabled_only:
+                return [rule for rule in rules if rule.enabled]
+            return rules
 
     def match_memory_rules(
         self,
@@ -289,7 +310,7 @@ class FeedbackStore:
         limit: int = 3,
     ) -> list[MemoryRule]:
         haystack = text.lower()
-        matches: list[MemoryRule] = []
+        matches: list[tuple[int, int, str, MemoryRule]] = []
         for rule in self.list_memory_rules(enabled_only=True):
             if rule.source_language and rule.source_language != source_language:
                 continue
@@ -298,9 +319,18 @@ class FeedbackStore:
             triggers = self.split_triggers(rule.trigger)
             if not triggers:
                 continue
-            if any(trigger.lower() in haystack for trigger in triggers):
-                matches.append(rule)
-        return matches[:limit]
+            matched = [trigger for trigger in triggers if trigger.lower() in haystack]
+            if matched:
+                matches.append(
+                    (
+                        max(len(trigger) for trigger in matched),
+                        len(matched),
+                        rule.updated_at,
+                        rule,
+                    )
+                )
+        matches.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
+        return [item[3] for item in matches[:limit]]
 
     @staticmethod
     def join_triggers(triggers: list[str]) -> str:

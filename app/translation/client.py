@@ -18,6 +18,7 @@ class ClientConfig:
     api_key: str
     model: str
     timeout_seconds: float = 30.0
+    max_tokens: int = 4096
 
     @property
     def chat_url(self) -> str:
@@ -62,7 +63,7 @@ class OpenAICompatibleClient:
             "model": self._config.model,
             "messages": messages,
             "temperature": 0.0,
-            "max_tokens": 4096,  # Increased from 1024 to give reasoning+content enough budget
+            "max_tokens": self._config.max_tokens,
         }
         self._apply_thinking(payload, thinking)
 
@@ -92,23 +93,15 @@ class OpenAICompatibleClient:
 
         response_json = response.json()
         
-        # Detailed diagnostic: dump full response structure (first call only)
-        import json
-        msg = response_json.get("choices", [{}])[0].get("message", {})
+        choice = response_json.get("choices", [{}])[0]
+        msg = choice.get("message", {})
         get_debug_logger().debug(
-            "API response structure: message_keys=%s",
-            list(msg.keys())
+            "API response structure: message_keys=%s content_len=%d reasoning_len=%d finish_reason=%r",
+            list(msg.keys()),
+            len(msg.get("content") or ""),
+            len(msg.get("reasoning_content") or ""),
+            choice.get("finish_reason"),
         )
-        if "reasoning_content" in msg:
-            get_debug_logger().debug(
-                "reasoning_content preview: %s",
-                (msg["reasoning_content"][:200] if msg["reasoning_content"] else "(empty)")
-            )
-        if "content" in msg:
-            get_debug_logger().debug(
-                "content preview: %s",
-                (msg["content"][:200] if msg["content"] else "(empty)")
-            )
         
         result = self._extract_content(response_json)
         
@@ -165,7 +158,17 @@ class OpenAICompatibleClient:
         http_ms = (_time.perf_counter() - t0) * 1000
         get_debug_logger().debug("API HTTP round-trip: %.0fms", http_ms)
 
-        result = self._extract_content(response.json())
+        response_json = response.json()
+        choice = response_json.get("choices", [{}])[0]
+        msg = choice.get("message", {})
+        get_debug_logger().debug(
+            "API response structure: message_keys=%s content_len=%d reasoning_len=%d finish_reason=%r",
+            list(msg.keys()),
+            len(msg.get("content") or ""),
+            len(msg.get("reasoning_content") or ""),
+            choice.get("finish_reason"),
+        )
+        result = self._extract_content(response_json)
         if not result.strip():
             raise TranslationError("API returned an empty translation.")
 
@@ -191,20 +194,8 @@ class OpenAICompatibleClient:
                 {"role": "user", "content": source_text},
             ],
             "temperature": 0.0,
-            "max_tokens": 4096,
+            "max_tokens": self._config.max_tokens,
         }
-
-        # DeepSeek v4 reasoning models consume max_tokens for both
-        # thinking and output.  "low" keeps reasoning short so more
-        # budget is left for the actual translation content.
-        # Only add this for DeepSeek reasoning models to avoid breaking
-        # other providers that don't recognise this parameter.
-        is_deepseek_reasoning = (
-            "deepseek" in self._config.base_url.lower()
-            and "v4" in model.lower()
-        )
-        if is_deepseek_reasoning:
-            payload["reasoning_effort"] = "low"
 
         return payload
 
