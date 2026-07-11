@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -26,3 +27,6 @@ class CompiledPrompt:
 
     content: str = ""
     version: str = "draft"
+    policy: dict[str, Any] | None = None
+    reference_package: dict[str, Any] | None = None
+    runtime_profile: dict[str, Any] | None = None

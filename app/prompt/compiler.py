@@ -10,6 +10,8 @@ from app.prompt.models import (
     PromptConstraints,
     PromptKnowledgeReference,
 )
+from app.prompt.policy import ConstraintPolicy, ConstraintPolicyCompiler
+from app.reference_layer import ReferencePackage
 
 
 class PromptCompiler:
@@ -31,7 +33,9 @@ class PromptCompiler:
         if not optimization_layer:
             optimization_layer = "No AI-optimized supplemental rules."
 
-        knowledge_layer = self._compile_knowledge_layer(references or [])
+        reference_sections = self._load_knowledge_sections(references or [])
+        knowledge_layer = self._format_knowledge_layer(reference_sections)
+        reference_package = self._compile_reference_package(reference_sections)
 
         content = "\n\n".join(
             [
@@ -54,7 +58,17 @@ class PromptCompiler:
                 "For every request, follow the source and target languages appended by the app.",
             ]
         )
-        return CompiledPrompt(content=content, version="preview")
+        user_policy = ConstraintPolicyCompiler.compile(constraints.text)
+        proposed_policy = getattr(optimized_user_layer, "policy", ConstraintPolicy())
+        if not isinstance(proposed_policy, ConstraintPolicy):
+            proposed_policy = ConstraintPolicy.from_dict(proposed_policy)
+        policy = user_policy.merge_supplemental(proposed_policy)
+        return CompiledPrompt(
+            content=content,
+            version="preview",
+            policy=policy.to_dict(),
+            reference_package=reference_package.to_dict(),
+        )
 
     def build_optimizer_messages(
         self,
@@ -66,7 +80,21 @@ class PromptCompiler:
         knowledge_layer = self._compile_knowledge_layer(references or [])
         system_prompt = (
             "You optimize translation prompt rules for an OCR-based desktop translator. "
-            "Return only concise supplemental rules, glossary entries, style guidance, and fixed expressions. "
+            "Return one JSON object with keys supplemental_rules and constraint_policy. "
+            "supplemental_rules must be a concise string containing semantic/style clarifications, "
+            "risk reminders, and examples only. Do not create glossary tables, source=>target mappings, "
+            "fixed term readings, or terminology lists; those belong only in the user-confirmed "
+            "Knowledge Reference layer. constraint_policy must be an object with version=1 and "
+            "a rules array. Each rule has type, params, enforcement, scope, and source_text. "
+            "Allowed locally enforceable types are allowed_characters, separator, term_wrapper, punctuation, "
+            "preserve, max_length, line_breaks, case, literal_replace, and forbidden_literals. "
+            "For term_wrapper, selection_mode must be one of references_only, references_and_ascii, or "
+            "domain_inference. Use references_only when fixed bracketed readings must come only from "
+            "user-confirmed knowledge references; use references_and_ascii when source code-like ASCII "
+            "tokens may also be bracketed; use domain_inference only when the user explicitly asks the "
+            "model to identify additional domain terminology. "
+            "Use enforcement=model for requirements that cannot be mechanically checked. "
+            "Do not output code, regexes, commands, or executable expressions. "
             "Preserve the user's original intent exactly. "
             "Do not weaken, replace, or override the fixed template layer or user constraints. "
             "Always include as the first supplemental rule: produce a natural translation that faithfully conveys "
@@ -82,11 +110,17 @@ class PromptCompiler:
         return system_prompt, user_prompt
 
     def _compile_knowledge_layer(self, references: list[PromptKnowledgeReference]) -> str:
+        return self._format_knowledge_layer(self._load_knowledge_sections(references))
+
+    def _load_knowledge_sections(
+        self,
+        references: list[PromptKnowledgeReference],
+    ) -> list[tuple[Path, str]]:
         enabled_references = [ref for ref in references if ref.enabled]
         if not enabled_references:
-            return "No knowledge references."
+            return []
 
-        sections: list[str] = []
+        sections: list[tuple[Path, str]] = []
         for ref in enabled_references:
             path = Path(ref.path)
             try:
@@ -97,6 +131,18 @@ class PromptCompiler:
                 content = f"(Unable to read reference: {exc})"
             if not content:
                 content = "(empty reference)"
-            sections.append(f"### {path.name}\n{content}")
+            sections.append((path, content))
 
-        return "\n\n".join(sections)
+        return sections
+
+    def _format_knowledge_layer(self, sections: list[tuple[Path, str]]) -> str:
+        if not sections:
+            return "No knowledge references."
+        return "\n\n".join(f"### {path.name}\n{content}" for path, content in sections)
+
+    def _compile_reference_package(
+        self,
+        sections: list[tuple[Path, str]],
+    ) -> ReferencePackage:
+        texts = [content for _, content in sections]
+        return ReferencePackage.from_texts(texts)
