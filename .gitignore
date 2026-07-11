@@ -14,7 +14,11 @@ build/
 
 compiled-prompt.md
 logs/
+poc/results/
 
 # AI tool configs
 .claude/
 .omo/
+.codex/
+.agents/
+.playwright-mcp/
