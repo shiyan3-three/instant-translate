@@ -145,6 +145,59 @@ class OpenAICompatibleClientTests(unittest.TestCase):
             with self.assertRaisesRegex(TranslationError, "empty translation"):
                 client.complete("system", "user")
 
+    def test_list_models_parses_openai_style_payload(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "data": [
+                {"id": "deepseek-v4-pro"},
+                {"id": "deepseek-v4-flash"},
+                {"id": "deepseek-v4-flash"},
+                {"foo": "bar"},
+            ]
+        }
+
+        with patch("app.translation.client.httpx.get", return_value=response) as get:
+            client = OpenAICompatibleClient(
+                ClientConfig(
+                    base_url="https://api.example.test/v1",
+                    api_key="key",
+                    model="unused",
+                )
+            )
+            models = client.list_models()
+
+        self.assertEqual(models, ["deepseek-v4-flash", "deepseek-v4-pro"])
+        self.assertEqual(
+            get.call_args.kwargs["url"],
+            "https://api.example.test/v1/models",
+        )
+        self.assertIn("Authorization", get.call_args.kwargs["headers"])
+
+    def test_list_models_raises_on_http_error(self) -> None:
+        import httpx
+
+        response = Mock()
+        response.status_code = 401
+        response.text = "unauthorized"
+        error = httpx.HTTPStatusError(
+            "boom",
+            request=Mock(),
+            response=response,
+        )
+        response.raise_for_status.side_effect = error
+
+        with patch("app.translation.client.httpx.get", return_value=response):
+            client = OpenAICompatibleClient(
+                ClientConfig(
+                    base_url="https://api.example.test/v1",
+                    api_key="bad",
+                    model="unused",
+                )
+            )
+            with self.assertRaisesRegex(TranslationError, "API error 401"):
+                client.list_models()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -27,6 +27,13 @@ class ClientConfig:
         base = self.base_url.rstrip("/")
         return f"{base}/chat/completions"
 
+    @property
+    def models_url(self) -> str:
+        """Return the full models list endpoint."""
+
+        base = self.base_url.rstrip("/")
+        return f"{base}/models"
+
 
 class TranslationError(RuntimeError):
     """Raised when a translation request fails for any reason."""
@@ -180,6 +187,70 @@ class OpenAICompatibleClient:
         if not source_text.strip():
             raise TranslationError("Cannot translate empty text.")
         return self.complete(system_prompt, source_text)
+
+    def list_models(self) -> list[str]:
+        """Fetch available model IDs from the OpenAI-compatible ``/models`` endpoint.
+
+        Returns a sorted, de-duplicated list of model id strings.
+        Raises TranslationError on timeout, HTTP error, or unexpected payload.
+        """
+
+        from app.logger import get_debug_logger
+
+        headers = self._build_headers()
+        try:
+            response = httpx.get(
+                url=self._config.models_url,
+                headers=headers,
+                timeout=min(self._config.timeout_seconds, 30.0),
+            )
+            response.raise_for_status()
+        except httpx.TimeoutException:
+            get_debug_logger().warning("List models timeout")
+            raise TranslationError(
+                f"List models timed out after {min(self._config.timeout_seconds, 30.0):.0f}s."
+            )
+        except httpx.HTTPStatusError as exc:
+            get_debug_logger().warning("List models HTTP %d", exc.response.status_code)
+            raise TranslationError(
+                f"API error {exc.response.status_code}: "
+                f"{self._truncate(str(exc.response.text))}"
+            )
+        except httpx.RequestError as exc:
+            get_debug_logger().warning("List models network error: %s", exc)
+            raise TranslationError(
+                f"Network error reaching {self._config.base_url}: {exc}"
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise TranslationError(f"Models response is not JSON: {exc}") from exc
+
+        raw_items = payload.get("data") if isinstance(payload, dict) else payload
+        if not isinstance(raw_items, list):
+            raise TranslationError("Unexpected models response format — missing data list.")
+
+        models: list[str] = []
+        seen: set[str] = set()
+        for item in raw_items:
+            if isinstance(item, str):
+                model_id = item.strip()
+            elif isinstance(item, dict):
+                model_id = str(item.get("id") or item.get("name") or "").strip()
+            else:
+                continue
+            if not model_id:
+                continue
+            key = model_id.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            models.append(model_id)
+
+        models.sort(key=str.casefold)
+        get_debug_logger().debug("Listed %d models from %s", len(models), self._config.models_url)
+        return models
 
     # ------------------------------------------------------------------
     # internal helpers
