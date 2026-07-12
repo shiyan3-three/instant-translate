@@ -9,12 +9,14 @@ from dataclasses import asdict
 from pathlib import Path
 from unittest.mock import patch
 
+from app.agent.session_store import AgentSessionStore
 from app.feedback.store import FeedbackStore
 from app.reference_layer import ReferenceStore
 from app.settings import AppSettings
 from app.translation.quality import OutputNormalizer, OutputValidator
 from poc.poc_runtime_profile_completeness import (
     COMPLETENESS_CHECK,
+    CompletenessPocError,
     DATASET_PATH,
     EXPECTED_CASE_SCOPES,
     EXPECTED_CASE_SOURCES,
@@ -28,6 +30,7 @@ from poc.poc_runtime_profile_completeness import (
     build_isolated_fixture_context,
     freeze_case_contexts,
     load_dataset,
+    load_production_agent_profile,
     run,
 )
 
@@ -98,8 +101,15 @@ class CompletenessProfileMessageTests(unittest.TestCase):
         cls.context, cls.fixture_metadata = build_isolated_fixture_context(
             AppSettings.load(), Path(cls.fixture.name)
         )
+        cls.profile_meta, cls.production_bootstrap, cls.profile_audit = (
+            load_production_agent_profile(AppSettings.load())
+        )
         cls.profile = build_confirmed_runtime_profile(cls.context, cls.dataset)
-        cls.frozen = freeze_case_contexts(cls.context, cls.dataset)
+        cls.frozen = freeze_case_contexts(
+            cls.context,
+            cls.dataset,
+            rule_checklist=cls.production_bootstrap[2]["content"],
+        )
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -126,14 +136,36 @@ class CompletenessProfileMessageTests(unittest.TestCase):
             current = build_flash_messages(
                 group=GROUPS[0], context=self.context,
                 frozen=self.frozen[case.id], runtime_profile=self.profile,
+                production_bootstrap=self.production_bootstrap,
             )
             completeness = build_flash_messages(
                 group=GROUPS[1], context=self.context,
                 frozen=self.frozen[case.id], runtime_profile=self.profile,
+                production_bootstrap=self.production_bootstrap,
             )
             self.assertNotIn("<RUNTIME_PROFILE>", current[0]["content"])
             self.assertIn("<RUNTIME_PROFILE>", completeness[0]["content"])
+            self.assertEqual(current[:3], list(self.production_bootstrap))
             self.assertEqual(current[1:], completeness[1:])
+
+    def test_loaded_profile_is_exact_current_three_message_bootstrap(self) -> None:
+        self.assertEqual(self.profile_audit["status"], "loaded")
+        self.assertEqual(self.profile_audit["key"], self.profile_meta.key())
+        self.assertEqual(
+            [message["role"] for message in self.production_bootstrap],
+            ["system", "user", "assistant"],
+        )
+        self.assertEqual(len(self.profile_audit["messages"]), 3)
+        self.assertTrue(all(len(row["sha256"]) == 64 for row in self.profile_audit["messages"]))
+
+    def test_missing_matching_profile_fails_instead_of_generating_one(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            empty_store = AgentSessionStore(Path(tmp))
+            with self.assertRaises(CompletenessPocError):
+                load_production_agent_profile(
+                    AppSettings.load(), session_store=empty_store
+                )
+            self.assertFalse(any(Path(tmp).rglob("*.json")))
 
     def test_at_least_four_cases_have_frozen_reference_or_memory_hits(self) -> None:
         matched = [
@@ -183,6 +215,13 @@ class CompletenessRunTests(unittest.TestCase):
             self.assertEqual(state["attempted_flash_calls"], 0)
             self.assertEqual(len(state["frozen_request_contexts"]), 16)
             self.assertIn("token_gate_likely_failed_before_formal_run", state["summary"])
+            profile_audit = state["production_agent_profile"]
+            self.assertEqual(profile_audit["status"], "loaded")
+            self.assertEqual(len(profile_audit["messages"]), 3)
+            self.assertEqual(
+                [row["role"] for row in profile_audit["messages"]],
+                ["system", "user", "assistant"],
+            )
             for group in GROUPS:
                 self.assertEqual(
                     set(state["summary"]["groups"][group]),

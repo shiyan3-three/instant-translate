@@ -15,10 +15,12 @@ from pathlib import Path
 from typing import Any
 
 from app.feedback.store import FeedbackStore
+from app.agent.session_store import AgentProfileMeta, AgentSessionStore
 from app.prompt.runtime_profile import RuntimeProfile
 from app.reference_layer import ReferenceEntry, ReferencePackage
 from app.settings import AppSettings
 from app.translation.client import TranslationError
+from app.translation.service import TranslationService
 from poc.poc_agent_runtime_projection import (
     FrozenRequestContext,
     ProjectionContext,
@@ -28,7 +30,6 @@ from poc.poc_agent_runtime_projection import (
 )
 from poc.poc_agent_semantic_profile import evaluate_output
 from poc.poc_reference_injection import _percentile, estimate_tokens
-from poc.poc_runtime_profile_ab import CURRENT_RULE_CHECKLIST, _FORMAT_PROFILE_USER
 
 
 GROUPS = ("CURRENT_RUNTIME", "COMPLETENESS_ONLY_RUNTIME")
@@ -204,6 +205,66 @@ def build_confirmed_runtime_profile(
     return profile
 
 
+def load_production_agent_profile(
+    settings: AppSettings,
+    *,
+    session_store: AgentSessionStore | None = None,
+) -> tuple[AgentProfileMeta, tuple[dict[str, str], ...], dict[str, Any]]:
+    """Load the exact current three-message bootstrap without creating one."""
+
+    service = TranslationService(settings)
+    try:
+        definition = service._resolve_agent_definition("中文", "日本語")
+    finally:
+        service.shutdown()
+    meta = definition.profile_meta
+    store = session_store or AgentSessionStore()
+    profile_path = store._profile_path(meta)
+    if not profile_path.exists():
+        raise CompletenessPocError(
+            f"matching production Agent Profile is missing: key={meta.key()}"
+        )
+    messages = store.load_profile(meta)
+    if messages is None:
+        raise CompletenessPocError(
+            f"matching production Agent Profile is invalid: key={meta.key()}"
+        )
+    roles = [message.get("role") for message in messages]
+    if len(messages) != 3 or roles != ["system", "user", "assistant"]:
+        raise CompletenessPocError(
+            "production Agent Profile must contain exactly system/user/assistant bootstrap"
+        )
+    bootstrap: list[dict[str, str]] = []
+    message_audit: list[dict[str, Any]] = []
+    for index, message in enumerate(messages):
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise CompletenessPocError(
+                f"production Agent Profile message {index} has empty content"
+            )
+        role = str(message["role"])
+        bootstrap.append({"role": role, "content": content})
+        message_audit.append(
+            {
+                "index": index,
+                "role": role,
+                "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                "length": len(content),
+            }
+        )
+    return meta, tuple(bootstrap), {
+        "status": "loaded",
+        "key": meta.key(),
+        "path": str(profile_path.resolve()),
+        "source_language": meta.source_language,
+        "target_language": meta.target_language,
+        "prompt_hash": meta.prompt_hash,
+        "fast_model": meta.fast_model,
+        "thinking_model": meta.thinking_model,
+        "messages": message_audit,
+    }
+
+
 def build_isolated_fixture_context(
     settings: AppSettings,
     fixture_root: Path,
@@ -267,12 +328,16 @@ def build_isolated_fixture_context(
 def freeze_case_contexts(
     context: ProjectionContext,
     dataset: CompletenessDataset,
+    *,
+    rule_checklist: str,
 ) -> dict[str, FrozenRequestContext]:
+    if not rule_checklist.strip():
+        raise CompletenessPocError("production Agent Profile checklist is empty")
     return {
         case.id: freeze_runtime_case(
             context,
             case,
-            current_format_profile=CURRENT_RULE_CHECKLIST,
+            current_format_profile=rule_checklist,
         )
         for case in dataset.cases
     }
@@ -284,21 +349,24 @@ def build_flash_messages(
     context: ProjectionContext,
     frozen: FrozenRequestContext,
     runtime_profile: RuntimeProfile,
+    production_bootstrap: tuple[dict[str, str], ...],
 ) -> list[dict[str, str]]:
-    system = context.production.system
+    del context
+    if len(production_bootstrap) != 3:
+        raise CompletenessPocError("production bootstrap must contain three messages")
+    messages = [dict(message) for message in production_bootstrap]
     if group == "COMPLETENESS_ONLY_RUNTIME":
         rendered = runtime_profile.render()
         if not rendered:
             raise CompletenessPocError("RuntimeProfile rendered empty")
-        system = f"{system}\n\n{rendered}"
+        messages[0] = {
+            "role": "system",
+            "content": f"{messages[0]['content']}\n\n{rendered}",
+        }
     elif group != "CURRENT_RUNTIME":
         raise CompletenessPocError(f"unknown group: {group}")
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": _FORMAT_PROFILE_USER},
-        {"role": "assistant", "content": CURRENT_RULE_CHECKLIST},
-        {"role": "user", "content": frozen.current_user_content},
-    ]
+    messages.append({"role": "user", "content": frozen.current_user_content})
+    return messages
 
 
 def _default_paths() -> tuple[Path, Path, Path]:
@@ -401,8 +469,19 @@ def run(args: argparse.Namespace) -> tuple[Path, Path, Path]:
         context, fixture_metadata = build_isolated_fixture_context(
             settings, Path(fixture_temp.name)
         )
+        profile_meta, production_bootstrap, production_profile_audit = (
+            load_production_agent_profile(settings)
+        )
+        if profile_meta.prompt_hash != context.production.prompt_hash:
+            raise CompletenessPocError(
+                "loaded production Agent Profile does not match current POC prompt hash"
+            )
         runtime_profile = build_confirmed_runtime_profile(context, dataset)
-        frozen = freeze_case_contexts(context, dataset)
+        frozen = freeze_case_contexts(
+            context,
+            dataset,
+            rule_checklist=production_bootstrap[2]["content"],
+        )
         fast_model = args.fast_model.strip() or settings.ai.fast_model_name or "deepseek-v4-flash"
         if not args.dry_run and not (settings.ai.base_url and settings.ai.api_key and fast_model):
             raise CompletenessPocError("API base URL, key, and Flash model are required")
@@ -420,6 +499,7 @@ def run(args: argparse.Namespace) -> tuple[Path, Path, Path]:
                 context=context,
                 frozen=frozen[dataset.cases[0].id],
                 runtime_profile=runtime_profile,
+                production_bootstrap=production_bootstrap,
             )[0]["content"]
             for group in GROUPS
         }
@@ -455,6 +535,7 @@ def run(args: argparse.Namespace) -> tuple[Path, Path, Path]:
                 "formal_call_design": dict(FORMAL_CALL_DESIGN),
                 "dry_run": args.dry_run,
                 "fixture_source": fixture_metadata,
+                "production_agent_profile": production_profile_audit,
             },
             "pro_calls": 0,
             "pro_payloads": [],
@@ -465,6 +546,7 @@ def run(args: argparse.Namespace) -> tuple[Path, Path, Path]:
                 "rendered": runtime_profile.render(),
                 "digest": runtime_profile.digest(),
             },
+            "production_agent_profile": production_profile_audit,
             "frozen_request_contexts": frozen_state,
             "system_prompts": {
                 group: {
@@ -498,6 +580,7 @@ def run(args: argparse.Namespace) -> tuple[Path, Path, Path]:
                 context=context,
                 frozen=frozen_case,
                 runtime_profile=runtime_profile,
+                production_bootstrap=production_bootstrap,
             )
             payload = {
                 "model": fast_model,

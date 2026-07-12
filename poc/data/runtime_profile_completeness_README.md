@@ -14,6 +14,11 @@ new lexical drift.
   translations.
 - Each of 16 cases freezes Reference, Feedback Memory, technical terms, and the
   OCR user message once before the 64 A/B jobs start.
+- The current `AgentProfileMeta` is resolved for Chinese to Japanese and the
+  matching persisted production Profile is loaded read-only. Its exact
+  system/user/assistant bootstrap and assistant checklist are reused by both
+  groups. A missing or invalid matching Profile stops the experiment before
+  any network request; this POC never calls Pro to create one.
 - Four POC-only Reference entries and three Feedback Memory rules live in a
   temporary isolated directory. They do not change settings or real user data.
 - Formal design: 0 Pro, 64 Flash, 0 judge, 0 retry.

@@ -64,6 +64,24 @@ def _args(root: Path) -> argparse.Namespace:
     )
 
 
+def _write_compatible_checkpoint(root: Path, context) -> Path:
+    """Create a test-only checkpoint without mutating the formal POC artifact."""
+
+    state = json.loads(REUSE_STATE_PATH.read_text(encoding="utf-8"))
+    state["metadata"].update(
+        {
+            "prompt_hash": context.production.prompt_hash,
+            "policy_digest": context.production.policy_digest,
+            "reference_digest": context.production.reference_digest,
+            "fast_model": "deepseek-v4-flash",
+            "thinking_model": "deepseek-v4-pro",
+        }
+    )
+    path = root / "synthetic-compatible-current-profile.json"
+    path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
 def _grounded_context():
     context = build_projection_context(AppSettings.load())
     return replace(
@@ -483,10 +501,16 @@ class ReusedCurrentProfileTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.dataset = load_dataset(DATASET_PATH)
         cls.context = build_projection_context(AppSettings.load())
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.compatible_state = _write_compatible_checkpoint(Path(cls.tmp.name), cls.context)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.tmp.cleanup()
 
     def test_valid_v2_current_checkpoint_is_revalidated_and_reusable(self) -> None:
         reused = load_reused_current_profile_state(
-            REUSE_STATE_PATH,
+            self.compatible_state,
             context=self.context,
             dataset=self.dataset,
             fast_model="deepseek-v4-flash",
@@ -499,7 +523,7 @@ class ReusedCurrentProfileTests(unittest.TestCase):
         self.assertTrue(reused["profile_record"]["reused"])
 
     def test_all_context_and_model_mismatches_fail_before_network(self) -> None:
-        original = json.loads(REUSE_STATE_PATH.read_text(encoding="utf-8"))
+        original = json.loads(self.compatible_state.read_text(encoding="utf-8"))
         mismatches = {
             "prompt_hash": "wrong-prompt",
             "policy_digest": "wrong-policy",
@@ -524,7 +548,7 @@ class ReusedCurrentProfileTests(unittest.TestCase):
                 request.assert_not_called()
 
     def test_current_raw_profile_is_revalidated_before_network(self) -> None:
-        original = json.loads(REUSE_STATE_PATH.read_text(encoding="utf-8"))
+        original = json.loads(self.compatible_state.read_text(encoding="utf-8"))
         original["profiles"]["CURRENT_RUNTIME"]["raw_response"] = ""
         with tempfile.TemporaryDirectory() as tmp:
             reuse_path = Path(tmp) / "reuse.json"
@@ -538,6 +562,16 @@ class ReusedCurrentProfileTests(unittest.TestCase):
                 with self.assertRaises(RuntimeProjectionPocError):
                     run(args)
             request.assert_not_called()
+
+    def test_formal_v2_checkpoint_is_rejected_after_template_hash_change(self) -> None:
+        with self.assertRaisesRegex(RuntimeProjectionPocError, "prompt_hash mismatch"):
+            load_reused_current_profile_state(
+                REUSE_STATE_PATH,
+                context=self.context,
+                dataset=self.dataset,
+                fast_model="deepseek-v4-flash",
+                thinking_model="deepseek-v4-pro",
+            )
 
 
 class ProgressiveStateFailureTests(unittest.TestCase):
@@ -589,6 +623,9 @@ class ProgressiveStateFailureTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as tmp:
             args = _args(Path(tmp))
+            args.reuse_current_profile_state = str(
+                _write_compatible_checkpoint(Path(tmp), context)
+            )
             args.dry_run = False
             with patch(
                 "poc.poc_agent_runtime_projection.AppSettings.load",
@@ -634,6 +671,9 @@ class ProgressiveStateFailureTests(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as tmp:
             args = _args(Path(tmp))
+            args.reuse_current_profile_state = str(
+                _write_compatible_checkpoint(Path(tmp), context)
+            )
             args.dry_run = False
             with patch(
                 "poc.poc_agent_runtime_projection.AppSettings.load",
@@ -663,11 +703,19 @@ class DryRunIntegrationTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.tmp = tempfile.TemporaryDirectory()
         root = Path(cls.tmp.name)
+        context = _grounded_context()
+        args = _args(root)
+        args.reuse_current_profile_state = str(
+            _write_compatible_checkpoint(root, context)
+        )
         original_memory_match = FeedbackStore.match_memory_rules
         original_reference_protect = ReferenceStore.protect
         with patch(
             "poc.poc_agent_runtime_projection._send_diagnostic_request",
             side_effect=AssertionError("network called"),
+        ), patch(
+            "poc.poc_agent_runtime_projection.build_projection_context",
+            return_value=context,
         ), patch("builtins.print"), patch(
             "poc.poc_agent_semantic_profile.OutputNormalizer.normalize_with_policy",
             wraps=OutputNormalizer.normalize_with_policy,
@@ -689,7 +737,7 @@ class DryRunIntegrationTests(unittest.TestCase):
                 store, *args, **kwargs
             ),
         ) as reference_protect:
-            output, state, blind = run(_args(root))
+            output, state, blind = run(args)
             cls.normalizer_calls = normalizer.call_count
             cls.validator_calls = validator.call_count
             cls.memory_match_calls = memory_match.call_count
