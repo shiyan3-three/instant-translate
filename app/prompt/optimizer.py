@@ -86,8 +86,32 @@ class PromptOptimizer:
         supplemental = payload.get("supplemental_rules", "")
         if isinstance(supplemental, list):
             supplemental = "\n".join(str(item).strip() for item in supplemental if str(item).strip())
-        supplemental = str(supplemental).strip()
-        if not supplemental:
-            return OptimizedPrompt(raw)
+        elif not isinstance(supplemental, str):
+            supplemental = ""
+        supplemental = supplemental.strip()
         policy = ConstraintPolicy.from_dict(payload.get("constraint_policy", {}), strict=False)
-        return OptimizedPrompt(supplemental, policy)
+        user_summary = payload.get("user_summary", "")
+        if not isinstance(user_summary, str):
+            user_summary = ""
+        user_summary = user_summary.strip()[:800]
+        if user_summary and not re.search(r"[\u3400-\u9fff]", user_summary):
+            user_summary = ""
+        raw_items = payload.get("change_items", [])
+        change_items: list[dict[str, str]] = []
+        if isinstance(raw_items, list):
+            for item in raw_items[:8]:
+                if not isinstance(item, dict):
+                    continue
+                title = item.get("title", "")
+                description = item.get("description", "")
+                if not isinstance(title, str) or not isinstance(description, str):
+                    continue
+                title = title.strip()[:40]
+                description = description.strip()[:240]
+                if (
+                    title and description
+                    and re.search(r"[\u3400-\u9fff]", title)
+                    and re.search(r"[\u3400-\u9fff]", description)
+                ):
+                    change_items.append({"title": title, "description": description})
+        return OptimizedPrompt(supplemental, policy, user_summary, change_items)

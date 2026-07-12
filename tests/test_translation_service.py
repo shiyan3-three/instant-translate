@@ -839,7 +839,8 @@ class TranslationServiceAgentPerGroupTests(unittest.TestCase):
         store = FakeSessionStore(loaded_messages=messages)
         service = TranslationService(settings, session_store=store)
 
-        with patch.object(TranslationAgent, 'digest_rules') as digest_mock, \
+        with patch.object(service, '_current_policy', return_value=ConstraintPolicy()), \
+             patch.object(TranslationAgent, 'digest_rules') as digest_mock, \
              patch.object(TranslationAgent, 'restore_messages') as restore_mock:
             service._ensure_agent(1, "中文", "日本語")
 

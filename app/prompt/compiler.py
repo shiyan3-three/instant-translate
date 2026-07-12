@@ -80,7 +80,7 @@ class PromptCompiler:
         knowledge_layer = self._compile_knowledge_layer(references or [])
         system_prompt = (
             "You optimize translation prompt rules for an OCR-based desktop translator. "
-            "Return one JSON object with keys supplemental_rules and constraint_policy. "
+            "Return one JSON object with keys supplemental_rules, constraint_policy, user_summary, and change_items. "
             "supplemental_rules must be a concise string containing semantic/style clarifications, "
             "risk reminders, and examples only. Do not create glossary tables, source=>target mappings, "
             "fixed term readings, or terminology lists; those belong only in the user-confirmed "
@@ -95,6 +95,10 @@ class PromptCompiler:
             "model to identify additional domain terminology. "
             "Use enforcement=model for requirements that cannot be mechanically checked. "
             "Do not output code, regexes, commands, or executable expressions. "
+            "user_summary must be a short, plain Simplified Chinese explanation for a non-technical user. "
+            "change_items must contain 1 to 8 objects with non-empty Simplified Chinese title and description. "
+            "They must faithfully explain the effects of supplemental_rules, without chain-of-thought, API details, "
+            "the complete machine prompt, invented terminology mappings, or new hard rules. "
             "Preserve the user's original intent exactly. "
             "Do not weaken, replace, or override the fixed template layer or user constraints. "
             "Always include as the first supplemental rule: produce a natural translation that faithfully conveys "

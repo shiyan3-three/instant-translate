@@ -17,7 +17,7 @@ from app.prompt.runtime_profile import (
     digest_text,
 )
 from app.prompt.storage import PromptStorage
-from app.prompt.policy import ConstraintPolicyCompiler
+from app.prompt.policy import ConstraintPolicyCompiler, OptimizedPrompt
 from app.reference_layer import ReferencePackage
 
 
@@ -208,6 +208,43 @@ class PromptCompilerTests(unittest.TestCase):
         self.assertIn("AI Optimization Layer", compiled.content)
         self.assertIn("Knowledge Reference Layer", compiled.content)
         self.assertEqual(compiled.policy["version"], 1)
+
+    def test_fixed_template_prioritizes_semantic_fidelity(self) -> None:
+        self.assertIn("subject, object, action", DEFAULT_BASE_PROMPT)
+        self.assertIn("negation, conditions, exceptions", DEFAULT_BASE_PROMPT)
+        self.assertIn("command or causative as a request", DEFAULT_BASE_PROMPT)
+        self.assertIn("semantic fidelity wins", DEFAULT_BASE_PROMPT)
+
+    def test_review_only_explanation_never_enters_compiled_artifacts(self) -> None:
+        optimized = OptimizedPrompt(
+            "Machine supplemental rule.",
+            user_summary="用户可读秘密说明",
+            change_items=[{"title": "中文标题", "description": "中文变化说明"}],
+        )
+        compiled = PromptCompiler().compile_preview(
+            PromptConstraints(text="Keep meaning."),
+            optimized_user_layer=optimized,
+        )
+        serialized_policy = json.dumps(compiled.policy, ensure_ascii=False)
+        serialized_references = json.dumps(compiled.reference_package, ensure_ascii=False)
+        self.assertIn("Machine supplemental rule.", compiled.content)
+        self.assertNotIn("用户可读秘密说明", compiled.content)
+        self.assertNotIn("中文变化说明", compiled.content)
+        self.assertNotIn("用户可读秘密说明", serialized_policy)
+        self.assertNotIn("用户可读秘密说明", serialized_references)
+
+        other_explanation = OptimizedPrompt(
+            "Machine supplemental rule.",
+            user_summary="另一份说明",
+            change_items=[{"title": "不同标题", "description": "不同描述"}],
+        )
+        other = PromptCompiler().compile_preview(
+            PromptConstraints(text="Keep meaning."),
+            optimized_user_layer=other_explanation,
+        )
+        self.assertEqual(compiled.content, other.content)
+        self.assertEqual(compiled.policy, other.policy)
+        self.assertEqual(compiled.reference_package, other.reference_package)
 
     def test_compile_preview_keeps_original_constraints_and_ai_rules(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

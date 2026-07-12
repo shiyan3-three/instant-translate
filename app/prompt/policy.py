@@ -456,11 +456,21 @@ class ConstraintPolicyCompiler:
 
 
 class OptimizedPrompt(str):
-    """String-compatible optimized rules carrying an optional safe policy."""
+    """Machine rules plus review-only Chinese explanation metadata."""
 
     policy: ConstraintPolicy
+    user_summary: str
+    change_items: tuple[dict[str, str], ...]
 
-    def __new__(cls, value: str, policy: ConstraintPolicy | None = None):
+    def __new__(
+        cls,
+        value: str,
+        policy: ConstraintPolicy | None = None,
+        user_summary: str = "",
+        change_items: list[dict[str, str]] | tuple[dict[str, str], ...] | None = None,
+    ):
         obj = str.__new__(cls, value)
         obj.policy = policy or ConstraintPolicy()
+        obj.user_summary = str(user_summary or "").strip()
+        obj.change_items = tuple(dict(item) for item in (change_items or ()))
         return obj
