@@ -764,16 +764,21 @@ class TemplatePage(QWidget):
 
     def _confirm_compiled_prompt_with_dialog(self, content: str) -> bool:
         dlg = QDialog(self)
+        dlg.setObjectName("compiledPromptDialog")
         dlg.setWindowTitle("确认翻译模板")
         dlg.resize(680, 500)
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
         tabs = QTabWidget()
+        tabs.setObjectName("compiledPromptTabs")
         easy_viewer = QPlainTextEdit()
+        easy_viewer.setObjectName("compiledPromptViewer")
         easy_viewer.setReadOnly(True)
         easy_viewer.setPlainText(str(content))
         advanced_viewer = QPlainTextEdit()
+        advanced_viewer.setObjectName("compiledPromptViewer")
         advanced_viewer.setReadOnly(True)
         advanced_viewer.setPlainText(getattr(content, "advanced_content", "（无高级内容）"))
         tabs.addTab(easy_viewer, "易懂说明")
@@ -781,12 +786,17 @@ class TemplatePage(QWidget):
         layout.addWidget(tabs, 1)
 
         hint = QLabel("请确认易懂说明；需要核对机器实际内容时可打开“高级内容”。")
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
         layout.addWidget(hint)
 
         btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
         btn_row.addStretch()
         no_btn = QPushButton("返回修改")
+        no_btn.setObjectName("secondaryButton")
         yes_btn = QPushButton("确认并启用")
+        yes_btn.setObjectName("primaryButton")
         no_btn.setDefault(True)
         btn_row.addWidget(no_btn)
         btn_row.addWidget(yes_btn)
@@ -1589,11 +1599,18 @@ class FeedbackOptimizationDialog(QDialog):
         self._title_bar.close_requested.connect(self.reject)
 
         self._section_names = (
-            "AI 优化译文", "AI 问题判断", "AI 关键词候选", "AI 记忆规则候选", "AI 总体建议",
+            "优化译文", "问题判断", "关键词", "记忆规则", "总体建议",
         )
         self._review_states = [self.UNREVIEWED] * len(self._section_names)
         self._review_choices: list[dict[str, object] | None] = [None] * len(self._section_names)
-        self._nav_buttons = [NavButton("") for _ in self._section_names]
+        self._nav_buttons: list[QPushButton] = []
+        for _ in self._section_names:
+            btn = QPushButton("")
+            btn.setObjectName("reviewNavButton")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFixedHeight(40)
+            self._nav_buttons.append(btn)
         self._stack = QStackedWidget()
         self._user_editors: list[QPlainTextEdit] = []
         self._ai_keyword_editor = KeywordTagEditor()
@@ -1617,9 +1634,11 @@ class FeedbackOptimizationDialog(QDialog):
         self._select_page(0)
 
         sidebar = QWidget()
-        sidebar.setFixedWidth(170)
+        sidebar.setObjectName("reviewSidebar")
+        sidebar.setFixedWidth(148)
         side_layout = QVBoxLayout(sidebar)
         side_layout.setContentsMargins(8, 8, 8, 8)
+        side_layout.setSpacing(4)
         for button in self._nav_buttons:
             side_layout.addWidget(button)
         side_layout.addStretch(1)
@@ -1627,20 +1646,30 @@ class FeedbackOptimizationDialog(QDialog):
         self._error_label = QLabel("")
         self._error_label.setObjectName("hintLabel")
         self._error_label.setWordWrap(True)
-        self._use_ai_button = QPushButton("采用 AI 当前项")
+        self._use_ai_button = QPushButton("采用优化")
         self._use_ai_button.setObjectName("primaryButton")
         self._use_ai_button.clicked.connect(self._use_ai)
-        self._use_user_button = QPushButton("保存我的修改")
+        self._use_user_button = QPushButton("确认修改")
         self._use_user_button.setObjectName("primaryButton")
         self._use_user_button.clicked.connect(self._use_user)
-        self._skip_button = QPushButton("跳过此项")
+        self._skip_button = QPushButton("跳过")
         self._skip_button.setObjectName("secondaryButton")
         self._skip_button.clicked.connect(self._skip_current)
-        self._finish_button = QPushButton("完成审查并返回")
+        self._finish_button = QPushButton("完成审查")
         self._finish_button.setObjectName("primaryButton")
         self._finish_button.setEnabled(False)
         self._finish_button.clicked.connect(self._finish_review)
+        for button in (
+            self._skip_button,
+            self._use_ai_button,
+            self._use_user_button,
+            self._finish_button,
+        ):
+            button.setFixedHeight(34)
+            button.setMinimumWidth(72)
+            button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         buttons = QHBoxLayout()
+        buttons.setSpacing(8)
         buttons.addWidget(self._skip_button)
         buttons.addStretch(1)
         buttons.addWidget(self._use_ai_button)
@@ -1757,8 +1786,22 @@ class FeedbackOptimizationDialog(QDialog):
         self.accept()
 
     def _refresh_nav_labels(self) -> None:
-        for name, state, button in zip(self._section_names, self._review_states, self._nav_buttons):
-            button.setText(f"{name} · {state}")
+        """Show short section titles with a status dot (gray / red / green)."""
+
+        for name, state, button in zip(
+            self._section_names, self._review_states, self._nav_buttons
+        ):
+            if state == self.UNREVIEWED:
+                review_state = "pending"
+            elif state == self.SKIPPED:
+                review_state = "skipped"
+            else:
+                review_state = "done"
+            button.setText(f"●  {name}")
+            button.setProperty("reviewState", review_state)
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.update()
 
     def _user_text(self, section_index: int) -> str:
         editor_index = {0: 0, 1: 1, 3: 2, 4: 3}.get(section_index)
@@ -2693,6 +2736,47 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }
 
+            QWidget#reviewSidebar {
+                background: #0a0f1a;
+                border-right: 1px solid #1e293b;
+            }
+            QPushButton#reviewNavButton {
+                background: transparent;
+                color: #e2e8f0;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 10px;
+                text-align: left;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QPushButton#reviewNavButton:hover {
+                background: #1e293b;
+            }
+            QPushButton#reviewNavButton:checked {
+                background: #1e293b;
+                color: #f1f5f9;
+                font-weight: 600;
+            }
+            QPushButton#reviewNavButton[reviewState="pending"] {
+                color: #94a3b8;
+            }
+            QPushButton#reviewNavButton[reviewState="pending"]:checked {
+                color: #e2e8f0;
+            }
+            QPushButton#reviewNavButton[reviewState="skipped"] {
+                color: #f87171;
+            }
+            QPushButton#reviewNavButton[reviewState="skipped"]:checked {
+                color: #fca5a5;
+            }
+            QPushButton#reviewNavButton[reviewState="done"] {
+                color: #4ade80;
+            }
+            QPushButton#reviewNavButton[reviewState="done"]:checked {
+                color: #86efac;
+            }
+
             QWidget#contentPage {
                 background: #0f172a;
             }
@@ -2703,14 +2787,28 @@ class MainWindow(QMainWindow):
                 background: #0f172a;
                 border: none;
             }
-            QTabWidget#feedbackTabs::pane {
+            QDialog#compiledPromptDialog {
+                background: #0f172a;
+                color: #e2e8f0;
+            }
+            QPlainTextEdit#compiledPromptViewer {
+                background: #1e293b;
+                color: #e2e8f0;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+            QTabWidget#feedbackTabs::pane,
+            QTabWidget#compiledPromptTabs::pane {
                 background: #0f172a;
                 border: 1px solid #334155;
                 border-radius: 10px;
                 top: -1px;
                 padding: 4px;
             }
-            QTabWidget#feedbackTabs QTabBar::tab {
+            QTabWidget#feedbackTabs QTabBar::tab,
+            QTabWidget#compiledPromptTabs QTabBar::tab {
                 background: transparent;
                 color: #94a3b8;
                 border: none;
@@ -2720,12 +2818,14 @@ class MainWindow(QMainWindow):
                 font-size: 13px;
                 font-weight: 500;
             }
-            QTabWidget#feedbackTabs QTabBar::tab:selected {
+            QTabWidget#feedbackTabs QTabBar::tab:selected,
+            QTabWidget#compiledPromptTabs QTabBar::tab:selected {
                 color: #60a5fa;
                 font-weight: 600;
                 border-bottom: 2px solid #60a5fa;
             }
-            QTabWidget#feedbackTabs QTabBar::tab:hover {
+            QTabWidget#feedbackTabs QTabBar::tab:hover,
+            QTabWidget#compiledPromptTabs QTabBar::tab:hover {
                 color: #e2e8f0;
             }
             QLabel#feedbackSectionLabel {
