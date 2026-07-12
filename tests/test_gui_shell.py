@@ -10,15 +10,20 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox, QSizePolicy
+from PySide6.QtWidgets import (
+    QApplication, QDialog, QHBoxLayout, QMessageBox, QPlainTextEdit, QPushButton,
+    QSizePolicy, QTabWidget, QScrollArea,
+)
 
 from app.app_context import ApplicationContext
 from app.feedback.optimizer import FeedbackOptimization
 from app.feedback.store import FeedbackStore
-from app.gui.main_window import FeedbackPage
+from app.gui.main_window import FeedbackPage, FeedbackOptimizationDialog, TitleBar
 from app.gui.main_window import MainWindow
+from app.gui.main_window import ModelPage
 from app.gui.main_window import TemplatePage
 from app.prompt.optimizer import PromptOptimizationError
+from app.prompt.policy import ConstraintPolicyCompiler, OptimizedPrompt
 from app.gui.settings_window import SettingsWindow
 from app.gui.tray_icon import TrayIconController
 from app.prompt.storage import PromptStorage
@@ -187,6 +192,87 @@ class TemplatePageTests(unittest.TestCase):
             self.assertEqual(reference_dir, Path(tmp) / "prompts" / "references")
             self.assertTrue(reference_dir.exists())
 
+    def test_user_preview_is_chinese_and_uses_real_policy_and_reference_counts(self) -> None:
+        page = TemplatePage(
+            constraints_text="输出只能使用平假名。",
+            knowledge_paths=["terms.md"],
+            confirm_compiled_prompt=lambda content: True,
+        )
+        optimized = OptimizedPrompt(
+            "Machine rule only.",
+            user_summary="AI 会补充检查语义完整性。",
+            change_items=[{"title": "避免漏译", "description": "检查否定和完成状态。"}],
+        )
+        policy = ConstraintPolicyCompiler.compile("输出只能使用平假名。").to_dict()
+        preview = page._build_user_preview(
+            optimized,
+            policy=policy,
+            machine_content="EXACT MACHINE PROMPT",
+            reference_package={
+                "version": 1, "entries": [{"source": "API"}],
+                "style_guidance": ["natural"], "risk_notes": ["ambiguous"],
+            },
+        )
+        readable = str(preview)
+        self.assertIn("一、基本目标", readable)
+        self.assertIn("输出只能使用平假名。", readable)
+        self.assertIn("AI 会补充", readable)
+        self.assertIn("限制输出字符范围", readable)
+        self.assertIn("四、程序会强制检查", readable)
+        self.assertIn("五、模型需要遵守", readable)
+        self.assertIn("术语 1 条", readable)
+        self.assertNotIn('"rules"', readable)
+        self.assertIn("EXACT MACHINE PROMPT", preview.advanced_content)
+        self.assertIn('"rules"', preview.advanced_content)
+
+    def test_preview_without_ai_summary_or_references_is_explicit(self) -> None:
+        page = TemplatePage(confirm_compiled_prompt=lambda content: True)
+        preview = page._build_user_preview("Machine-only legacy response")
+        self.assertIn("AI 未提供中文变更说明", str(preview))
+        self.assertIn("具体术语读法未由用户引用层固定", str(preview))
+
+    def test_default_confirmation_dialog_has_easy_and_advanced_tabs(self) -> None:
+        page = TemplatePage()
+        preview = page._build_user_preview(
+            OptimizedPrompt("machine"),
+            policy={"version": 1, "rules": []},
+            machine_content="EXACT MACHINE",
+        )
+        captured = {}
+        def fake_exec(dialog):
+            tabs = dialog.findChild(QTabWidget)
+            captured["tabs"] = [tabs.tabText(i) for i in range(tabs.count())]
+            captured["texts"] = [
+                editor.toPlainText() for editor in dialog.findChildren(QPlainTextEdit)
+            ]
+            captured["buttons"] = [button.text() for button in dialog.findChildren(QPushButton)]
+            return 0
+        with patch.object(QDialog, "exec", fake_exec):
+            self.assertFalse(page._confirm_compiled_prompt_with_dialog(preview))
+        self.assertEqual(captured["tabs"], ["易懂说明", "高级内容"])
+        self.assertTrue(any("EXACT MACHINE" in text for text in captured["texts"]))
+        self.assertIn("返回修改", captured["buttons"])
+        self.assertIn("确认并启用", captured["buttons"])
+
+    def test_policy_preview_separates_local_and_model_rules_and_explains_scopes(self) -> None:
+        page = TemplatePage(confirm_compiled_prompt=lambda content: True)
+        policy = {
+            "version": 1,
+            "rules": [
+                {"type": "separator", "enforcement": "both", "params": {"scope": "global", "min_spaces": 2}},
+                {"type": "term_wrapper", "enforcement": "both", "params": {
+                    "selection_mode": "references_and_ascii", "left": "[", "right": "]"
+                }},
+                {"type": "model_instruction", "enforcement": "model", "params": {"text": "keep meaning"}},
+            ],
+        }
+        readable = str(page._build_user_preview(policy=policy))
+        local_section, model_section = readable.split("五、模型需要遵守", 1)
+        self.assertIn("所有分词空格至少使用 2 个空格", local_section)
+        self.assertIn("只强制用户引用术语和 ASCII 技术标识", local_section)
+        self.assertNotIn("程序无法机械验证", local_section)
+        self.assertIn("程序无法机械验证", model_section)
+
     def test_reference_preview_shows_parsed_terms_style_and_risk(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             reference_path = Path(tmp) / "terms.md"
@@ -316,11 +402,58 @@ class FailingPromptOptimizer:
         raise PromptOptimizationError(self.message)
 
 
+class ModelPageTests(unittest.TestCase):
+    """Verify model combos can be filled from /models results."""
+
+    def setUp(self) -> None:
+        self.app = ensure_qapplication()
+
+    def test_fetch_models_populates_editable_combos(self) -> None:
+        page = ModelPage(
+            base_url="https://api.example.test/v1",
+            api_key="key",
+            fast_model="kept-fast",
+            thinking_model="kept-thinking",
+        )
+        page._show_models_result(
+            ["deepseek-v4-flash", "deepseek-v4-pro", "kept-fast"],
+            "已拉取 3 个模型",
+        )
+
+        self.assertFalse(page._model.isEditable())
+        self.assertGreaterEqual(page._model.count(), 3)
+        self.assertEqual(page._model.currentText(), "kept-fast")
+        self.assertEqual(page._thinking_model.currentText(), "kept-thinking")
+        self.assertIn("deepseek-v4-pro", [page._model.itemText(i) for i in range(page._model.count())])
+        self.assertIn("已拉取", page._test_status.text())
+        self.assertTrue(page._models_loaded)
+
+    def test_fetch_models_button_disabled_without_credentials(self) -> None:
+        page = ModelPage()
+        self.assertFalse(page._fetch_models_btn.isEnabled())
+        self.assertFalse(page._test_btn.isEnabled())
+        page._base_url.setText("https://api.example.test/v1")
+        page._api_key.setText("key")
+        self.assertTrue(page._fetch_models_btn.isEnabled())
+        self.assertTrue(page._test_btn.isEnabled())
+
+
 class FeedbackPageTests(unittest.TestCase):
     """Verify the optimize-translation page writes confirmed memory."""
 
     def setUp(self) -> None:
         self.app = ensure_qapplication()
+        def accept_ai(dialog):
+            for _ in range(5):
+                if dialog._stack.currentIndex() == 0 and not dialog.suggestion.improved_translation.strip():
+                    dialog._skip_current()
+                else:
+                    dialog._use_ai()
+            dialog._finish_review()
+            return 1
+        self._dialog_patch = patch.object(FeedbackOptimizationDialog, "exec", accept_ai)
+        self._dialog_patch.start()
+        self.addCleanup(self._dialog_patch.stop)
 
     def _wait_for_ai(self, page: FeedbackPage, timeout: float = 2.0) -> None:
         deadline = time.monotonic() + timeout
@@ -329,6 +462,151 @@ class FeedbackPageTests(unittest.TestCase):
             time.sleep(0.005)
         self.app.processEvents()
         self.assertFalse(page._ai_optimizing, "feedback AI optimization did not finish")
+
+    def test_feedback_uses_compact_actions_and_separate_memory_tab(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            page = FeedbackPage(FeedbackStore(tmp), AppSettings())
+
+            self.assertIsInstance(page._action_layout, QHBoxLayout)
+            self.assertIsInstance(page._feedback_tabs, QTabWidget)
+            self.assertEqual(page._feedback_tabs.count(), 2)
+            self.assertEqual(page._feedback_tabs.tabText(0), "译文修正")
+            self.assertEqual(page._feedback_tabs.tabText(1), "长期记忆（可选）")
+            self.assertEqual(page._accept_translation_button.text(), "仅采用译文")
+            self.assertEqual(page._accept_memory_button.text(), "保存为长期记忆")
+            self.assertLessEqual(page._accept_translation_button.maximumWidth(), 100)
+            self.assertLessEqual(page._accept_memory_button.maximumWidth(), 132)
+            self.assertLessEqual(page.sizeHint().width(), 440)
+            self.assertEqual(
+                page._detail_scroll.horizontalScrollBarPolicy(),
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+            )
+            self.assertFalse(hasattr(page, "_problem_summary_text"))
+            self.assertFalse(hasattr(page, "_memory_recommendation_label"))
+            self.assertIs(page._optimizer._feedback_store, page._feedback_store)
+
+    def test_empty_ai_candidates_never_clear_existing_user_drafts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            store.add_feedback(
+                group_id=1, source_language="中文", target_language="日本語",
+                ocr_text="原文", translation_text="wrong",
+            )
+            page = FeedbackPage(
+                store, AppSettings(),
+                optimizer=FakeFeedbackOptimizer(FeedbackOptimization(
+                    improved_translation="", trigger_options=[], rule="",
+                    problem_summary="仅有问题说明", memory_recommended=False,
+                )),
+            )
+            page._corrected_translation_text.setPlainText("用户已有译文")
+            page._keyword_editor.set_keywords(["用户已有关键词"])
+            page._rule_text.setPlainText("用户已有规则")
+
+            page._on_ai_optimize()
+            self._wait_for_ai(page)
+
+            self.assertEqual(page._corrected_translation_text.toPlainText(), "用户已有译文")
+            self.assertEqual(page._keyword_editor.keywords(), ["用户已有关键词"])
+            self.assertEqual(page._rule_text.toPlainText(), "用户已有规则")
+
+    def test_review_dialog_reuses_shell_components_without_scroll_area(self) -> None:
+        parent = FeedbackPage(FeedbackStore(tempfile.mkdtemp()), AppSettings())
+        parent.resize(640, 480)
+        dialog = FeedbackOptimizationDialog(
+            FeedbackOptimization(
+                problem_summary="主客体错误", improved_translation="correct",
+                trigger_options=["系统", "队列"], rule="按技术语境处理。",
+            ),
+            parent,
+        )
+
+        self.assertIsInstance(dialog._title_bar, TitleBar)
+        self.assertEqual(dialog._stack.count(), 5)
+        self.assertEqual(len(dialog._nav_buttons), 5)
+        self.assertEqual(dialog.findChildren(QScrollArea), [])
+        self.assertLessEqual(dialog.width(), parent.width())
+        self.assertLessEqual(dialog.height(), parent.height())
+        dialog._nav_buttons[3].click()
+        self.assertEqual(dialog._stack.currentIndex(), 3)
+        dialog._ai_keyword_editor.remove_keyword("系统")
+        self.assertEqual(dialog.ai_keywords(), ["队列"])
+
+    def test_rejecting_review_dialog_leaves_user_fields_and_store_unchanged(self) -> None:
+        class RejectDialog:
+            decision = ""
+            def __init__(self, suggestion, parent): pass
+            def exec(self): return 0
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1, source_language="中文", target_language="日本語",
+                ocr_text="原文", translation_text="wrong",
+            )
+            page = FeedbackPage(
+                store, AppSettings(),
+                optimizer=FakeFeedbackOptimizer(FeedbackOptimization(
+                    improved_translation="AI correct", trigger="系统",
+                    trigger_options=["系统"], rule="AI rule",
+                )),
+                dialog_factory=RejectDialog,
+            )
+            page._corrected_translation_text.setPlainText("用户原草稿")
+            page._keyword_editor.set_keywords(["用户词"])
+            page._rule_text.setPlainText("用户规则")
+
+            page._on_ai_optimize()
+            self._wait_for_ai(page)
+
+            self.assertEqual(page._corrected_translation_text.toPlainText(), "用户原草稿")
+            self.assertEqual(page._keyword_editor.keywords(), ["用户词"])
+            self.assertEqual(page._rule_text.toPlainText(), "用户规则")
+            self.assertEqual(store.get_feedback(record.id).status, "pending")
+            self.assertEqual(store.list_memory_rules(), [])
+
+    def test_user_decision_requires_translation_and_preserves_existing_note(self) -> None:
+        dialog = FeedbackOptimizationDialog(FeedbackOptimization(improved_translation="AI"))
+        dialog._use_user()
+        self.assertEqual(dialog.decision, "")
+        self.assertIn("完整", dialog._error_label.text())
+        dialog._user_editors[0].setPlainText("用户译文")
+        dialog._user_editors[1].setPlainText("用户问题判断")
+        dialog._user_editors[2].setPlainText("用户规则")
+        dialog._user_editors[3].setPlainText("总体意见")
+        dialog._user_keyword_editor.set_keywords(["用户词"])
+        dialog._use_user()
+        self.assertEqual(dialog._review_states[0], FeedbackOptimizationDialog.USED_USER)
+        self.assertEqual(dialog.decision, "")
+        self.assertEqual(dialog._stack.currentIndex(), 1)
+        self.assertIn("已采用修改", dialog._nav_buttons[0].text())
+        for _ in range(4):
+            dialog._skip_current()
+        self.assertTrue(dialog._finish_button.isEnabled())
+        dialog._finish_review()
+        self.assertEqual(dialog.decision, FeedbackOptimizationDialog.COMPLETED)
+
+    def test_dialog_rejects_empty_ai_translation_and_skips_empty_memory_candidates(self) -> None:
+        dialog = FeedbackOptimizationDialog(FeedbackOptimization())
+        dialog._use_ai()
+        self.assertEqual(dialog._review_states[0], FeedbackOptimizationDialog.UNREVIEWED)
+        self.assertIn("不能采用空译文", dialog._error_label.text())
+        dialog._skip_current()
+        dialog._select_page(2)
+        dialog._use_ai()
+        self.assertEqual(dialog._review_states[2], FeedbackOptimizationDialog.SKIPPED)
+        dialog._select_page(3)
+        dialog._use_ai()
+        self.assertEqual(dialog._review_states[3], FeedbackOptimizationDialog.SKIPPED)
+
+    def test_dialog_minimize_also_minimizes_owning_window(self) -> None:
+        parent = FeedbackPage(FeedbackStore(tempfile.mkdtemp()), AppSettings())
+        dialog = FeedbackOptimizationDialog(FeedbackOptimization(), parent)
+        with patch.object(parent, "showMinimized") as owner_minimize, \
+             patch.object(dialog, "showMinimized") as dialog_minimize:
+            dialog._minimize_with_owner()
+        owner_minimize.assert_called_once_with()
+        dialog_minimize.assert_not_called()
 
     def test_ai_suggestion_can_be_confirmed_into_local_memory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -383,8 +661,10 @@ class FeedbackPageTests(unittest.TestCase):
             ))
 
             self.assertIsNotNone(page._detail_scroll)
-            self.assertGreaterEqual(page._source_text.minimumHeight(), 80)
-            self.assertGreaterEqual(page._rule_text.minimumHeight(), 110)
+            self.assertGreaterEqual(page._source_text.minimumHeight(), 60)
+            self.assertLessEqual(page._source_text.maximumHeight(), 110)
+            self.assertGreaterEqual(page._rule_text.minimumHeight(), 70)
+            self.assertLessEqual(page._rule_text.maximumHeight(), 110)
             self.assertEqual(
                 page._detail_scroll.horizontalScrollBarPolicy(),
                 Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
@@ -430,7 +710,7 @@ class FeedbackPageTests(unittest.TestCase):
             self.assertEqual(len(rules), 1)
             self.assertEqual(rules[0].trigger, "软件测试")
 
-    def test_ai_improved_translation_without_keyword_saves_exact_example(self) -> None:
+    def test_ai_improved_translation_without_keyword_can_be_accepted_without_memory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = FeedbackStore(tmp)
             source = "邻居闹到很晚，小李被吵到了。"
@@ -446,8 +726,10 @@ class FeedbackPageTests(unittest.TestCase):
                 FeedbackOptimization(
                     trigger="",
                     trigger_options=[],
-                    rule="遇到相同例句时，按用户确认译文处理。",
+                    rule="",
                     improved_translation=expected,
+                    problem_summary="原译文把被动受害关系翻错了。",
+                    memory_recommended=False,
                 )
             ))
 
@@ -457,16 +739,84 @@ class FeedbackPageTests(unittest.TestCase):
             self.assertEqual(page._keyword_editor.keywords(), [])
             self.assertEqual(page._corrected_translation_text.toPlainText(), expected)
 
-            page._on_confirm()
+            page._on_accept_translation()
 
-            rules = store.match_memory_rules(
-                source,
-                source_language="中文",
-                target_language="日本語",
+            self.assertEqual(store.list_memory_rules(), [])
+            accepted = store.list_feedback(status="accepted")
+            self.assertEqual(len(accepted), 1)
+            self.assertEqual(accepted[0].corrected_translation, expected)
+
+    def test_save_memory_without_keyword_is_rejected_even_with_translation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1, source_language="中文", target_language="日本語",
+                ocr_text="一次性句子", translation_text="wrong",
             )
-            self.assertEqual(len(rules), 1)
-            self.assertEqual(rules[0].trigger, source)
-            self.assertEqual(rules[0].preferred_translation, expected)
+            page = FeedbackPage(store, AppSettings())
+            page._corrected_translation_text.setPlainText("correct")
+            page._rule_text.setPlainText("可复用规则")
+
+            page._on_accept_with_memory()
+
+            self.assertEqual(store.list_memory_rules(), [])
+            self.assertEqual(store.get_feedback(record.id).status, "pending")
+            self.assertEqual(
+                page._status_label.text(),
+                "保存长期记忆需要确认关键词和规则。",
+            )
+
+    def test_ai_memory_recommendation_never_saves_automatically(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            store.add_feedback(
+                group_id=1, source_language="中文", target_language="日本語",
+                ocr_text="高考开始", translation_text="wrong",
+            )
+            page = FeedbackPage(
+                store,
+                AppSettings(),
+                optimizer=FakeFeedbackOptimizer(
+                    FeedbackOptimization(
+                        trigger="高考",
+                        trigger_options=["高考"],
+                        rule="按大学入学考试语境翻译。",
+                        improved_translation="correct",
+                        problem_summary="考试类型错误。",
+                        memory_recommended=True,
+                    )
+                ),
+            )
+            page._on_ai_optimize()
+            self._wait_for_ai(page)
+
+            self.assertEqual(store.list_memory_rules(), [])
+            self.assertEqual(store.list_feedback(status="pending")[0].status, "pending")
+            self.assertEqual(page._feedback_tabs.currentIndex(), 0)
+
+    def test_accept_translation_reports_stale_overlay_without_losing_feedback_save(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=7, source_language="中文", target_language="日本語",
+                ocr_text="旧句子", translation_text="wrong",
+            )
+            calls = []
+            page = FeedbackPage(
+                store,
+                AppSettings(),
+                translation_applier=lambda group_id, source, translation: (
+                    calls.append((group_id, source, translation)) or False
+                ),
+            )
+            page._corrected_translation_text.setPlainText("认可译文")
+
+            page._on_accept_translation()
+
+            self.assertEqual(calls, [(7, "旧句子", "认可译文")])
+            self.assertEqual(store.get_feedback(record.id).status, "accepted")
+            self.assertIn("原选区内容已变化", page._status_label.text())
+            self.assertEqual(store.list_memory_rules(), [])
 
     def test_confirmed_memory_matches_any_keyword_tag(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
