@@ -764,6 +764,30 @@ class SelectionWorkflowController(QObject):
 
         self._upsert_translation_window(group_id, region)
 
+    def apply_accepted_translation(
+        self,
+        group_id: int,
+        expected_ocr_text: str,
+        accepted_translation: str,
+    ) -> bool:
+        """Refresh an existing overlay only when it still shows the feedback source."""
+
+        region = self._runtime_store.regions.get(group_id)
+        state = self._runtime_store.runtime_states.get(group_id)
+        translation = accepted_translation.strip()
+        if region is None or state is None or not translation:
+            return False
+        if state.latest_ocr_text != expected_ocr_text:
+            return False
+        self._invalidate_translation_requests(
+            group_id,
+            "user accepted corrected translation",
+        )
+        state.latest_translation_text = translation
+        self._upsert_translation_window(group_id, region)
+        self._on_state_changed()
+        return True
+
     def _on_ocr_text_ready(self, group_id: int, text: str) -> None:
         """Update the OCR viewer window on the Qt main thread."""
 

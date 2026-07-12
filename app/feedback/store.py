@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import tempfile
 import threading
@@ -241,6 +240,30 @@ class FeedbackStore:
             self._write_feedback(kept)
             return True
 
+    def accept_translation(
+        self,
+        feedback_id: str,
+        corrected_translation: str,
+    ) -> FeedbackRecord:
+        """Accept one corrected translation without creating reusable memory."""
+
+        corrected = corrected_translation.strip()
+        if not corrected:
+            raise ValueError("corrected translation is required")
+        with self._lock:
+            records = self.list_feedback()
+            record = next((item for item in records if item.id == feedback_id), None)
+            if record is None:
+                raise KeyError(f"feedback not found: {feedback_id}")
+            if record.status != "pending":
+                raise ValueError("only pending feedback can accept a translation")
+            record.corrected_translation = corrected
+            record.status = "accepted"
+            record.memory_rule_id = ""
+            record.updated_at = _now_iso()
+            self._write_feedback(records)
+            return record
+
     def approve_feedback(
         self,
         feedback_id: str,
@@ -404,8 +427,6 @@ class FeedbackStore:
     @staticmethod
     def _candidate_root_dirs() -> list[Path]:
         roots = [AppSettings.config_dir() / "feedback"]
-        if os.name == "nt":
-            roots.append(Path("C:/tmp") / "instant-translate" / "feedback")
         roots.append(Path(tempfile.gettempdir()) / "instant-translate" / "feedback")
         roots.append(Path.cwd() / ".instant-translate" / "feedback")
         return roots

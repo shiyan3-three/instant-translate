@@ -178,6 +178,61 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         self.assertEqual(self.context.active_group_count, 1)
         self.assertEqual(self.controller.selection_box_count, 1)
         self.assertEqual(self.controller.translation_window_count, 1)
+
+    def test_accepted_translation_updates_matching_runtime_state_and_window(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(100, 120, 360, 100))
+        state = self.runtime_store.runtime_states[1]
+        state.latest_ocr_text = "原句"
+        state.latest_translation_text = "旧译文"
+
+        with patch.object(self.controller, "_upsert_translation_window") as upsert:
+            updated = self.controller.apply_accepted_translation(1, "原句", "认可译文")
+
+        self.assertTrue(updated)
+        self.assertEqual(state.latest_translation_text, "认可译文")
+        upsert.assert_called_once_with(1, self.runtime_store.regions[1])
+
+    def test_accepted_translation_does_not_overwrite_when_ocr_changed(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(100, 120, 360, 100))
+        state = self.runtime_store.runtime_states[1]
+        state.latest_ocr_text = "新句子"
+        state.latest_translation_text = "新句译文"
+        service = FakeTranslationService()
+        self.controller._translation_service = service
+
+        with patch.object(self.controller, "_upsert_translation_window") as upsert:
+            updated = self.controller.apply_accepted_translation(1, "旧句子", "旧句认可译文")
+
+        self.assertFalse(updated)
+        self.assertEqual(state.latest_translation_text, "新句译文")
+        upsert.assert_not_called()
+        self.assertEqual(service.invalidations, [])
+
+    def test_accepted_translation_for_missing_group_returns_false(self) -> None:
+        self.assertFalse(
+            self.controller.apply_accepted_translation(99, "原句", "认可译文")
+        )
+
+    def test_accepted_translation_does_not_request_fast_or_pro_translation(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(100, 120, 360, 100))
+        state = self.runtime_store.runtime_states[1]
+        state.latest_ocr_text = "原句"
+        service = FakeTranslationService()
+        self.controller._translation_service = service
+
+        self.assertTrue(
+            self.controller.apply_accepted_translation(1, "原句", "认可译文")
+        )
+        self.assertEqual(service.requests, [])
+        self.assertEqual(service.prepared_profiles, [])
+        self.assertEqual(
+            service.invalidations,
+            [{"group_id": 1, "reason": "user accepted corrected translation"}],
+        )
+        self.assertEqual(service.reset_calls, [])
         self.assertEqual(self.context.status_message, "已创建第 1 组选择框。")
 
     def test_configured_agent_profile_is_prepared_before_any_selection(self) -> None:

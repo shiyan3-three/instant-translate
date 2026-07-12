@@ -72,6 +72,9 @@ def build_desktop_shell(argv: Sequence[str] | None = None) -> DesktopShell:
         edit_mode_controller=EditModeController(),
         on_state_changed=main_window.refresh_runtime_state,
     )
+    main_window.set_feedback_translation_applier(
+        selection_workflow.apply_accepted_translation
+    )
 
     def _apply_default_language(src: str, tgt: str) -> None:
         context.default_source_language = src

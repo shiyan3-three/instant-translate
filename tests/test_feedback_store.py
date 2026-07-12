@@ -9,6 +9,80 @@ from app.feedback.store import FeedbackStore
 
 
 class FeedbackStoreTests(unittest.TestCase):
+    def test_accept_translation_marks_accepted_without_creating_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1, source_language="中文", target_language="日本語",
+                ocr_text="一次性句子", translation_text="wrong",
+            )
+            accepted = store.accept_translation(record.id, "correct")
+
+            self.assertEqual(accepted.status, "accepted")
+            self.assertEqual(accepted.corrected_translation, "correct")
+            self.assertEqual(accepted.memory_rule_id, "")
+            self.assertEqual(store.list_memory_rules(), [])
+            self.assertEqual(store.list_feedback(status="pending"), [])
+            self.assertEqual(store.get_feedback(record.id).status, "accepted")
+
+    def test_accept_translation_requires_nonempty_translation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1, source_language="中文", target_language="日本語",
+                ocr_text="句子", translation_text="wrong",
+            )
+            with self.assertRaises(ValueError):
+                store.accept_translation(record.id, "  ")
+            self.assertEqual(store.get_feedback(record.id).status, "pending")
+
+    def test_confirmed_feedback_cannot_be_changed_to_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1, source_language="中文", target_language="日本語",
+                ocr_text="高考开始", translation_text="wrong",
+            )
+            memory = store.approve_feedback(
+                record.id,
+                trigger="高考",
+                rule="按大学入学考试语境翻译。",
+                preferred_translation="confirmed translation",
+            )
+
+            with self.assertRaises(ValueError):
+                store.accept_translation(record.id, "replacement")
+
+            unchanged = store.get_feedback(record.id)
+            self.assertEqual(unchanged.status, "confirmed")
+            self.assertEqual(unchanged.memory_rule_id, memory.id)
+            self.assertEqual(unchanged.corrected_translation, "confirmed translation")
+            memories = store.list_memory_rules()
+            self.assertEqual(len(memories), 1)
+            self.assertEqual(memories[0].id, memory.id)
+
+    def test_dismissed_and_accepted_feedback_cannot_be_accepted_again(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            dismissed = store.add_feedback(
+                group_id=1, source_language="中文", target_language="日本語",
+                ocr_text="dismissed", translation_text="wrong",
+            )
+            store.update_feedback(dismissed.id, status="dismissed")
+            with self.assertRaises(ValueError):
+                store.accept_translation(dismissed.id, "replacement")
+            self.assertEqual(store.get_feedback(dismissed.id).status, "dismissed")
+
+            accepted = store.add_feedback(
+                group_id=2, source_language="中文", target_language="日本語",
+                ocr_text="accepted", translation_text="wrong",
+            )
+            store.accept_translation(accepted.id, "first")
+            with self.assertRaises(ValueError):
+                store.accept_translation(accepted.id, "second")
+            unchanged = store.get_feedback(accepted.id)
+            self.assertEqual(unchanged.status, "accepted")
+            self.assertEqual(unchanged.corrected_translation, "first")
     """Verify pending feedback can become reusable local memory."""
 
     def test_feedback_can_be_approved_and_matched_after_reload(self) -> None:
