@@ -12,7 +12,8 @@ from unittest.mock import patch
 
 from app.agent.agent import TranslationAgent
 from app.agent.session_store import AgentSessionMeta
-from app.feedback.store import FeedbackStore
+from app.feedback.store import FeedbackStorageUnavailable, FeedbackStore
+from app.feedback.retrieval import FeedbackRetrievalResult
 from app.prompt.base_template import DEFAULT_BASE_PROMPT
 from app.prompt.policy import ConstraintPolicy
 from app.prompt.storage import PromptStorage
@@ -368,6 +369,610 @@ For every request, follow the source and target languages appended by the app.
         self.assertIsNone(duplicate_pending)
         self.assertIsNone(duplicate_committed)
 
+    def test_exact_ocr_variant_cache_reuses_a_b_results_without_fuzzy_matching(self) -> None:
+        service = TranslationService(AppSettings(), session_store=FakeSessionStore())
+        api_calls: list[str] = []
+        results = []
+
+        class CountingAgent:
+            messages = []
+
+            def translate(self, text, memory_hints=None, *, reference_hints=None, record=True, cancellation_check=None):
+                api_calls.append(text)
+                return f"translated:{text}"
+
+            def record_translation(self, source_text, translated_text):
+                return None
+
+        service._ensure_agent = lambda group_id, source, target: CountingAgent()
+
+        def execute_inline(fn, request, callback):
+            fn(request, callback)
+            completed = Future()
+            completed.set_result(None)
+            return completed
+
+        with patch.object(service._executor, "submit", side_effect=execute_inline):
+            texts = [
+                "Count is 1.",
+                "Do not enable cache.",
+                "Count is 1.",
+                "Do not enable cache.",
+            ]
+            for text in texts:
+                service.request_translation(1, text, results.append)
+        service.shutdown()
+
+        self.assertEqual(api_calls, ["Count is 1.", "Do not enable cache."])
+        self.assertEqual(
+            [result.text for result in results],
+            ["translated:Count is 1.", "translated:Do not enable cache.",
+             "translated:Count is 1.", "translated:Do not enable cache."],
+        )
+        self.assertEqual(
+            [result.source for result in results],
+            ["api", "api", "cache", "cache"],
+        )
+
+    def test_ocr_variant_cache_has_ttl_capacity_and_configuration_invalidation(self) -> None:
+        settings = AppSettings()
+        service = TranslationService(settings, session_store=FakeSessionStore())
+        service.OCR_VARIANT_CACHE_CAPACITY = 2
+        now = [100.0]
+        service._time_fn = lambda: now[0]
+        api_calls: list[str] = []
+
+        class CountingAgent:
+            messages = []
+
+            def translate(self, text, memory_hints=None, *, reference_hints=None, record=True, cancellation_check=None):
+                api_calls.append(text)
+                return f"translated:{text}"
+
+            def record_translation(self, source_text, translated_text):
+                return None
+
+        service._ensure_agent = lambda group_id, source, target: CountingAgent()
+
+        def execute_inline(fn, request, callback):
+            fn(request, callback)
+            completed = Future()
+            completed.set_result(None)
+            return completed
+
+        with patch.object(service._executor, "submit", side_effect=execute_inline):
+            service.request_translation(1, "A", lambda _result: None)
+            service.request_translation(1, "B", lambda _result: None)
+            service.request_translation(1, "C", lambda _result: None)
+            self.assertEqual(list(service._ensure_group(1).translation_variants), ["B", "C"])
+            service.request_translation(1, "A", lambda _result: None)
+            self.assertEqual(len(api_calls), 4)
+
+            now[0] += service.OCR_VARIANT_CACHE_TTL_SECONDS + 0.1
+            service.request_translation(1, "C", lambda _result: None)
+            self.assertEqual(len(api_calls), 5)
+
+            settings.ai.fast_model = "new-fast-model"
+            service.request_translation(1, "A", lambda _result: None)
+            self.assertEqual(len(api_calls), 6)
+            self.assertEqual(len(service._ensure_group(1).translation_variants), 1)
+
+        service.reset_group(1)
+        self.assertEqual(len(service._ensure_group(1).translation_variants), 0)
+        service.shutdown()
+
+    def test_feedback_revision_invalidates_cached_translation_and_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            feedback_store = FeedbackStore(tmp)
+            record = feedback_store.add_feedback(
+                group_id=1,
+                source_language="English",
+                target_language="中文",
+                ocr_text="alpha source",
+                translation_text="wrong",
+            )
+            memory = feedback_store.approve_feedback(
+                record.id,
+                trigger="alpha",
+                rule="保留 alpha 的领域含义。",
+                preferred_translation="with-rule",
+            )
+            service = TranslationService(
+                AppSettings(),
+                feedback_store=feedback_store,
+                session_store=FakeSessionStore(),
+            )
+            api_calls: list[tuple[str, bool]] = []
+            results = []
+
+            class CountingAgent:
+                messages = []
+
+                def translate(
+                    self,
+                    text,
+                    memory_hints=None,
+                    *,
+                    reference_hints=None,
+                    record=True,
+                    cancellation_check=None,
+                ):
+                    has_rule = not api_calls
+                    api_calls.append((text, has_rule))
+                    return "with-rule" if has_rule else f"plain:{text}"
+
+                def record_translation(self, source_text, translated_text):
+                    return None
+
+            service._ensure_agent = lambda group_id, source, target: CountingAgent()
+
+            def execute_inline(fn, request, callback):
+                fn(request, callback)
+                completed = Future()
+                completed.set_result(None)
+                return completed
+
+            with patch.object(service._executor, "submit", side_effect=execute_inline):
+                service.request_translation(1, "alpha source", results.append)
+                service.request_translation(1, "beta source", results.append)
+                self.assertEqual(len(api_calls), 2)
+                self.assertEqual(service.memory_provenance(1)[1], [])
+
+                feedback_store.update_memory_rule(memory.id, enabled=False)
+                service.request_translation(1, "alpha source", results.append)
+
+            service.shutdown()
+
+        self.assertEqual(len(api_calls), 3)
+        self.assertEqual(api_calls[0], ("alpha source", True))
+        self.assertEqual(api_calls[2], ("alpha source", False))
+        self.assertEqual([result.source for result in results], ["api", "api", "api"])
+        self.assertNotIn(memory.id, service.memory_provenance(1)[1])
+        self.assertEqual(results[-1].text, "plain:alpha source")
+
+    def test_inflight_feedback_disable_requeues_without_committing_old_result(self) -> None:
+        """A rule revoked during API work cannot commit or reach the UI."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            feedback_store = FeedbackStore(tmp)
+            record = feedback_store.add_feedback(
+                group_id=1,
+                source_language="English",
+                target_language="\u4e2d\u6587",
+                ocr_text="alpha source",
+                translation_text="wrong",
+            )
+            memory = feedback_store.approve_feedback(
+                record.id,
+                trigger="alpha",
+                rule="use the confirmed alpha meaning",
+                preferred_translation="with-rule",
+            )
+            service = TranslationService(
+                AppSettings(),
+                feedback_store=feedback_store,
+                session_store=FakeSessionStore(),
+            )
+            started = threading.Event()
+            release = threading.Event()
+            completed = threading.Event()
+            calls = []
+            recorded = []
+            results = []
+
+            class BlockingAgent:
+                messages = []
+
+                def translate(
+                    self,
+                    text,
+                    memory_hints=None,
+                    *,
+                    reference_hints=None,
+                    record=True,
+                    cancellation_check=None,
+                ):
+                    calls.append((text, list(memory_hints or [])))
+                    if len(calls) == 1:
+                        started.set()
+                        self.assert_release(release)
+                        return "old-rule-result"
+                    return "new-revision-result"
+
+                @staticmethod
+                def assert_release(gate):
+                    if not gate.wait(timeout=3.0):
+                        raise AssertionError("blocking Agent was not released")
+
+                def record_translation(self, source_text, translated_text):
+                    recorded.append((source_text, translated_text))
+
+            agent = BlockingAgent()
+            service._ensure_agent = lambda group_id, source, target: agent
+
+            def on_result(result):
+                results.append(result)
+                completed.set()
+
+            try:
+                old_request = service.request_translation(
+                    1,
+                    "alpha source",
+                    on_result,
+                )
+                self.assertIsNotNone(old_request)
+                self.assertTrue(started.wait(timeout=3.0))
+                old_revision = old_request.feedback_revision
+
+                feedback_store.update_memory_rule(memory.id, enabled=False)
+                self.assertGreater(feedback_store.knowledge_revision, old_revision)
+                release.set()
+
+                self.assertTrue(completed.wait(timeout=4.0))
+                self.assertEqual(len(results), 1)
+                self.assertEqual(results[0].text, "new-revision-result")
+                self.assertGreater(results[0].request_id, old_request.request_id)
+                self.assertEqual(len(calls), 2)
+                self.assertTrue(calls[0][1])
+                self.assertFalse(
+                    any("confirmed alpha meaning" in item for item in calls[1][1])
+                )
+                self.assertEqual(recorded, [("alpha source", "new-revision-result")])
+                self.assertNotIn(memory.id, service.memory_provenance(1)[1])
+                self.assertNotIn(memory.id, service.memory_provenance_snapshot(1).memory_rule_ids)
+            finally:
+                release.set()
+                service.shutdown()
+
+    def test_inflight_feedback_rule_edit_requeues_with_new_rule_text(self) -> None:
+        """Editing a rule invalidates the old request and its provenance."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1,
+                source_language="English",
+                target_language="\u4e2d\u6587",
+                ocr_text="alpha source",
+                translation_text="wrong",
+            )
+            memory = store.approve_feedback(
+                record.id,
+                trigger="alpha",
+                rule="old rule text",
+                preferred_translation="old",
+            )
+            service = TranslationService(AppSettings(), feedback_store=store)
+            started = threading.Event()
+            release = threading.Event()
+            completed = threading.Event()
+            hints = []
+            results = []
+
+            class BlockingAgent:
+                messages = []
+
+                def translate(self, text, memory_hints=None, *, reference_hints=None, record=True, cancellation_check=None):
+                    hints.append(list(memory_hints or []))
+                    if len(hints) == 1:
+                        started.set()
+                        if not release.wait(timeout=3.0):
+                            raise AssertionError("blocking Agent was not released")
+                    return f"result-{len(hints)}"
+
+                def record_translation(self, source_text, translated_text):
+                    return None
+
+            agent = BlockingAgent()
+            service._ensure_agent = lambda group_id, source, target: agent
+            try:
+                request = service.request_translation(1, "alpha source", lambda result: (results.append(result), completed.set()))
+                self.assertIsNotNone(request)
+                self.assertTrue(started.wait(timeout=3.0))
+                store.update_memory_rule(memory.id, rule_text="new rule text")
+                release.set()
+                self.assertTrue(completed.wait(timeout=4.0))
+            finally:
+                release.set()
+                service.shutdown()
+
+        self.assertEqual([result.text for result in results], ["result-2"])
+        self.assertTrue(hints[0])
+        self.assertTrue(hints[1])
+
+    def test_inflight_feedback_disable_correction_does_not_keep_old_provenance(self) -> None:
+        """Revoking an active correction also causes one bounded retranslation."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1,
+                source_language="English",
+                target_language="\u4e2d\u6587",
+                ocr_text="correction alpha",
+                translation_text="wrong",
+            )
+            store.submit_correction(
+                record.id,
+                corrected_translation="confirmed correction",
+                keywords=["correction alpha"],
+            )
+            service = TranslationService(AppSettings(), feedback_store=store)
+            started = threading.Event()
+            release = threading.Event()
+            completed = threading.Event()
+            correction_hints = []
+            results = []
+
+            class BlockingAgent:
+                messages = []
+
+                def translate(self, text, memory_hints=None, *, reference_hints=None, record=True, cancellation_check=None):
+                    correction_hints.append(list(memory_hints or []))
+                    if len(correction_hints) == 1:
+                        started.set()
+                        if not release.wait(timeout=3.0):
+                            raise AssertionError("blocking Agent was not released")
+                    return f"correction-result-{len(correction_hints)}"
+
+                def record_translation(self, source_text, translated_text):
+                    return None
+
+            agent = BlockingAgent()
+            service._ensure_agent = lambda group_id, source, target: agent
+            try:
+                request = service.request_translation(1, "correction alpha", lambda result: (results.append(result), completed.set()))
+                self.assertIsNotNone(request)
+                self.assertTrue(started.wait(timeout=3.0))
+                store.set_feedback_enabled(record.id, False)
+                release.set()
+                self.assertTrue(completed.wait(timeout=4.0))
+            finally:
+                release.set()
+                service.shutdown()
+
+        self.assertEqual([result.text for result in results], ["correction-result-2"])
+        self.assertTrue(correction_hints[0])
+        self.assertEqual(correction_hints[1], [])
+        self.assertEqual(service.memory_provenance(1), ([], []))
+
+    def test_feedback_revision_retry_is_bounded(self) -> None:
+        """Repeated rule churn cannot recursively resubmit forever."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1,
+                source_language="English",
+                target_language="\u4e2d\u6587",
+                ocr_text="retry alpha",
+                translation_text="wrong",
+            )
+            memory = store.approve_feedback(
+                record.id,
+                trigger="retry",
+                rule="first retry rule",
+                preferred_translation="old",
+            )
+            service = TranslationService(AppSettings(), feedback_store=store)
+            started = threading.Event()
+            release = threading.Event()
+            completed = threading.Event()
+            results = []
+            calls = []
+            recorded = []
+
+            class ChurningAgent:
+                messages = []
+
+                def translate(self, text, memory_hints=None, *, reference_hints=None, record=True, cancellation_check=None):
+                    calls.append(text)
+                    if len(calls) == 1:
+                        started.set()
+                        if not release.wait(timeout=3.0):
+                            raise AssertionError("blocking Agent was not released")
+                    elif len(calls) == 2:
+                        store.update_memory_rule(memory.id, rule_text="second retry rule")
+                    return f"result-{len(calls)}"
+
+                def record_translation(self, source_text, translated_text):
+                    recorded.append((source_text, translated_text))
+
+            service._ensure_agent = lambda group_id, source, target: ChurningAgent()
+            try:
+                def on_result(result):
+                    results.append(result)
+                    completed.set()
+
+                request = service.request_translation(1, "retry alpha", on_result)
+                self.assertIsNotNone(request)
+                self.assertTrue(started.wait(timeout=3.0))
+                store.update_memory_rule(memory.id, rule_text="first changed rule")
+                release.set()
+                self.assertTrue(completed.wait(timeout=4.0))
+            finally:
+                release.set()
+                service.shutdown()
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].source, "feedback_revision_churn")
+        self.assertIsNone(results[0].text)
+        self.assertEqual(recorded, [])
+        self.assertEqual(request.revision_retry_count, 0)
+
+    def test_reentrant_feedback_change_rolls_back_agent_history_before_retry(self) -> None:
+        """A revision change inside the commit hook cannot retain the old result."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1,
+                source_language="English",
+                target_language="\u4e2d\u6587",
+                ocr_text="atomic alpha",
+                translation_text="wrong",
+            )
+            memory = store.approve_feedback(
+                record.id,
+                trigger="atomic",
+                rule="old atomic rule",
+                preferred_translation="old",
+            )
+            service = TranslationService(
+                AppSettings(),
+                feedback_store=store,
+                session_store=FakeSessionStore(),
+            )
+            results = []
+            completed = threading.Event()
+
+            class ReentrantAgent:
+                def __init__(self) -> None:
+                    self.messages = [
+                        {"role": "system", "content": "system"},
+                        {"role": "user", "content": "bootstrap"},
+                        {"role": "assistant", "content": "ready"},
+                    ]
+                    self.calls = 0
+
+                def translate(self, text, memory_hints=None, *, reference_hints=None, record=True, cancellation_check=None):
+                    self.calls += 1
+                    return f"result-{self.calls}"
+
+                def record_translation(self, source_text, translated_text):
+                    self.messages.extend(
+                        [
+                            {"role": "user", "content": source_text},
+                            {"role": "assistant", "content": translated_text},
+                        ]
+                    )
+                    if translated_text == "result-1":
+                        store.update_memory_rule(
+                            memory.id,
+                            rule_text="new atomic rule",
+                        )
+
+            agent = ReentrantAgent()
+            service._ensure_agent = lambda group_id, source, target: agent
+
+            def on_result(result):
+                results.append(result)
+                completed.set()
+
+            try:
+                service.request_translation(1, "atomic alpha", on_result)
+                self.assertTrue(completed.wait(timeout=4.0))
+            finally:
+                service.shutdown()
+
+        self.assertEqual(agent.calls, 2)
+        self.assertEqual([result.text for result in results], ["result-2"])
+        assistant_messages = [
+            message["content"]
+            for message in agent.messages
+            if message.get("role") == "assistant"
+        ]
+        self.assertNotIn("result-1", assistant_messages)
+        self.assertEqual(assistant_messages[-1], "result-2")
+
+    def test_feedback_revision_change_does_not_requeue_after_reset(self) -> None:
+        """A reset wins the race and prevents the revision retry from returning UI work."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1,
+                source_language="English",
+                target_language="\u4e2d\u6587",
+                ocr_text="reset alpha",
+                translation_text="wrong",
+            )
+            memory = store.approve_feedback(
+                record.id,
+                trigger="reset",
+                rule="reset rule",
+                preferred_translation="old",
+            )
+            service = TranslationService(AppSettings(), feedback_store=store)
+            started = threading.Event()
+            release = threading.Event()
+            results = []
+
+            class BlockingAgent:
+                messages = []
+
+                def translate(self, text, memory_hints=None, *, reference_hints=None, record=True, cancellation_check=None):
+                    started.set()
+                    if not release.wait(timeout=3.0):
+                        raise AssertionError("blocking Agent was not released")
+                    return "old-result"
+
+                def record_translation(self, source_text, translated_text):
+                    raise AssertionError("reset stale result was recorded")
+
+            agent = BlockingAgent()
+            service._ensure_agent = lambda group_id, source, target: agent
+            try:
+                service.request_translation(1, "reset alpha", results.append)
+                self.assertTrue(started.wait(timeout=3.0))
+                store.update_memory_rule(memory.id, enabled=False)
+                service.reset_group(1)
+                release.set()
+                time.sleep(0.3)
+            finally:
+                release.set()
+                service.shutdown()
+
+        self.assertEqual(results, [])
+
+    def test_provenance_expires_immediately_when_feedback_changes(self) -> None:
+        """Provenance IDs are stale immediately, even before another OCR request."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            record = store.add_feedback(
+                group_id=1,
+                source_language="English",
+                target_language="\u4e2d\u6587",
+                ocr_text="provenance alpha",
+                translation_text="wrong",
+            )
+            memory = store.approve_feedback(
+                record.id,
+                trigger="provenance",
+                rule="provenance rule",
+                preferred_translation="confirmed",
+            )
+            service = TranslationService(AppSettings(), feedback_store=store)
+            agent = FakeMemoryAgent()
+            service._ensure_agent = lambda group_id, source, target: agent
+            results = []
+
+            def execute_inline(fn, request, callback):
+                fn(request, callback)
+                future = Future()
+                future.set_result(None)
+                return future
+
+            try:
+                with patch.object(service._executor, "submit", side_effect=execute_inline):
+                    service.request_translation(1, "provenance alpha", results.append)
+                self.assertIn(memory.id, service.memory_provenance(1)[1])
+                before = service.memory_provenance_snapshot(1)
+                self.assertIn(memory.id, before.memory_rule_ids)
+
+                store.update_memory_rule(memory.id, enabled=False)
+                self.assertEqual(service.memory_provenance(1), ([], []))
+                after = service.memory_provenance_snapshot(1)
+            finally:
+                service.shutdown()
+
+        self.assertEqual(after.memory_rule_ids, ())
+        self.assertEqual(after.correction_ids, ())
+        self.assertEqual(after.ocr_text, before.ocr_text)
+        self.assertEqual(after.translation_text, before.translation_text)
+
     def test_current_translation_error_clears_pending_text_for_retry(self) -> None:
         service = TranslationService(AppSettings())
 
@@ -438,6 +1043,87 @@ For every request, follow the source and target languages appended by the app.
         self.assertEqual(fake_agent.text, "")
         self.assertEqual(fake_agent.recorded, [])
 
+    def test_stale_request_after_feedback_retrieval_never_calls_flash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service_holder = {}
+
+            class SlowRetriever:
+                def retrieve(self, text, **kwargs):
+                    service_holder["service"].invalidate_group_requests(
+                        1,
+                        reason="screen changed during feedback retrieval",
+                    )
+                    return FeedbackRetrievalResult(backend="slow-rag-test")
+
+            service = TranslationService(
+                AppSettings(),
+                feedback_store=FeedbackStore(tmp),
+                feedback_retriever=SlowRetriever(),
+            )
+            service_holder["service"] = service
+            fake_agent = FakeMemoryAgent()
+            service._ensure_agent = lambda group_id, source, target: fake_agent
+            request = TranslationRequest(group_id=1, request_id=1, ocr_text="old text")
+            ctx = service._ensure_group(1)
+            ctx.current_request_id = 1
+            ctx.pending_text = "old text"
+
+            service._execute(request, lambda result: None)
+            service.shutdown()
+
+            self.assertEqual(fake_agent.text, "")
+            self.assertEqual(fake_agent.recorded, [])
+
+    def test_feedback_storage_recovery_failure_skips_hints_but_keeps_translation(self) -> None:
+        service = TranslationService(AppSettings())
+        fake_agent = FakeMemoryAgent()
+        service._ensure_agent = lambda group_id, source, target: fake_agent
+        service._memory_hints_for_request = lambda request: (_ for _ in ()).throw(
+            FeedbackStorageUnavailable("rollback pending")
+        )
+        request = TranslationRequest(group_id=1, request_id=1, ocr_text="current text")
+        ctx = service._ensure_group(1)
+        ctx.current_request_id = 1
+        ctx.pending_text = "current text"
+        results = []
+
+        service._execute(request, results.append)
+        service.shutdown()
+
+        self.assertEqual(fake_agent.text, "current text")
+        self.assertEqual(fake_agent.memory_hints, [])
+        self.assertEqual(results[0].text, "the national college entrance exam starts soon")
+
+    def test_stale_request_after_reference_retrieval_never_calls_flash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = TranslationService(
+                AppSettings(),
+                feedback_store=FeedbackStore(tmp),
+            )
+            fake_agent = FakeMemoryAgent()
+            service._ensure_agent = lambda group_id, source, target: fake_agent
+            original = service._reference_context_for_request
+
+            def retrieve_and_invalidate(request):
+                context = original(request)
+                service.invalidate_group_requests(
+                    request.group_id,
+                    reason="screen changed during reference retrieval",
+                )
+                return context
+
+            service._reference_context_for_request = retrieve_and_invalidate
+            request = TranslationRequest(group_id=1, request_id=1, ocr_text="old text")
+            ctx = service._ensure_group(1)
+            ctx.current_request_id = 1
+            ctx.pending_text = "old text"
+
+            service._execute(request, lambda result: None)
+            service.shutdown()
+
+            self.assertEqual(fake_agent.text, "")
+            self.assertEqual(fake_agent.recorded, [])
+
     def test_execute_injects_confirmed_feedback_memory_when_trigger_matches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             feedback_store = FeedbackStore(tmp)
@@ -473,7 +1159,102 @@ For every request, follow the source and target languages appended by the app.
             self.assertEqual(results[0].text, "the national college entrance exam starts soon")
             self.assertEqual(fake_agent.text, "The gaokao starts soon")
             self.assertIsNotNone(fake_agent.memory_hints)
-            self.assertIn("gaokao 应译为", fake_agent.memory_hints[0])
+            self.assertIn("完全一致的用户确认纠错", fake_agent.memory_hints[0])
+            self.assertIn("高考很快开始", fake_agent.memory_hints[0])
+
+    def test_execute_injects_submitted_correction_and_commits_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            feedback_store = FeedbackStore(tmp)
+            record = feedback_store.add_feedback(
+                group_id=1, source_language="中文", target_language="日本語",
+                ocr_text="连接超时了", translation_text="wrong",
+            )
+            feedback_store.submit_correction(
+                record.id,
+                corrected_translation="せつぞく  が  たいむあうと  しました",
+                keywords=["连接超时"],
+            )
+            service = TranslationService(AppSettings(), feedback_store=feedback_store)
+            fake_agent = FakeMemoryAgent()
+            service._ensure_agent = lambda group_id, source, target: fake_agent
+            request = TranslationRequest(
+                group_id=1,
+                request_id=1,
+                ocr_text="接口连接超时了",
+                source_language="中文",
+                target_language="日本語",
+            )
+            service._ensure_group(1).current_request_id = 1
+
+            service._execute(request, lambda result: None)
+
+            correction_ids, rule_ids = service.memory_provenance(1)
+            snapshot = service.memory_provenance_snapshot(1)
+            service.shutdown()
+            self.assertEqual(correction_ids, [record.id])
+            self.assertEqual(rule_ids, [])
+            self.assertEqual(
+                dict(snapshot.correction_hint_snapshots),
+                request.matched_correction_hint_snapshots,
+            )
+            self.assertIn(record.id, dict(snapshot.correction_hint_snapshots))
+            self.assertTrue(any("用户确认纠错案例原文" in item for item in fake_agent.memory_hints))
+
+    def test_memory_injection_is_capped_at_three_items(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(tmp)
+            for index in range(2):
+                record = store.add_feedback(
+                    group_id=index, source_language="中文", target_language="日本語",
+                    ocr_text=f"连接错误 {index}", translation_text="wrong",
+                )
+                store.submit_correction(
+                    record.id,
+                    corrected_translation=f"correct {index}",
+                    keywords=["连接"],
+                )
+            for index in range(2):
+                record = store.add_feedback(
+                    group_id=10 + index, source_language="中文", target_language="日本語",
+                    ocr_text=f"连接规则 {index}", translation_text="wrong",
+                )
+                store.approve_feedback(
+                    record.id,
+                    trigger="连接",
+                    rule=f"rule {index}",
+                )
+            service = TranslationService(AppSettings(), feedback_store=store)
+            request = TranslationRequest(
+                group_id=1, request_id=1, ocr_text="连接错误 0",
+                source_language="中文", target_language="日本語",
+            )
+
+            hints = service._memory_hints_for_request(request)
+            service.shutdown()
+
+            self.assertEqual(len(hints), 3)
+            self.assertEqual(len(request.matched_memory_rule_ids), 2)
+            self.assertEqual(len(request.matched_correction_ids), 1)
+            self.assertEqual(
+                set(request.matched_memory_hint_snapshots),
+                set(request.matched_memory_rule_ids),
+            )
+            self.assertEqual(
+                set(request.matched_correction_hint_snapshots),
+                set(request.matched_correction_ids),
+            )
+            self.assertTrue(all(
+                hint in hints
+                for hint in request.matched_memory_hint_snapshots.values()
+            ))
+            self.assertTrue(all(
+                hint in hints
+                for hint in request.matched_correction_hint_snapshots.values()
+            ))
+            self.assertLessEqual(
+                sum(len(item) for item in hints),
+                TranslationService.MAX_MEMORY_HINT_CHARS,
+            )
 
     def test_execute_injects_compiled_reference_hints(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -979,6 +1760,20 @@ class TranslationServiceAgentPerGroupTests(unittest.TestCase):
         finally:
             gate.set()
             service.shutdown()
+
+    def test_shutdown_rejects_new_translation_and_profile_work(self) -> None:
+        settings = AppSettings()
+        settings.ai.base_url = "https://example.invalid/v1"
+        settings.ai.api_key = "test-key"
+        settings.ai.fast_model = "fast"
+        settings.ai.thinking_model = "thinking"
+        service = TranslationService(settings)
+
+        service.shutdown()
+
+        self.assertIsNone(service.request_translation(1, "hello", lambda _result: None))
+        self.assertIsNone(service.prepare_agent_profile("English", "中文"))
+        service.shutdown()  # idempotent
 
 
 if __name__ == "__main__":

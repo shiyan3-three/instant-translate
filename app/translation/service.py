@@ -7,13 +7,21 @@ import math
 import re
 import threading
 import time
+from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.agent.agent import StaleRequestAborted, TranslationAgent
 from app.agent.session_store import AgentProfileMeta, AgentSessionMeta, AgentSessionStore
-from app.feedback.store import FeedbackStore
+from app.feedback.memory_policy import memory_rule_prompt_hint
+from app.feedback.store import FeedbackStorageUnavailable, FeedbackStore
+from app.feedback.retrieval import (
+    AuthoritativeFeedbackRetriever,
+    FeedbackRetriever,
+    LexicalFeedbackRetriever,
+)
 from app.logger import get_debug_logger, get_logger
 from app.prompt.base_template import DEFAULT_BASE_PROMPT
 from app.prompt.policy import ConstraintPolicy, ConstraintPolicyCompiler
@@ -30,8 +38,32 @@ class TranslationRequest:
     group_id: int
     request_id: int
     ocr_text: str
+    # ``-1`` is retained as a compatibility sentinel for tests/integrations
+    # that construct a request directly.  Requests created by
+    # ``request_translation`` always capture the real revision.
+    feedback_revision: int = -1
+    revision_retry_count: int = 0
     source_language: str = "English"
     target_language: str = "中文"
+    matched_memory_rule_ids: list[str] = field(default_factory=list)
+    matched_correction_ids: list[str] = field(default_factory=list)
+    matched_memory_hint_snapshots: dict[str, str] = field(default_factory=dict)
+    matched_correction_hint_snapshots: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CachedTranslation:
+    """One exact OCR variant cached for a short period within one group."""
+
+    translation_text: str
+    source_language: str
+    target_language: str
+    correction_ids: tuple[str, ...]
+    memory_rule_ids: tuple[str, ...]
+    correction_hint_snapshots: tuple[tuple[str, str], ...]
+    memory_hint_snapshots: tuple[tuple[str, str], ...]
+    feedback_revision: int
+    stored_at: float
 
 
 @dataclass
@@ -42,6 +74,14 @@ class TranslationResult:
     request_id: int
     text: str | None
     error: str | None
+    source: str = "api"
+    feedback_revision: int = -1
+
+    @property
+    def from_cache(self) -> bool:
+        """Compatibility flag for callers that only need cache provenance."""
+
+        return self.source == "cache"
 
     @property
     def is_stale(self) -> bool:
@@ -58,6 +98,33 @@ class GroupContext:
     last_translation: str = ""
     current_request_id: int = 0
     pending_text: str = ""
+    last_memory_rule_ids: list[str] = field(default_factory=list)
+    last_correction_ids: list[str] = field(default_factory=list)
+    last_memory_hint_snapshots: dict[str, str] = field(default_factory=dict)
+    last_correction_hint_snapshots: dict[str, str] = field(default_factory=dict)
+    last_source_language: str = ""
+    last_target_language: str = ""
+    last_request_id: int = 0
+    last_feedback_revision: int = 0
+    translation_variants: OrderedDict[str, CachedTranslation] = field(
+        default_factory=OrderedDict
+    )
+    cache_scope: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True)
+class TranslationMemorySnapshot:
+    """Committed translation and the feedback knowledge injected for it."""
+
+    ocr_text: str = ""
+    translation_text: str = ""
+    correction_ids: tuple[str, ...] = ()
+    memory_rule_ids: tuple[str, ...] = ()
+    correction_hint_snapshots: tuple[tuple[str, str], ...] = ()
+    memory_hint_snapshots: tuple[tuple[str, str], ...] = ()
+    source_language: str = ""
+    target_language: str = ""
+    request_id: int = 0
 
 
 @dataclass
@@ -115,6 +182,10 @@ class TranslationService:
 
     API_BACKOFF_FAILURE_THRESHOLD = 3
     API_BACKOFF_COOLDOWN_SECONDS = 30.0
+    MAX_MEMORY_HINT_CHARS = 2400
+    OCR_VARIANT_CACHE_TTL_SECONDS = 8.0
+    OCR_VARIANT_CACHE_CAPACITY = 8
+    FEEDBACK_REVISION_RETRY_LIMIT = 1
 
     def __init__(
         self,
@@ -123,10 +194,12 @@ class TranslationService:
         max_concurrent_api_calls: int = 2,
         session_store: AgentSessionStore | None = None,
         feedback_store: FeedbackStore | None = None,
+        feedback_retriever: FeedbackRetriever | None = None,
     ) -> None:
         self._settings = settings
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._lock = threading.RLock()
+        self._closing = False
         self._groups: dict[int, GroupContext] = {}
         self._agents: dict[int, TranslationAgent] = {}
         self._agent_meta: dict[int, AgentRuntimeMeta] = {}
@@ -146,6 +219,13 @@ class TranslationService:
         self._time_fn = time.monotonic
         self._session_store = session_store or AgentSessionStore()
         self._feedback_store = feedback_store or FeedbackStore()
+        feedback_backend = feedback_retriever or LexicalFeedbackRetriever(
+            self._feedback_store,
+        )
+        self._feedback_retriever = AuthoritativeFeedbackRetriever(
+            feedback_backend,
+            self._feedback_store,
+        )
 
     # ------------------------------------------------------------------
     # public API
@@ -172,34 +252,107 @@ class TranslationService:
         if not clean:
             return None
 
+        feedback_revision = self._current_feedback_revision()
+        cached_request: TranslationRequest | None = None
+        cached_result: TranslationResult | None = None
+        future: Future | None = None
         with self._lock:
+            if self._closing:
+                return None
             ctx = self._ensure_group(group_id)
+            self._refresh_translation_cache_scope(
+                ctx,
+                source_language=source_language,
+                target_language=target_language,
+                feedback_revision=feedback_revision,
+            )
 
             if self._is_similar(clean, ctx.last_committed_text) or self._is_similar(
                 clean, ctx.pending_text
             ):
                 get_debug_logger().debug(
-                    "[G%d] Translation request skipped as duplicate: %r",
+                    "[G%d] Translation request skipped as duplicate: len=%d sha256=%s",
                     group_id,
-                    clean[:80],
+                    len(clean),
+                    hashlib.sha256(clean.encode("utf-8")).hexdigest()[:12],
                 )
                 return None
 
-            ctx.current_request_id += 1
-            ctx.pending_text = clean
-            request = TranslationRequest(
-                group_id=group_id,
-                request_id=ctx.current_request_id,
-                ocr_text=clean,
-                source_language=source_language,
-                target_language=target_language,
-            )
+            self._expire_translation_variants(ctx)
+            cached = ctx.translation_variants.get(clean)
+            if cached is not None and cached.feedback_revision != feedback_revision:
+                # The scope and the revision are read independently.  If a
+                # feedback write lands between those reads, refuse the old
+                # variant rather than restoring it for the new token.
+                cached = None
+            if cached is not None:
+                # A cached variant is a new logical generation.  This makes a
+                # still-running B request stale before A is restored, while
+                # keeping the callback/result path identical to a real call.
+                ctx.translation_variants.move_to_end(clean)
+                ctx.current_request_id += 1
+                ctx.pending_text = ""
+                ctx.last_committed_text = clean
+                ctx.last_translation = cached.translation_text
+                ctx.last_memory_rule_ids = list(cached.memory_rule_ids)
+                ctx.last_correction_ids = list(cached.correction_ids)
+                ctx.last_memory_hint_snapshots = dict(cached.memory_hint_snapshots)
+                ctx.last_correction_hint_snapshots = dict(cached.correction_hint_snapshots)
+                ctx.last_source_language = cached.source_language
+                ctx.last_target_language = cached.target_language
+                ctx.last_request_id = ctx.current_request_id
+                ctx.last_feedback_revision = cached.feedback_revision
+                cached_request = TranslationRequest(
+                    group_id=group_id,
+                    request_id=ctx.current_request_id,
+                    ocr_text=clean,
+                    feedback_revision=feedback_revision,
+                    source_language=source_language,
+                    target_language=target_language,
+                )
+                cached_result = TranslationResult(
+                    group_id=group_id,
+                    request_id=ctx.current_request_id,
+                    text=cached.translation_text,
+                    error=None,
+                    source="cache",
+                    feedback_revision=feedback_revision,
+                )
+            else:
+                ctx.current_request_id += 1
+                ctx.pending_text = clean
+                request = TranslationRequest(
+                    group_id=group_id,
+                    request_id=ctx.current_request_id,
+                    ocr_text=clean,
+                    feedback_revision=feedback_revision,
+                    source_language=source_language,
+                    target_language=target_language,
+                )
 
-        future: Future = self._executor.submit(
-            self._execute, request, on_result
-        )
+                try:
+                    future = self._executor.submit(
+                        self._execute, request, on_result
+                    )
+                except RuntimeError:
+                    # shutdown() may race a final OCR callback.  The request was
+                    # never queued, so clear its pending marker without surfacing
+                    # an exception through a Qt/background boundary.
+                    ctx.pending_text = ""
+                    return None
+        if cached_result is not None:
+            with self._feedback_revision_guard(
+                cached_request.feedback_revision
+            ) as revision_current:
+                if revision_current:
+                    self._invoke_callback(on_result, cached_result)
+                    return cached_request
+            self._discard_revision_state(cached_request)
+            self._requeue_after_feedback_revision(cached_request, on_result)
+            return cached_request
         # Avoids "future unused" warnings while still letting the pool
         # own lifecycle.
+        assert future is not None
         future.add_done_callback(self._log_worker_failure)
 
         return request
@@ -218,6 +371,57 @@ class TranslationService:
             ctx.last_committed_text = ""
             ctx.last_translation = ""
             ctx.pending_text = ""
+            ctx.last_memory_rule_ids = []
+            ctx.last_correction_ids = []
+            ctx.last_memory_hint_snapshots = {}
+            ctx.last_correction_hint_snapshots = {}
+            ctx.last_source_language = ""
+            ctx.last_target_language = ""
+            ctx.last_request_id = 0
+            ctx.last_feedback_revision = 0
+            ctx.translation_variants.clear()
+            ctx.cache_scope = ()
+
+    def memory_provenance(self, group_id: int) -> tuple[list[str], list[str]]:
+        """Return the correction/rule ids actually injected for the last committed request."""
+
+        feedback_revision = self._current_feedback_revision()
+        with self._lock:
+            ctx = self._ensure_group(group_id)
+            if ctx.last_feedback_revision != feedback_revision:
+                return [], []
+            return list(ctx.last_correction_ids), list(ctx.last_memory_rule_ids)
+
+    def memory_provenance_snapshot(self, group_id: int) -> TranslationMemorySnapshot:
+        """Return one atomic snapshot for feedback marking and audit."""
+
+        feedback_revision = self._current_feedback_revision()
+        with self._lock:
+            ctx = self._ensure_group(group_id)
+            provenance_is_current = ctx.last_feedback_revision == feedback_revision
+            return TranslationMemorySnapshot(
+                ocr_text=ctx.last_committed_text,
+                translation_text=ctx.last_translation,
+                correction_ids=(
+                    tuple(ctx.last_correction_ids) if provenance_is_current else ()
+                ),
+                memory_rule_ids=(
+                    tuple(ctx.last_memory_rule_ids) if provenance_is_current else ()
+                ),
+                correction_hint_snapshots=tuple(
+                    ctx.last_correction_hint_snapshots.items()
+                    if provenance_is_current
+                    else ()
+                ),
+                memory_hint_snapshots=(
+                    tuple(ctx.last_memory_hint_snapshots.items())
+                    if provenance_is_current
+                    else ()
+                ),
+                source_language=ctx.last_source_language,
+                target_language=ctx.last_target_language,
+                request_id=ctx.last_request_id,
+            )
 
     def invalidate_group_requests(self, group_id: int, reason: str = "") -> None:
         """Mark current in-flight work stale without destroying the Agent session."""
@@ -241,13 +445,33 @@ class TranslationService:
         with self._agent_lock:
             self._agents.pop(group_id, None)
             self._agent_meta.pop(group_id, None)
+        with self._lock:
+            ctx = self._groups.get(group_id)
+            if ctx is not None:
+                ctx.translation_variants.clear()
+                # reset_agent is also a translation-context reset: the next
+                # request must not be suppressed by the previous committed
+                # text or by a cache scope from the old Agent session.
+                ctx.cache_scope = ()
         if delete_persisted:
             self._session_store.delete(group_id)
 
     def shutdown(self) -> None:
-        """Shut down the background thread pool (best-effort, no wait)."""
+        """Invalidate all work and cancel futures that have not started."""
 
-        self._executor.shutdown(wait=False)
+        with self._lock:
+            if self._closing:
+                return
+            self._closing = True
+            for ctx in self._groups.values():
+                ctx.current_request_id += 1
+                ctx.pending_text = ""
+        with self._profile_lock:
+            profile_futures = list(self._profile_futures.values())
+            self._profile_futures.clear()
+        for future in profile_futures:
+            future.cancel()
+        self._executor.shutdown(wait=False, cancel_futures=True)
 
     def prepare_agent_profile(
         self,
@@ -256,6 +480,9 @@ class TranslationService:
     ) -> Future | None:
         """Prepare the visible Pro bootstrap in the background before OCR exists."""
 
+        with self._lock:
+            if self._closing:
+                return None
         ai = self._settings.ai
         if not (
             ai.base_url.strip()
@@ -296,19 +523,115 @@ class TranslationService:
     # internal helpers
     # ------------------------------------------------------------------
 
-    def _execute(self, request: TranslationRequest, on_result) -> None:
-        with self._lock:
-            ctx = self._ensure_group(request.group_id)
-            if self._is_stale_request(request, ctx):
-                return
+    def _translation_cache_scope(
+        self,
+        source_language: str,
+        target_language: str,
+        *,
+        feedback_revision: int | None = None,
+    ) -> tuple[object, ...]:
+        """Return local configuration that changes translation meaning."""
 
+        ai = self._settings.ai
+        prompt = self._settings.prompt
+        if feedback_revision is None:
+            feedback_revision = self._current_feedback_revision()
+        return (
+            source_language,
+            target_language,
+            ai.base_url.strip(),
+            ai.fast_model_name.strip(),
+            ai.thinking_model_name.strip(),
+            prompt.constraints_text,
+            prompt.compiled_prompt_path,
+            tuple(prompt.knowledge_reference_paths),
+            feedback_revision,
+        )
+
+    def _refresh_translation_cache_scope(
+        self,
+        ctx: GroupContext,
+        *,
+        source_language: str,
+        target_language: str,
+        feedback_revision: int | None = None,
+    ) -> None:
+        scope = self._translation_cache_scope(
+            source_language,
+            target_language,
+            feedback_revision=feedback_revision,
+        )
+        if ctx.cache_scope != scope and (
+            ctx.cache_scope
+            or ctx.translation_variants
+            or ctx.last_committed_text
+            or ctx.pending_text
+        ):
+            # Configuration changes must not let the previous model/prompt
+            # suppress the first request under the new configuration.
+            ctx.current_request_id += 1
+            ctx.last_committed_text = ""
+            ctx.last_translation = ""
+            ctx.pending_text = ""
+            ctx.last_memory_rule_ids = []
+            ctx.last_correction_ids = []
+            ctx.last_memory_hint_snapshots = {}
+            ctx.last_correction_hint_snapshots = {}
+            ctx.last_source_language = ""
+            ctx.last_target_language = ""
+            ctx.last_request_id = 0
+            ctx.last_feedback_revision = 0
+            ctx.translation_variants.clear()
+        ctx.cache_scope = scope
+
+    def _expire_translation_variants(self, ctx: GroupContext) -> None:
+        cutoff = self._time_fn() - self.OCR_VARIANT_CACHE_TTL_SECONDS
+        for text, cached in list(ctx.translation_variants.items()):
+            if cached.stored_at <= cutoff:
+                ctx.translation_variants.pop(text, None)
+
+    def _cache_translation_variant(
+        self,
+        ctx: GroupContext,
+        request: TranslationRequest,
+        translated_text: str,
+    ) -> None:
+        if not translated_text.strip():
+            return
+        self._expire_translation_variants(ctx)
+        ctx.translation_variants[request.ocr_text] = CachedTranslation(
+            translation_text=translated_text,
+            source_language=request.source_language,
+            target_language=request.target_language,
+            correction_ids=tuple(request.matched_correction_ids),
+            memory_rule_ids=tuple(request.matched_memory_rule_ids),
+            correction_hint_snapshots=tuple(request.matched_correction_hint_snapshots.items()),
+            memory_hint_snapshots=tuple(request.matched_memory_hint_snapshots.items()),
+            feedback_revision=request.feedback_revision,
+            stored_at=self._time_fn(),
+        )
+        ctx.translation_variants.move_to_end(request.ocr_text)
+        while len(ctx.translation_variants) > self.OCR_VARIANT_CACHE_CAPACITY:
+            ctx.translation_variants.popitem(last=False)
+
+    def _execute(self, request: TranslationRequest, on_result) -> None:
+        if request.feedback_revision < 0:
+            # Keep direct callers/tests compatible while all public requests
+            # still carry an explicit captured revision.
+            request.feedback_revision = self._current_feedback_revision()
+        stale, feedback_changed = self._request_stage_status(request)
+        if stale:
+            if feedback_changed:
+                self._requeue_after_feedback_revision(request, on_result)
+            return
         try:
             group_lock = self._agent_lock_for(request.group_id)
             with group_lock:
-                with self._lock:
-                    ctx = self._ensure_group(request.group_id)
-                    if self._is_stale_request(request, ctx):
-                        return
+                stale, feedback_changed = self._request_stage_status(request)
+                if stale:
+                    if feedback_changed:
+                        self._requeue_after_feedback_revision(request, on_result)
+                    return
 
                 get_debug_logger().debug("[G%d] Waiting for API slot", request.group_id)
                 with self._api_slots:
@@ -322,18 +645,39 @@ class TranslationService:
                         # Agent preparation may include a slow Pro bootstrap.
                         # Re-check after it finishes so an obsolete OCR request
                         # never spends another Flash call or reaches the UI.
-                        with self._lock:
-                            ctx = self._ensure_group(request.group_id)
-                            if self._is_stale_request(request, ctx):
-                                get_debug_logger().debug(
-                                    "[G%d] Translation skipped after Agent prepare: stale request=%d current=%d",
-                                    request.group_id,
-                                    request.request_id,
-                                    ctx.current_request_id,
-                                )
-                                return
-                        memory_hints = self._memory_hints_for_request(request)
+                        stale, feedback_changed = self._request_stage_status(request)
+                        if stale:
+                            if feedback_changed:
+                                self._requeue_after_feedback_revision(request, on_result)
+                            return
+                        try:
+                            memory_hints = self._memory_hints_for_request(request)
+                        except FeedbackStorageUnavailable as exc:
+                            # Translation remains available, but partially
+                            # recovered feedback must never enter the model.
+                            get_logger().warning(
+                                "[G%d] Feedback memory unavailable; translating without hints: %s",
+                                request.group_id,
+                                exc,
+                            )
+                            request.matched_memory_rule_ids = []
+                            request.matched_correction_ids = []
+                            request.matched_memory_hint_snapshots = {}
+                            request.matched_correction_hint_snapshots = {}
+                            memory_hints = []
+                        # A future RAG backend may be slow.  Do not spend a
+                        # Flash request after retrieval if OCR already moved on.
+                        stale, feedback_changed = self._request_stage_status(request)
+                        if stale:
+                            if feedback_changed:
+                                self._requeue_after_feedback_revision(request, on_result)
+                            return
                         reference_context = self._reference_context_for_request(request)
+                        stale, feedback_changed = self._request_stage_status(request)
+                        if stale:
+                            if feedback_changed:
+                                self._requeue_after_feedback_revision(request, on_result)
+                            return
                         translate_kwargs = {
                             "memory_hints": memory_hints,
                             "reference_hints": reference_context.hints,
@@ -349,32 +693,90 @@ class TranslationService:
                     finally:
                         get_debug_logger().debug("[G%d] API slot released", request.group_id)
 
-                with self._lock:
-                    ctx = self._ensure_group(request.group_id)
-                    if self._is_stale_request(request, ctx):
-                        get_debug_logger().debug(
-                            "[G%d] Translation completed but was not committed: stale request=%d current=%d",
-                            request.group_id,
-                            request.request_id,
-                            ctx.current_request_id,
-                        )
-                        return
-                    agent.record_translation(request.ocr_text, text)
-                    ctx.last_committed_text = request.ocr_text
-                    ctx.pending_text = ""
-                    ctx.last_translation = text
-                self._save_agent_session(request.group_id, agent)
+                # This is the commit gate.  FeedbackStore holds its shared root
+                # lock across the short local commit, session write, and success
+                # callback so a durable feedback mutation cannot land between
+                # a revision check and any of those side effects.
+                stale = False
+                feedback_changed = False
+                agent_messages = self._snapshot_agent_messages(agent)
+                with self._feedback_revision_guard(
+                    request.feedback_revision
+                ) as revision_current:
+                    if not revision_current:
+                        feedback_changed = True
+                    else:
+                        with self._lock:
+                            ctx = self._ensure_group(request.group_id)
+                            if self._is_stale_request(request, ctx):
+                                stale = True
+                            else:
+                                agent.record_translation(request.ocr_text, text)
+                                # A re-entrant test double can mutate feedback
+                                # from record_translation even though external
+                                # writers are blocked by the revision guard.
+                                if not self._feedback_revision_is_current(request):
+                                    self._restore_agent_messages(agent, agent_messages)
+                                    feedback_changed = True
+                                else:
+                                    ctx.last_committed_text = request.ocr_text
+                                    ctx.pending_text = ""
+                                    ctx.last_translation = text
+                                    ctx.last_memory_rule_ids = list(
+                                        request.matched_memory_rule_ids
+                                    )
+                                    ctx.last_correction_ids = list(
+                                        request.matched_correction_ids
+                                    )
+                                    ctx.last_memory_hint_snapshots = dict(
+                                        request.matched_memory_hint_snapshots
+                                    )
+                                    ctx.last_correction_hint_snapshots = dict(
+                                        request.matched_correction_hint_snapshots
+                                    )
+                                    ctx.last_source_language = request.source_language
+                                    ctx.last_target_language = request.target_language
+                                    ctx.last_request_id = request.request_id
+                                    ctx.last_feedback_revision = request.feedback_revision
+                                    self._cache_translation_variant(ctx, request, text)
 
-            self._invoke_callback(
-                on_result,
-                TranslationResult(
-                    group_id=request.group_id,
-                    request_id=request.request_id,
-                    text=text,
-                    error=None,
-                )
-            )
+                        if not stale and not feedback_changed:
+                            self._save_agent_session(request.group_id, agent)
+                            if not self._feedback_revision_is_current(request):
+                                # Defensive support for re-entrant/custom
+                                # session stores.  Production feedback writers
+                                # cannot enter while the revision guard is held.
+                                self._restore_agent_messages(agent, agent_messages)
+                                self._session_store.delete(request.group_id)
+                                feedback_changed = True
+                            else:
+                                self._invoke_callback(
+                                    on_result,
+                                    TranslationResult(
+                                        group_id=request.group_id,
+                                        request_id=request.request_id,
+                                        text=text,
+                                        error=None,
+                                        source="api",
+                                        feedback_revision=request.feedback_revision,
+                                    ),
+                                )
+                if stale:
+                    get_debug_logger().debug(
+                        "[G%d] Translation completed but was not committed: stale request=%d",
+                        request.group_id,
+                        request.request_id,
+                    )
+                    return
+                if feedback_changed:
+                    self._discard_revision_state(request)
+                    self._requeue_after_feedback_revision(request, on_result)
+                    return
+                return
         except StaleRequestAborted:
+            if not self._feedback_revision_is_current(request):
+                self._requeue_after_feedback_revision(request, on_result)
+                return
             get_debug_logger().debug(
                 "[G%d] Translation aborted before thinking retry: stale request=%d",
                 request.group_id,
@@ -382,6 +784,9 @@ class TranslationService:
             )
             return
         except TranslationError as exc:
+            if not self._feedback_revision_is_current(request):
+                self._requeue_after_feedback_revision(request, on_result)
+                return
             with self._lock:
                 ctx = self._ensure_group(request.group_id)
                 if self._is_stale_request(request, ctx):
@@ -394,9 +799,14 @@ class TranslationService:
                     request_id=request.request_id,
                     text=None,
                     error=str(exc),
+                    source="api",
+                    feedback_revision=request.feedback_revision,
                 )
             )
         except Exception as exc:
+            if not self._feedback_revision_is_current(request):
+                self._requeue_after_feedback_revision(request, on_result)
+                return
             get_debug_logger().exception(
                 "[G%d] Unexpected translation worker failure", request.group_id
             )
@@ -412,6 +822,8 @@ class TranslationService:
                     request_id=request.request_id,
                     text=None,
                     error=f"Unexpected translation failure: {exc}",
+                    source="api",
+                    feedback_revision=request.feedback_revision,
                 )
             )
 
@@ -813,6 +1225,34 @@ class TranslationService:
         messages = getattr(agent, "messages", [])
         return len(messages) if isinstance(messages, list) else 0
 
+    @staticmethod
+    def _snapshot_agent_messages(agent: TranslationAgent) -> list[object] | None:
+        """Copy mutable Agent history before a revision-bound commit.
+
+        Production feedback writers are serialized by the store guard.  The
+        snapshot is a defensive rollback for custom/re-entrant implementations
+        that mutate feedback from ``record_translation`` itself.
+        """
+
+        messages = getattr(agent, "messages", None)
+        if not isinstance(messages, list):
+            return None
+        return [dict(message) if isinstance(message, dict) else message for message in messages]
+
+    @staticmethod
+    def _restore_agent_messages(
+        agent: TranslationAgent,
+        snapshot: list[object] | None,
+    ) -> None:
+        if snapshot is None:
+            return
+        messages = getattr(agent, "messages", None)
+        if isinstance(messages, list):
+            messages[:] = [
+                dict(message) if isinstance(message, dict) else message
+                for message in snapshot
+            ]
+
     def _agent_lock_for(self, group_id: int) -> threading.RLock:
         """Return the stable per-group lock used for Agent session mutation."""
 
@@ -857,6 +1297,157 @@ class TranslationService:
 
         return request.request_id != ctx.current_request_id
 
+    def _current_feedback_revision(self) -> int:
+        """Read the feedback knowledge token without holding service state."""
+
+        revision = getattr(self._feedback_store, "knowledge_revision", 0)
+        if callable(revision):
+            revision = revision()
+        if not isinstance(revision, int) or isinstance(revision, bool):
+            return 0
+        return revision
+
+    def _feedback_revision_guard(self, expected_revision: int):
+        """Return a context manager serializing a revision-bound local commit."""
+
+        guard = getattr(self._feedback_store, "guard_knowledge_revision", None)
+        if callable(guard):
+            return guard(expected_revision)
+        # Compatibility for lightweight test doubles and optional stores.  They
+        # still get a final equality check, but cannot provide serialization.
+        return nullcontext(self._current_feedback_revision() == expected_revision)
+
+    def _feedback_revision_is_current(self, request: TranslationRequest) -> bool:
+        """Return whether a request still describes the current feedback knowledge."""
+
+        return request.feedback_revision == self._current_feedback_revision()
+
+    def _request_stage_status(
+        self,
+        request: TranslationRequest,
+    ) -> tuple[bool, bool]:
+        """Return ``(stale, feedback_changed)`` at a safe stage boundary.
+
+        The store revision is read before taking ``_lock``.  This keeps the
+        service/store lock order one-way and makes every network-free stage
+        check short.
+        """
+
+        feedback_revision = self._current_feedback_revision()
+        with self._lock:
+            ctx = self._ensure_group(request.group_id)
+            if self._closing or self._is_stale_request(request, ctx):
+                return True, False
+        if request.feedback_revision != feedback_revision:
+            return True, True
+        return False, False
+
+    def _clear_feedback_state_locked(self, ctx: GroupContext) -> None:
+        """Clear current translation/provenance/cache state after knowledge changed."""
+
+        ctx.last_committed_text = ""
+        ctx.last_translation = ""
+        ctx.pending_text = ""
+        ctx.last_memory_rule_ids = []
+        ctx.last_correction_ids = []
+        ctx.last_memory_hint_snapshots = {}
+        ctx.last_correction_hint_snapshots = {}
+        ctx.last_source_language = ""
+        ctx.last_target_language = ""
+        ctx.last_request_id = 0
+        ctx.last_feedback_revision = 0
+        ctx.translation_variants.clear()
+        ctx.cache_scope = ()
+
+    def _discard_revision_state(self, request: TranslationRequest) -> None:
+        """Remove a just-committed result whose feedback token became stale."""
+
+        with self._lock:
+            ctx = self._ensure_group(request.group_id)
+            if self._is_stale_request(request, ctx):
+                return
+            self._clear_feedback_state_locked(ctx)
+
+    def _requeue_after_feedback_revision(
+        self,
+        request: TranslationRequest,
+        on_result,
+    ) -> bool:
+        """Re-submit one stale OCR request under the newest feedback token.
+
+        This submits ``_execute`` directly instead of recursively calling the
+        public API from a worker.  The retry count is carried by the logical
+        request and is capped so repeated knowledge churn cannot loop forever.
+        """
+
+        feedback_revision = self._current_feedback_revision()
+        if request.feedback_revision == feedback_revision:
+            return False
+        scope = self._translation_cache_scope(
+            request.source_language,
+            request.target_language,
+            feedback_revision=feedback_revision,
+        )
+        future: Future | None = None
+        churn_result: TranslationResult | None = None
+        with self._lock:
+            if self._closing:
+                return False
+            ctx = self._ensure_group(request.group_id)
+            if self._is_stale_request(request, ctx):
+                # reset_group, shutdown, or a newer OCR request owns the group.
+                return False
+            self._clear_feedback_state_locked(ctx)
+            if request.revision_retry_count >= self.FEEDBACK_REVISION_RETRY_LIMIT:
+                ctx.current_request_id += 1
+                churn_result = TranslationResult(
+                    group_id=request.group_id,
+                    request_id=ctx.current_request_id,
+                    text=None,
+                    error="Feedback knowledge changed repeatedly; OCR refresh required",
+                    source="feedback_revision_churn",
+                    feedback_revision=feedback_revision,
+                )
+                get_debug_logger().warning(
+                    "[G%d] Translation paused after feedback revision churn; requesting OCR refresh | retries=%d len=%d sha256=%s",
+                    request.group_id,
+                    request.revision_retry_count,
+                    len(request.ocr_text),
+                    hashlib.sha256(request.ocr_text.encode("utf-8")).hexdigest()[:12],
+                )
+            else:
+                ctx.current_request_id += 1
+                retry = TranslationRequest(
+                    group_id=request.group_id,
+                    request_id=ctx.current_request_id,
+                    ocr_text=request.ocr_text,
+                    feedback_revision=feedback_revision,
+                    revision_retry_count=request.revision_retry_count + 1,
+                    source_language=request.source_language,
+                    target_language=request.target_language,
+                )
+                ctx.pending_text = retry.ocr_text
+                ctx.cache_scope = scope
+                try:
+                    future = self._executor.submit(self._execute, retry, on_result)
+                except RuntimeError:
+                    ctx.pending_text = ""
+                    return False
+        if churn_result is not None:
+            self._invoke_callback(on_result, churn_result)
+            return False
+        get_debug_logger().warning(
+            "[G%d] Translation requeued after feedback revision change | retry=%d/%d len=%d sha256=%s",
+            request.group_id,
+            retry.revision_retry_count,
+            self.FEEDBACK_REVISION_RETRY_LIMIT,
+            len(request.ocr_text),
+            hashlib.sha256(request.ocr_text.encode("utf-8")).hexdigest()[:12],
+        )
+        assert future is not None
+        future.add_done_callback(self._log_worker_failure)
+        return True
+
     def _is_request_cancelled(self, request: TranslationRequest) -> bool:
         """Check whether *request* has been superseded (thread-safe).
 
@@ -864,9 +1455,14 @@ class TranslationService:
         so a stale request can abort before a slow thinking retry.
         """
 
+        feedback_revision = self._current_feedback_revision()
         with self._lock:
             ctx = self._ensure_group(request.group_id)
-            return self._is_stale_request(request, ctx)
+            return (
+                self._closing
+                or self._is_stale_request(request, ctx)
+                or request.feedback_revision != feedback_revision
+            )
 
     def _build_client(self) -> OpenAICompatibleClient:
         ai = self._settings.ai
@@ -879,26 +1475,137 @@ class TranslationService:
         )
 
     def _memory_hints_for_request(self, request: TranslationRequest) -> list[str]:
-        rules = self._feedback_store.match_memory_rules(
+        retrieval = self._feedback_retriever.retrieve(
             request.ocr_text,
             source_language=request.source_language,
             target_language=request.target_language,
-            limit=3,
+            correction_limit=2,
+            rule_limit=2,
+            minimum_correction_score=0.62,
         )
-        if not rules:
+        rules = list(retrieval.rules)
+        correction_rows = list(zip(
+            retrieval.corrections,
+            retrieval.correction_scores,
+            retrieval.correction_exact_matches,
+            strict=True,
+        ))
+        score_by_correction_id = {
+            correction.id: score for correction, score, _ in correction_rows
+        }
+        exact_by_correction_id = {
+            correction.id: exact for correction, _, exact in correction_rows
+        }
+        exact_corrections = [
+            correction for correction, _, exact in correction_rows if exact
+        ][:1]
+        exact_ids = {item.id for item in exact_corrections}
+        # An exact user correction is stronger than an unlocked automatic rule
+        # derived from that correction.  Keep the exact example and discard the
+        # lower-authority summary, not the other way around.
+        rules = [
+            rule for rule in rules
+            if not (
+                rule.origin == "automatic"
+                and not rule.user_locked
+                and exact_ids.intersection(rule.source_feedback_ids or [])
+            )
+        ]
+        rule_feedback_ids = {
+            feedback_id
+            for rule in rules
+            for feedback_id in (rule.source_feedback_ids or [])
+        }
+        similar_corrections = [
+            correction for correction, _, exact in correction_rows
+            if not exact and correction.id not in rule_feedback_ids
+        ]
+        corrections = [*exact_corrections, *similar_corrections]
+        if not rules and not corrections:
             return []
-        triggers = ", ".join(rule.trigger for rule in rules)
+        triggers = ", ".join(rule.trigger for rule in rules) or "(correction examples only)"
         get_logger().info(
-            "[G%d] Translation memory hit | %s",
+            "[G%d] Translation memory hit | rules=%s corrections=%d",
             request.group_id,
             triggers,
+            len(corrections),
         )
         get_debug_logger().debug(
-            "[G%d] Translation memory hit | ids=%s",
+            "[G%d] Feedback retrieval backend=%s correction_scores=%s",
+            request.group_id,
+            retrieval.backend,
+            ",".join(
+                f"{item.id[:8]}:{score_by_correction_id[item.id]:.3f}"
+                for item in corrections
+            ),
+        )
+        get_debug_logger().debug(
+            "[G%d] Translation memory hit | rule_ids=%s correction_ids=%s",
             request.group_id,
             ",".join(rule.id for rule in rules),
+            ",".join(item.id for item in corrections),
         )
-        return [rule.as_prompt_hint() for rule in rules]
+        candidates = [
+            *((
+                "correction",
+                correction,
+                self._feedback_store.correction_prompt_hint(
+                    correction,
+                    score=score_by_correction_id[correction.id],
+                    exact_match=exact_by_correction_id[correction.id],
+                ),
+            ) for correction in exact_corrections),
+            *(("rule", rule, memory_rule_prompt_hint(rule)) for rule in rules),
+            *((
+                "correction",
+                correction,
+                self._feedback_store.correction_prompt_hint(
+                    correction,
+                    score=score_by_correction_id[correction.id],
+                    exact_match=False,
+                ),
+            ) for correction in similar_corrections),
+        ]
+        hints: list[str] = []
+        used_rules = []
+        used_corrections = []
+        remaining = self.MAX_MEMORY_HINT_CHARS
+        for kind, item, hint in candidates:
+            if len(hints) >= 3:
+                break
+            clean = hint.strip()
+            if not clean or remaining <= 0:
+                continue
+            if len(clean) > remaining:
+                # Never turn one trusted statement into a misleading half-rule.
+                # Individual fields are bounded by their renderers; if the
+                # complete hint does not fit, omit it atomically.
+                continue
+            hints.append(clean)
+            remaining -= len(clean)
+            if kind == "rule":
+                used_rules.append(item)
+            else:
+                used_corrections.append(item)
+        request.matched_memory_rule_ids = [item.id for item in used_rules]
+        request.matched_correction_ids = [item.id for item in used_corrections]
+        used_rule_ids = set(request.matched_memory_rule_ids)
+        used_correction_ids = set(request.matched_correction_ids)
+        request.matched_memory_hint_snapshots = {
+            item.id: clean
+            for kind, item, hint in candidates
+            if kind == "rule"
+            and item.id in used_rule_ids
+            and (clean := hint.strip())
+        }
+        request.matched_correction_hint_snapshots = {
+            item.id: clean
+            for kind, item, hint in candidates
+            if kind == "correction"
+            and item.id in used_correction_ids
+            and (clean := hint.strip())
+        }
+        return hints
 
     def _current_prompt(self, source: str, target: str) -> str:
         """Return the prompt to use for translation requests.
@@ -936,15 +1643,12 @@ class TranslationService:
             base_prompt = DEFAULT_BASE_PROMPT
         base_prompt = self._add_runtime_quality_clarifications(base_prompt, source, target)
 
-        try:
-            get_debug_logger().debug(
-                "Prompt source=%s length=%d path=%s",
-                prompt_source,
-                len(base_prompt),
-                compiled_path or "",
-            )
-        except Exception:
-            pass
+        get_debug_logger().debug(
+            "Prompt source=%s length=%d path=%s",
+            prompt_source,
+            len(base_prompt),
+            compiled_path or "",
+        )
         return (
             f"{base_prompt}\n\n"
             f"Translate from {source} to {target}."
