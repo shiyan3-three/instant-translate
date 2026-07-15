@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import threading
+from dataclasses import replace
 from pathlib import Path
 from collections.abc import Callable
 
@@ -36,7 +38,14 @@ from PySide6.QtWidgets import (
 
 from app.app_context import ApplicationContext
 from app.feedback.optimizer import FeedbackOptimization, FeedbackOptimizer
-from app.feedback.store import FeedbackRecord, FeedbackStore
+from app.feedback.learning import FeedbackLearningService
+from app.feedback.store import (
+    FeedbackRecord,
+    FeedbackStorageUnavailable,
+    FeedbackStore,
+    MemoryRule,
+)
+from app.logger import get_debug_logger, get_logger
 from app.prompt.compiler import PromptCompiler
 from app.prompt.models import PromptConstraints, PromptKnowledgeReference
 from app.prompt.optimizer import PromptOptimizationError, PromptOptimizer
@@ -62,12 +71,36 @@ def _configure_wrapping_text_edit(editor: QPlainTextEdit) -> None:
     _prevent_horizontal_growth(editor)
 
 
+def _make_content_card(title: str = "") -> tuple[QFrame, QVBoxLayout]:
+    """Build one mock-aligned content card and return its inner layout."""
+
+    card = QFrame()
+    card.setObjectName("contentCard")
+    card.setMinimumWidth(0)
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(16, 16, 16, 16)
+    card_layout.setSpacing(12)
+    if title:
+        title_label = QLabel(title)
+        title_label.setObjectName("cardTitle")
+        card_layout.addWidget(title_label)
+    return card, card_layout
+
+
+def _make_field_label(text: str) -> QLabel:
+    """Return the muted compact field label used by the HTML mock."""
+
+    label = QLabel(text)
+    label.setObjectName("fieldLabel")
+    return label
+
+
 # =========================================================================
 # custom title bar
 # =========================================================================
 
 class TitleBar(QWidget):
-    """Frameless title bar with min / close buttons."""
+    """Frameless title bar with brand, page name, min / close buttons."""
 
     minimize_requested = Signal()
     close_requested = Signal()
@@ -78,10 +111,28 @@ class TitleBar(QWidget):
         self.setObjectName("titleBar")
         self._dragging = False
         self._drag_start = None
+        self._page_name = ""
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 0, 4, 0)
+        layout.setContentsMargins(14, 0, 8, 0)
         layout.setSpacing(0)
+
+        self._brand_dot = QLabel()
+        self._brand_dot.setObjectName("titleBarDot")
+        self._brand_dot.setFixedSize(8, 8)
+        self._brand_label = QLabel("Instant Translate")
+        self._brand_label.setObjectName("titleBarBrand")
+        self._separator_label = QLabel("·")
+        self._separator_label.setObjectName("titleBarSeparator")
+        self._page_label = QLabel("")
+        self._page_label.setObjectName("titleBarPage")
+        layout.addWidget(self._brand_dot)
+        layout.addSpacing(10)
+        layout.addWidget(self._brand_label)
+        layout.addSpacing(8)
+        layout.addWidget(self._separator_label)
+        layout.addSpacing(8)
+        layout.addWidget(self._page_label)
         layout.addStretch(1)
 
         min_btn = QPushButton("—")
@@ -97,6 +148,14 @@ class TitleBar(QWidget):
         layout.addWidget(min_btn)
         layout.addSpacing(6)
         layout.addWidget(close_btn)
+
+    def set_page_name(self, page_name: str) -> None:
+        """Update title bar brand line: Instant Translate · {page}."""
+
+        self._page_name = (page_name or "").strip()
+        self._page_label.setText(self._page_name)
+        self._separator_label.setVisible(bool(self._page_name))
+        self._page_label.setVisible(bool(self._page_name))
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -125,9 +184,11 @@ class TitleBar(QWidget):
 class NavButton(QPushButton):
     """Single sidebar navigation item with active-state styling."""
 
-    def __init__(self, text: str, parent: QWidget | None = None) -> None:
-        super().__init__(text, parent)
+    def __init__(self, icon: str, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(f"{icon}    {text}", parent)
         self.setObjectName("navButton")
+        self.label_text = text
+        self.icon_text = icon
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setCheckable(True)
         self.setFixedHeight(44)
@@ -187,76 +248,6 @@ def _policy_rule_explanation(rule: dict) -> str:
 # pages
 # =========================================================================
 
-class LanguagePage(QWidget):
-    """Select default source → target language pair (persisted, used by new groups)."""
-
-    language_changed = Signal(str, str)
-
-    def __init__(self, source: str = "English", target: str = "中文", parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("contentPage")
-
-        title = QLabel("翻译方向")
-        title.setObjectName("pageTitle")
-        desc = QLabel("新建选择框时默认使用的语言对")
-        desc.setObjectName("pageDesc")
-
-        self._source_combo = QComboBox()
-        self._source_combo.addItems(LANGUAGES)
-        self._source_combo.setCurrentText(source)
-
-        swap_btn = QPushButton("⇄")
-        swap_btn.setObjectName("swapButton")
-        swap_btn.setFixedSize(36, 36)
-        swap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        swap_btn.setToolTip("交换源语言和目标语言")
-        swap_btn.clicked.connect(self._on_swap)
-
-        self._target_combo = QComboBox()
-        self._target_combo.addItems(LANGUAGES)
-        self._target_combo.setCurrentText(target)
-
-        row = QHBoxLayout()
-        row.setSpacing(12)
-        row.addWidget(QLabel("源语言"))
-        row.addWidget(self._source_combo, 1)
-        row.addWidget(swap_btn)
-        row.addWidget(self._target_combo, 1)
-        row.addWidget(QLabel("目标语言"))
-        row.addStretch(1)
-
-        self._source_combo.currentTextChanged.connect(self._emit_change)
-        self._target_combo.currentTextChanged.connect(self._emit_change)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(16)
-        layout.addWidget(title)
-        layout.addWidget(desc)
-        layout.addLayout(row)
-        layout.addStretch(1)
-
-    def _on_swap(self) -> None:
-        src = self._source_combo.currentText()
-        tgt = self._target_combo.currentText()
-        self._source_combo.blockSignals(True)
-        self._target_combo.blockSignals(True)
-        self._source_combo.setCurrentText(tgt)
-        self._target_combo.setCurrentText(src)
-        self._source_combo.blockSignals(False)
-        self._target_combo.blockSignals(False)
-        self._emit_change()
-
-    def _emit_change(self) -> None:
-        self.language_changed.emit(
-            self._source_combo.currentText(),
-            self._target_combo.currentText(),
-        )
-
-    def current_pair(self) -> tuple[str, str]:
-        return (self._source_combo.currentText(), self._target_combo.currentText())
-
-
 class TemplatePage(QWidget):
     """Unified translation template: language pair + constraints + knowledge references."""
 
@@ -294,18 +285,23 @@ class TemplatePage(QWidget):
         self._save_settings = save_settings
         self._knowledge_paths = knowledge_paths or []
         self._constraints_text = constraints_text
+        self._closing = False
+        self._ai_generation = 0
+        self._ai_state_lock = threading.Lock()
 
         # Create scrollable content
         scroll = QScrollArea()
+        scroll.setObjectName("contentScroll")
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         
         content = QWidget()
+        content.setObjectName("contentScrollBody")
         content.setMinimumWidth(0)
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(16)
+        layout.setContentsMargins(32, 28, 32, 24)
+        layout.setSpacing(14)
 
         # Page header
         title = QLabel("翻译模板")
@@ -318,44 +314,56 @@ class TemplatePage(QWidget):
         layout.addSpacing(8)
 
         # Section 1: Language Pair
-        lang_label = QLabel("语言方向")
-        lang_label.setStyleSheet("color: #94a3b8; font-weight: 600; font-size: 13px;")
-        layout.addWidget(lang_label)
+        language_card, language_card_layout = _make_content_card("语言方向")
 
         self._source_combo = QComboBox()
         self._source_combo.addItems(LANGUAGES)
         self._source_combo.setCurrentText(source)
 
-        swap_btn = QPushButton("⇄")
-        swap_btn.setObjectName("swapButton")
-        swap_btn.setFixedSize(36, 36)
-        swap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        swap_btn.setToolTip("交换源语言和目标语言")
-        swap_btn.clicked.connect(self._on_swap)
+        self._swap_btn = QPushButton("⇄")
+        self._swap_btn.setObjectName("swapButton")
+        self._swap_btn.setFixedSize(36, 36)
+        self._swap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._swap_btn.setToolTip("交换源语言和目标语言")
+        self._swap_btn.clicked.connect(self._on_swap)
 
         self._target_combo = QComboBox()
         self._target_combo.addItems(LANGUAGES)
         self._target_combo.setCurrentText(target)
 
+        # Field columns: label above combo so ⇄ can AlignBottom with combos.
+        source_field = QVBoxLayout()
+        source_field.setContentsMargins(0, 0, 0, 0)
+        source_field.setSpacing(6)
+        source_label = QLabel("源语言")
+        source_label.setObjectName("feedbackSectionLabel")
+        source_field.addWidget(source_label)
+        source_field.addWidget(self._source_combo)
+
+        target_field = QVBoxLayout()
+        target_field.setContentsMargins(0, 0, 0, 0)
+        target_field.setSpacing(6)
+        target_label = QLabel("目标语言")
+        target_label.setObjectName("feedbackSectionLabel")
+        target_field.addWidget(target_label)
+        target_field.addWidget(self._target_combo)
+
         lang_row = QHBoxLayout()
         lang_row.setSpacing(12)
-        lang_row.addWidget(QLabel("源语言"))
-        lang_row.addWidget(self._source_combo, 1)
-        lang_row.addWidget(swap_btn)
-        lang_row.addWidget(self._target_combo, 1)
-        lang_row.addWidget(QLabel("目标语言"))
-        lang_row.addStretch(1)
-        layout.addLayout(lang_row)
+        lang_row.addLayout(source_field, 1)
+        lang_row.addWidget(self._swap_btn, 0, Qt.AlignmentFlag.AlignBottom)
+        lang_row.addLayout(target_field, 1)
+        language_card_layout.addLayout(lang_row)
+        layout.addWidget(language_card)
 
         self._source_combo.currentTextChanged.connect(self._emit_language_change)
         self._target_combo.currentTextChanged.connect(self._emit_language_change)
 
-        layout.addSpacing(12)
-
-        # Section 2: Constraints
+        # Section 2: Constraints + Knowledge References
+        reference_card, reference_card_layout = _make_content_card("约束与知识引用")
         constraints_label = QLabel("约束层")
-        constraints_label.setStyleSheet("color: #94a3b8; font-weight: 600; font-size: 13px;")
-        layout.addWidget(constraints_label)
+        constraints_label.setObjectName("feedbackSectionLabel")
+        reference_card_layout.addWidget(constraints_label)
 
         self._constraints_btn = QPushButton()
         self._constraints_btn.setObjectName("constraintsPreview")
@@ -363,14 +371,14 @@ class TemplatePage(QWidget):
         _prevent_horizontal_growth(self._constraints_btn)
         self._constraints_btn.clicked.connect(self._on_edit_constraints)
         self._refresh_constraints_preview()
-        layout.addWidget(self._constraints_btn)
+        reference_card_layout.addWidget(self._constraints_btn)
 
-        layout.addSpacing(12)
+        reference_card_layout.addSpacing(2)
 
         # Section 3: Knowledge References
         knowledge_label = QLabel("知识引用层")
-        knowledge_label.setStyleSheet("color: #94a3b8; font-weight: 600; font-size: 13px;")
-        layout.addWidget(knowledge_label)
+        knowledge_label.setObjectName("feedbackSectionLabel")
+        reference_card_layout.addWidget(knowledge_label)
 
         self._knowledge_list = QPlainTextEdit()
         self._knowledge_list.setReadOnly(True)
@@ -379,7 +387,7 @@ class TemplatePage(QWidget):
         _configure_wrapping_text_edit(self._knowledge_list)
         if self._knowledge_paths:
             self._knowledge_list.setPlainText("\n".join(self._knowledge_paths))
-        layout.addWidget(self._knowledge_list)
+        reference_card_layout.addWidget(self._knowledge_list)
 
         know_btn_row = QHBoxLayout()
         know_btn_row.setSpacing(8)
@@ -400,19 +408,18 @@ class TemplatePage(QWidget):
         know_btn_row.addWidget(self._preview_refs_btn)
         know_btn_row.addWidget(self._export_ai_refs_btn)
         know_btn_row.addStretch(1)
-        layout.addLayout(know_btn_row)
-
-        layout.addSpacing(12)
+        reference_card_layout.addLayout(know_btn_row)
 
         # Section 4: Compiled Prompt
         compiled_label = QLabel("Compiled Prompt 文件")
-        compiled_label.setStyleSheet("color: #94a3b8; font-weight: 600; font-size: 13px;")
-        layout.addWidget(compiled_label)
+        compiled_label.setObjectName("feedbackSectionLabel")
+        reference_card_layout.addWidget(compiled_label)
 
         self._compiled_path = QLineEdit(compiled_prompt_path)
         self._compiled_path.setReadOnly(True)
         _prevent_horizontal_growth(self._compiled_path)
-        layout.addWidget(self._compiled_path)
+        reference_card_layout.addWidget(self._compiled_path)
+        layout.addWidget(reference_card)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
@@ -465,7 +472,7 @@ class TemplatePage(QWidget):
     def current_pair(self) -> tuple[str, str]:
         return (self._source_combo.currentText(), self._target_combo.currentText())
 
-    # Prompt methods (from PromptPage)
+    # Knowledge reference and prompt editing helpers
     def _knowledge_reference_dir(self) -> Path:
         return self._prompt_storage.ensure_reference_dir()
 
@@ -581,7 +588,12 @@ class TemplatePage(QWidget):
         QMessageBox.information(self, "提示词预览", self._build_user_preview())
 
     def _on_save(self) -> None:
-        settings = self._settings or AppSettings.load()
+        with self._ai_state_lock:
+            if self._closing:
+                return
+            self._ai_generation += 1
+            generation = self._ai_generation
+        settings = copy.deepcopy(self._settings or AppSettings.load())
         self._apply_form_to_settings(settings)
         constraints = PromptConstraints(text=self._constraints_text)
         references = self._collect_knowledge_references()
@@ -593,7 +605,7 @@ class TemplatePage(QWidget):
         self.ai_work_started.emit()
 
         def _run() -> None:
-            result_holder: dict = {}
+            result_holder: dict = {"generation": generation}
             try:
                 rules = self._optimizer.optimize(settings, constraints, references)
                 result_holder["optimized"] = rules
@@ -611,17 +623,32 @@ class TemplatePage(QWidget):
                     references=references,
                 )
             except Exception as exc:
+                # This daemon thread is a Qt boundary: keep the UI alive and
+                # fall back to the unoptimized preview, but make the failure
+                # observable without recording prompt contents.
+                get_debug_logger().exception(
+                    "Template prompt optimization worker failed; using unoptimized preview"
+                )
                 result_holder["warning"] = str(exc)
                 result_holder["optimized"] = ""
                 result_holder["compiled"] = self._compiler.compile_preview(
                     constraints,
                     references=references,
                 )
-            self._ai_work_done.emit(result_holder, settings)
+            with self._ai_state_lock:
+                should_emit = not self._closing and generation == self._ai_generation
+            if should_emit:
+                try:
+                    self._ai_work_done.emit(result_holder, settings)
+                except RuntimeError:
+                    return
 
         threading.Thread(target=_run, daemon=True).start()
 
     def _on_ai_work_done(self, result_holder: dict, settings: object) -> None:
+        with self._ai_state_lock:
+            if self._closing or result_holder.get("generation") != self._ai_generation:
+                return
         self.ai_work_finished.emit()
         self._preview_btn.setEnabled(True)
         self._save_btn.setEnabled(True)
@@ -653,9 +680,13 @@ class TemplatePage(QWidget):
             return
 
         try:
+            configured_path = settings.prompt.compiled_prompt_path
+            bundle_snapshot = self._prompt_storage.snapshot_compiled_prompt_bundle(
+                configured_path
+            )
             saved_path = self._prompt_storage.save_compiled_prompt(
                 compiled.content,
-                settings.prompt.compiled_prompt_path,
+                configured_path,
                 policy=compiled.policy,
                 reference_package=compiled.reference_package,
             )
@@ -664,10 +695,29 @@ class TemplatePage(QWidget):
             )
             settings.prompt.compiled_prompt_path = stored_path
             self._compiled_path.setText(stored_path)
+            original_prompt_settings = (
+                copy.deepcopy(self._settings.prompt)
+                if self._settings is not None
+                else None
+            )
             if self._save_settings is not None:
-                self._save_settings()
+                if self._settings is not None:
+                    self._settings.prompt = copy.deepcopy(settings.prompt)
+                try:
+                    self._save_settings()
+                except Exception:
+                    if self._settings is not None and original_prompt_settings is not None:
+                        self._settings.prompt = original_prompt_settings
+                    self._prompt_storage.restore_compiled_prompt_bundle(bundle_snapshot)
+                    raise
             else:
-                settings.save()
+                try:
+                    settings.save()
+                except Exception:
+                    self._prompt_storage.restore_compiled_prompt_bundle(bundle_snapshot)
+                    raise
+                if self._settings is not None:
+                    self._settings.prompt = copy.deepcopy(settings.prompt)
             warning = result_holder.get("warning")
             if warning:
                 self._save_status.setText(f"已保存并启用（AI 优化失败，已使用原始约束）：{warning}")
@@ -677,8 +727,19 @@ class TemplatePage(QWidget):
                 self._save_status.setStyleSheet("color: #4ade80; font-size: 12px;")
             self.compiled_prompt_saved.emit()
         except Exception as exc:
+            # Saving is a Qt slot boundary.  Rollback has already happened
+            # in the inner save branches; surface a safe message and retain
+            # the traceback in debug logs instead of leaking it to Qt.
+            get_debug_logger().exception("Template prompt save failed")
             self._save_status.setText(f"保存失败: {exc}")
             self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
+
+    def shutdown(self) -> None:
+        """Invalidate queued worker callbacks before this QWidget is deleted."""
+
+        with self._ai_state_lock:
+            self._closing = True
+            self._ai_generation += 1
 
     def constraints_text(self) -> str:
         return self._constraints_text
@@ -827,10 +888,13 @@ class ModelPage(QWidget):
         self._fetching_models = False
         self._testing = False
         self._models_loaded = False
+        self._closing = False
+        self._models_generation = 0
+        self._test_generation = 0
 
         title = QLabel("模型配置")
         title.setObjectName("pageTitle")
-        desc = QLabel("已保存 URL/Key 时会自动拉取模型；也可点「拉取模型」刷新。Fast / Thinking 从列表中选择，也可手输。")
+        desc = QLabel("连接 OpenAI 兼容接口，Fast / Thinking 模型只从 /models 返回的列表中选择。")
         desc.setObjectName("pageDesc")
         desc.setWordWrap(True)
 
@@ -853,10 +917,15 @@ class ModelPage(QWidget):
         self._fetch_models_btn.clicked.connect(self._on_fetch_models)
 
         self._test_btn = QPushButton("测试连接")
-        self._test_btn.setObjectName("secondaryButton")
+        self._test_btn.setObjectName("primaryButton")
         self._test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._test_btn.setToolTip("用当前 Fast 模型发一条最短请求验证连通性")
         self._test_btn.clicked.connect(self._on_test)
+
+        self._save_config_btn = QPushButton("保存配置")
+        self._save_config_btn.setObjectName("secondaryButton")
+        self._save_config_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._save_config_btn.clicked.connect(self._on_save_configuration)
 
         self._test_status = QLabel("")
         self._test_status.setObjectName("hintLabel")
@@ -867,32 +936,62 @@ class ModelPage(QWidget):
         action_row.setSpacing(8)
         action_row.addWidget(self._fetch_models_btn)
         action_row.addWidget(self._test_btn)
+        action_row.addWidget(self._save_config_btn)
         action_row.addWidget(self._test_status, 1)
 
-        form = QFormLayout()
-        form.setSpacing(14)
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        form.addRow("Base URL", self._base_url)
-        form.addRow("API Key", self._api_key)
-        form.addRow("Fast Model", self._model)
-        form.addRow("Thinking Model", self._thinking_model)
+        self._credential_status = QLabel()
+        self._credential_status.setObjectName("connectionStatusPill")
+        self._connection_summary = QLabel()
+        self._connection_summary.setObjectName("hintLabel")
+        self._connection_summary.setWordWrap(True)
+
+        summary_card, summary_layout = _make_content_card()
+        summary_head = QHBoxLayout()
+        summary_title = QLabel("连接摘要")
+        summary_title.setObjectName("cardTitle")
+        summary_head.addWidget(summary_title)
+        summary_head.addStretch(1)
+        summary_head.addWidget(self._credential_status)
+        summary_layout.addLayout(summary_head)
+        summary_layout.addWidget(self._connection_summary)
+
+        interface_card, interface_layout = _make_content_card("接口")
+        interface_form = QFormLayout()
+        interface_form.setContentsMargins(0, 0, 0, 0)
+        interface_form.setSpacing(12)
+        interface_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        interface_form.addRow(_make_field_label("Base URL"), self._base_url)
+        interface_form.addRow(_make_field_label("API Key"), self._api_key)
+        interface_layout.addLayout(interface_form)
+
+        models_card, models_layout = _make_content_card("模型（来自 /models，非硬编码）")
+        models_form = QFormLayout()
+        models_form.setContentsMargins(0, 0, 0, 0)
+        models_form.setSpacing(12)
+        models_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        models_form.addRow(_make_field_label("Fast Model"), self._model)
+        models_form.addRow(_make_field_label("Thinking Model"), self._thinking_model)
+        models_layout.addLayout(models_form)
 
         self._base_url.textChanged.connect(self._on_credentials_changed)
         self._api_key.textChanged.connect(self._on_credentials_changed)
-        self._model.currentTextChanged.connect(self._emit_change)
-        self._thinking_model.currentTextChanged.connect(self._emit_change)
+        self._model.currentTextChanged.connect(self._on_model_selection_changed)
+        self._thinking_model.currentTextChanged.connect(self._on_model_selection_changed)
         self._test_done.connect(self._show_test_result)
         self._models_done.connect(self._show_models_result)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(16)
+        layout.setContentsMargins(32, 28, 32, 24)
+        layout.setSpacing(14)
         layout.addWidget(title)
         layout.addWidget(desc)
-        layout.addLayout(form)
+        layout.addWidget(summary_card)
+        layout.addWidget(interface_card)
+        layout.addWidget(models_card)
         layout.addLayout(action_row)
         layout.addStretch(1)
 
+        self._refresh_connection_summary()
         self._refresh_action_enabled()
         # Existing saved credentials: auto-fill combos without requiring a manual click.
         if base_url.strip() and api_key.strip():
@@ -954,8 +1053,35 @@ class ModelPage(QWidget):
     def _on_credentials_changed(self) -> None:
         # URL/Key changed: list is stale until next successful fetch.
         self._models_loaded = False
+        self._refresh_connection_summary()
         self._refresh_action_enabled()
+
+    def _on_model_selection_changed(self) -> None:
+        """Persist intentional model selections, never individual keypresses."""
+
+        if not self._closing:
+            self._emit_change()
+
+    def _on_save_configuration(self) -> None:
+        if self._closing:
+            return
         self._emit_change()
+
+    def _refresh_connection_summary(self) -> None:
+        """Mirror the mock's compact credential summary without exposing secrets."""
+
+        base_url = self._base_url.text().strip()
+        api_key = self._api_key.text().strip()
+        configured = bool(base_url and api_key)
+        self._credential_status.setText("●  已配置凭据" if configured else "●  等待配置")
+        self._credential_status.setProperty("configured", configured)
+        self._credential_status.style().unpolish(self._credential_status)
+        self._credential_status.style().polish(self._credential_status)
+        if configured:
+            tail = api_key[-4:] if len(api_key) >= 4 else "••••"
+            self._connection_summary.setText(f"{base_url}  ·  key ••••{tail}")
+        else:
+            self._connection_summary.setText("填写 Base URL 与 API Key 后即可拉取模型列表。")
 
     def ensure_models_loaded(self) -> None:
         """Auto-fetch model list once when credentials are available."""
@@ -970,6 +1096,7 @@ class ModelPage(QWidget):
         has_creds = bool(self._base_url.text().strip() and self._api_key.text().strip())
         self._fetch_models_btn.setEnabled(has_creds and not self._fetching_models and not self._testing)
         self._test_btn.setEnabled(has_creds and not self._testing and not self._fetching_models)
+        self._save_config_btn.setEnabled(not self._closing and not self._fetching_models and not self._testing)
 
     def _set_status(self, message: str, tone: str = "hint") -> None:
         colors = {
@@ -1021,6 +1148,8 @@ class ModelPage(QWidget):
             return
 
         self._fetching_models = True
+        self._models_generation += 1
+        generation = self._models_generation
         self._refresh_action_enabled()
         self._set_status("正在拉取模型列表...", "busy")
 
@@ -1030,18 +1159,28 @@ class ModelPage(QWidget):
                     ClientConfig(base_url=base, api_key=key, model="unused")
                 )
                 models = client.list_models()
-                if not models:
-                    self._models_done.emit([], "接口返回空列表，请检查 Base URL 是否支持 /models")
-                else:
-                    self._models_done.emit(models, f"已拉取 {len(models)} 个模型，请在下拉框中选择")
+                result = ([], "接口返回空列表，请检查 Base URL 是否支持 /models") if not models else (
+                    models, f"已拉取 {len(models)} 个模型，请在下拉框中选择"
+                )
             except TranslationError as exc:
-                self._models_done.emit(None, str(exc))
+                result = (None, str(exc))
             except Exception as exc:
-                self._models_done.emit(None, str(exc))
+                # Model discovery runs off the Qt thread.  Preserve the
+                # user-facing failure result rather than letting a backend
+                # implementation error escape the worker.
+                get_debug_logger().exception("Model discovery worker failed")
+                result = (None, str(exc))
+            if not self._closing and generation == self._models_generation:
+                try:
+                    self._models_done.emit(*result)
+                except RuntimeError:
+                    return
 
         threading.Thread(target=_run, daemon=True).start()
 
     def _show_models_result(self, models: object, message: str) -> None:
+        if self._closing:
+            return
         self._fetching_models = False
         self._refresh_action_enabled()
         if models is None:
@@ -1077,15 +1216,17 @@ class ModelPage(QWidget):
             return
 
         self._testing = True
+        self._test_generation += 1
+        generation = self._test_generation
         self._refresh_action_enabled()
         self._set_status(f"测试中（{model}）...", "busy")
         threading.Thread(
             target=self._run_connection_test,
-            args=(base, key, model),
+            args=(base, key, model, generation),
             daemon=True,
         ).start()
 
-    def _run_connection_test(self, base: str, key: str, model: str) -> None:
+    def _run_connection_test(self, base: str, key: str, model: str, generation: int) -> None:
         """Run the network probe away from the Qt event loop."""
 
         import time as _time
@@ -1103,13 +1244,34 @@ class ModelPage(QWidget):
             elapsed = (_time.perf_counter() - t0) * 1000
             msg = f"{exc} ({elapsed:.0f}ms)"[:120]
         except Exception as exc:
+            # This is the final backend/Qt worker boundary; retain a short
+            # user message while keeping the full exception in debug logs.
+            get_debug_logger().exception("Connection test worker failed")
             msg = str(exc)[:120]
-        self._test_done.emit(ok, msg)
+        if not self._closing and generation == self._test_generation:
+            try:
+                self._test_done.emit(ok, msg)
+            except RuntimeError:
+                return
 
     def _show_test_result(self, ok: bool, msg: str) -> None:
+        if self._closing:
+            return
         self._testing = False
         self._refresh_action_enabled()
         self._set_status(msg, "ok" if ok else "error")
+
+    def show_save_result(self, success: bool, message: str) -> None:
+        """Display persistence feedback without exposing the API key."""
+
+        self._set_status(message, "ok" if success else "error")
+
+    def shutdown(self) -> None:
+        """Invalidate late daemon-thread completions during window teardown."""
+
+        self._closing = True
+        self._models_generation += 1
+        self._test_generation += 1
 
 
 # =========================================================================
@@ -1148,321 +1310,6 @@ class _ConstraintsDialog(QDialog):
 
     def text(self) -> str:
         return self._editor.toPlainText()
-
-
-class PromptPage(QWidget):
-    """Prompt constraint + knowledge reference editor (persisted, used by translation pipeline)."""
-
-    def __init__(
-        self,
-        constraints_text: str = "",
-        knowledge_paths: list | None = None,
-        compiled_prompt_path: str = "compiled-prompt.md",
-        parent: QWidget | None = None,
-        settings: AppSettings | None = None,
-        optimizer: PromptOptimizer | None = None,
-        prompt_storage: PromptStorage | None = None,
-        confirm_compiled_prompt: Callable[[str], bool] | None = None,
-        save_settings: Callable[[], None] | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setObjectName("contentPage")
-        self._compiler = PromptCompiler()
-        self._optimizer = optimizer or PromptOptimizer(self._compiler)
-        self._prompt_storage = prompt_storage or PromptStorage()
-        self._settings = settings
-        self._confirm_compiled_prompt = (
-            confirm_compiled_prompt or self._confirm_compiled_prompt_with_dialog
-        )
-        self._save_settings = save_settings
-        self._knowledge_paths = knowledge_paths or []
-
-        title = QLabel("提示词配置")
-        title.setObjectName("pageTitle")
-        desc = QLabel("固定模板层由系统维护（最高优先级），你只需编辑约束层和知识引用层。\n预览确认后再保存启用 compiled prompt。")
-        desc.setObjectName("pageDesc")
-        desc.setWordWrap(True)
-
-        # constraints — preview button → popup dialog
-        constraints_label = QLabel("约束层")
-        constraints_label.setStyleSheet("color: #94a3b8; font-weight: 600;")
-        self._constraints_text = constraints_text
-        self._constraints_btn = QPushButton()
-        self._constraints_btn.setObjectName("constraintsPreview")
-        self._constraints_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        _prevent_horizontal_growth(self._constraints_btn)
-        self._constraints_btn.clicked.connect(self._on_edit_constraints)
-        self._refresh_constraints_preview()
-
-        # knowledge references
-        knowledge_label = QLabel("知识引用层")
-        knowledge_label.setStyleSheet("color: #94a3b8; font-weight: 600;")
-        self._knowledge_list = QPlainTextEdit()
-        self._knowledge_list.setReadOnly(True)
-        self._knowledge_list.setPlaceholderText("尚未添加知识引用文档...")
-        self._knowledge_list.setMaximumHeight(80)
-        _configure_wrapping_text_edit(self._knowledge_list)
-        if self._knowledge_paths:
-            self._knowledge_list.setPlainText("\n".join(self._knowledge_paths))
-
-        know_btn_row = QHBoxLayout()
-        know_btn_row.setSpacing(8)
-        add_know_btn = QPushButton("+ 添加文档")
-        add_know_btn.setObjectName("secondaryButton")
-        add_know_btn.clicked.connect(self._on_add_knowledge)
-        rm_know_btn = QPushButton("− 移除")
-        rm_know_btn.setObjectName("secondaryButton")
-        rm_know_btn.clicked.connect(self._on_remove_knowledge)
-        know_btn_row.addWidget(add_know_btn)
-        know_btn_row.addWidget(rm_know_btn)
-        know_btn_row.addStretch(1)
-
-        # compiled prompt
-        compiled_label = QLabel("Compiled Prompt 文件")
-        compiled_label.setStyleSheet("color: #94a3b8; font-weight: 600;")
-        self._compiled_path = QLineEdit(compiled_prompt_path)
-        self._compiled_path.setReadOnly(True)
-        _prevent_horizontal_growth(self._compiled_path)
-
-        self._save_status = QLabel("")
-        self._save_status.setObjectName("hintLabel")
-        self._save_status.setWordWrap(True)
-        _prevent_horizontal_growth(self._save_status)
-
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        self._preview_btn = QPushButton("生成预览")
-        self._preview_btn.setObjectName("secondaryButton")
-        self._preview_btn.clicked.connect(self._on_preview)
-        self._save_btn = QPushButton("保存并启用")
-        self._save_btn.setObjectName("primaryButton")
-        self._save_btn.clicked.connect(self._on_save)
-        btn_row.addWidget(self._preview_btn)
-        btn_row.addWidget(self._save_btn)
-        btn_row.addWidget(self._save_status)
-        btn_row.addStretch(1)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(12)
-        layout.addWidget(title)
-        layout.addWidget(desc)
-        layout.addSpacing(8)
-        layout.addWidget(constraints_label)
-        layout.addWidget(self._constraints_btn)
-        layout.addWidget(knowledge_label)
-        layout.addWidget(self._knowledge_list)
-        layout.addLayout(know_btn_row)
-        layout.addSpacing(8)
-        layout.addWidget(compiled_label)
-        layout.addWidget(self._compiled_path)
-        layout.addLayout(btn_row)
-        layout.addStretch(1)
-
-    def _knowledge_reference_dir(self) -> Path:
-        """Return the project-local folder used for reference-layer markdown."""
-
-        return self._prompt_storage.ensure_reference_dir()
-
-    def _on_add_knowledge(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(self, "选择知识文档", str(self._knowledge_reference_dir()), "Markdown 文件 (*.md);;所有文件 (*)")
-        if file_path:
-            self._knowledge_paths.append(file_path)
-            self._knowledge_list.setPlainText("\n".join(self._knowledge_paths))
-
-    def _on_remove_knowledge(self) -> None:
-        self._knowledge_paths.clear()
-        self._knowledge_list.clear()
-
-    # ------------------------------------------------------------------
-    # constraints popup editor
-    # ------------------------------------------------------------------
-
-    def _refresh_constraints_preview(self) -> None:
-        """Update the preview button text from stored constraints."""
-
-        text = self._constraints_text.strip()
-        if not text:
-            self._constraints_btn.setText("点击编辑约束层...")
-            self._constraints_btn.setStyleSheet(
-                "QPushButton#constraintsPreview {"
-                "background: #1e293b; color: #64748b; border: 1px solid #334155;"
-                "border-radius: 8px; padding: 10px 14px; text-align: left;"
-                "font-size: 13px; min-height: 40px; }"
-                "QPushButton#constraintsPreview:hover { border: 1px solid #60a5fa; }"
-            )
-        else:
-            preview = text.replace("\n", " ")[:100]
-            suffix = "..." if len(text) > 100 else ""
-            self._constraints_btn.setText(f"{preview}{suffix}")
-            self._constraints_btn.setStyleSheet(
-                "QPushButton#constraintsPreview {"
-                "background: #1e293b; color: #e2e8f0; border: 1px solid #334155;"
-                "border-radius: 8px; padding: 10px 14px; text-align: left;"
-                "font-size: 13px; min-height: 40px; }"
-                "QPushButton#constraintsPreview:hover { border: 1px solid #60a5fa; }"
-            )
-
-    def _on_edit_constraints(self) -> None:
-        dlg = _ConstraintsDialog(self._constraints_text, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._constraints_text = dlg.text()
-            self._refresh_constraints_preview()
-
-    def _on_preview(self) -> None:
-        """Show only the user's constraints and knowledge references (not system template)."""
-
-        QMessageBox.information(self, "提示词预览", self._build_user_preview())
-
-    def _on_save(self) -> None:
-        settings = self._settings or AppSettings.load()
-        self._apply_form_to_settings(settings)
-        constraints = PromptConstraints(text=self._constraints_text)
-        references = self._collect_knowledge_references()
-
-        # --- async work -------------------------------------------------------
-        result_holder: dict = {}
-
-        def _do_work() -> None:
-            try:
-                rules = self._optimizer.optimize(settings, constraints, references)
-                result_holder["optimized"] = rules
-                compiled = self._compiler.compile_preview(
-                    constraints,
-                    references=references,
-                    optimized_user_layer=rules,
-                )
-                result_holder["compiled"] = compiled
-            except PromptOptimizationError as exc:
-                result_holder["warning"] = str(exc)
-                result_holder["optimized"] = ""
-                result_holder["compiled"] = self._compiler.compile_preview(
-                    constraints,
-                    references=references,
-                )
-            except Exception as exc:
-                result_holder["warning"] = str(exc)
-                result_holder["optimized"] = ""
-                result_holder["compiled"] = self._compiler.compile_preview(
-                    constraints,
-                    references=references,
-                )
-
-        needs_progress = bool(self._settings and self._settings.ai.base_url)
-        if needs_progress:
-            self._save_status.setText("正在优化提示词...")
-            self._save_status.setStyleSheet("color: #fbbf24; font-size: 12px;")
-            QApplication.processEvents()  # let the label render before blocking work
-
-        _do_work()
-        self._finish_save(result_holder, settings)
-
-    def _finish_save(self, result_holder: dict, settings: AppSettings) -> None:
-        """Complete the save flow after optimization finishes."""
-
-        error = result_holder.get("error")
-        if error is not None:
-            self._save_status.setText(f"优化失败: {error}")
-            self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
-            return
-
-        compiled = result_holder.get("compiled")
-        if compiled is None:
-            self._save_status.setText("优化失败: 无结果")
-            self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
-            return
-
-        # Confirm with optimized user layer (not raw input)
-        optimized = result_holder.get("optimized", self._constraints_text)
-        user_preview = self._build_user_preview(optimized, policy=compiled.policy)
-        if not self._confirm_compiled_prompt(user_preview):
-            self._save_status.setText("已取消")
-            self._save_status.setStyleSheet("color: #94a3b8; font-size: 12px;")
-            return
-
-        try:
-            saved_path = self._prompt_storage.save_compiled_prompt(
-                compiled.content,
-                settings.prompt.compiled_prompt_path,
-                policy=compiled.policy,
-                reference_package=compiled.reference_package,
-            )
-            stored_path = self._prompt_storage.stored_compiled_prompt_path(
-                settings.prompt.compiled_prompt_path
-            )
-            settings.prompt.compiled_prompt_path = stored_path
-            self._compiled_path.setText(stored_path)
-            if self._save_settings is not None:
-                self._save_settings()
-            else:
-                settings.save()
-            warning = result_holder.get("warning")
-            if warning:
-                self._save_status.setText(f"已保存并启用（AI 优化失败，已使用原始约束）：{warning}")
-                self._save_status.setStyleSheet("color: #fbbf24; font-size: 12px;")
-            else:
-                self._save_status.setText("已保存并启用 ✓")
-                self._save_status.setStyleSheet("color: #4ade80; font-size: 12px;")
-        except Exception as exc:
-            self._save_status.setText(f"保存失败: {exc}")
-            self._save_status.setStyleSheet("color: #f87171; font-size: 12px;")
-
-    def constraints_text(self) -> str:
-        return self._constraints_text
-
-    def _apply_form_to_settings(self, settings: AppSettings) -> None:
-        settings.prompt.constraints_text = self._constraints_text
-        settings.prompt.knowledge_reference_paths = list(self._knowledge_paths)
-
-    def _collect_knowledge_references(self) -> list[PromptKnowledgeReference]:
-        return [PromptKnowledgeReference(path=path) for path in self._knowledge_paths]
-
-    def _build_user_preview(self, optimized: str = "", policy: dict | None = None) -> str:
-        """Build a two-layer preview: constraints + knowledge (no system template)."""
-
-        parts: list[str] = []
-        c = optimized.strip() if optimized else self._constraints_text.strip()
-        parts.append(f"约束层：\n{c if c else '（未填写）'}")
-
-        refs = self._knowledge_paths
-        if refs:
-            parts.append(f"知识引用层（{len(refs)} 个文档）：\n" + "\n".join(f"  • {r}" for r in refs))
-        else:
-            parts.append("知识引用层：\n（未添加）")
-        if policy:
-            parts.append(
-                "本地声明式约束（仅执行这些白名单规则）：\n"
-                + json.dumps(policy, ensure_ascii=False, indent=2)
-            )
-        return "\n\n".join(parts)
-
-    def _confirm_compiled_prompt_with_dialog(self, content: str) -> bool:
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Compiled Prompt Preview")
-        dlg.setFixedSize(600, 420)
-        layout = QVBoxLayout(dlg)
-        layout.setContentsMargins(16, 16, 16, 16)
-
-        viewer = QPlainTextEdit()
-        viewer.setReadOnly(True)
-        viewer.setPlainText(content)
-        layout.addWidget(viewer)
-
-        hint = QLabel("Confirm and enable this compiled prompt?")
-        layout.addWidget(hint)
-
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        yes_btn = QPushButton("Yes")
-        no_btn = QPushButton("No")
-        no_btn.setDefault(True)
-        btn_row.addWidget(yes_btn)
-        btn_row.addWidget(no_btn)
-        layout.addLayout(btn_row)
-
-        yes_btn.clicked.connect(lambda: dlg.done(1))
-        no_btn.clicked.connect(lambda: dlg.done(0))
-        return dlg.exec() == 1
 
 
 class KeywordTagEditor(QWidget):
@@ -1599,7 +1446,7 @@ class FeedbackOptimizationDialog(QDialog):
         self._title_bar.close_requested.connect(self.reject)
 
         self._section_names = (
-            "优化译文", "问题判断", "关键词", "记忆规则", "总体建议",
+            "优化译文", "问题判断", "关键词",
         )
         self._review_states = [self.UNREVIEWED] * len(self._section_names)
         self._review_choices: list[dict[str, object] | None] = [None] * len(self._section_names)
@@ -1618,14 +1465,9 @@ class FeedbackOptimizationDialog(QDialog):
         self._user_keyword_editor = KeywordTagEditor()
 
         pages = (
-            self._text_page(suggestion.improved_translation),
-            self._text_page(suggestion.problem_summary),
+            self._text_page(suggestion.improved_translation, "AI 未提供优化译文。"),
+            self._text_page(suggestion.problem_summary, "AI 未提供问题判断。"),
             self._keyword_page(),
-            self._text_page(suggestion.rule),
-            self._text_page(
-                "AI 建议保存长期记忆。" if suggestion.memory_recommended
-                else "AI 不建议保存长期记忆。"
-            ),
         )
         for page in pages:
             self._stack.addWidget(page)
@@ -1696,9 +1538,9 @@ class FeedbackOptimizationDialog(QDialog):
         self.setMinimumSize(min(520, parent_size.width()), min(420, parent_size.height()))
         self._refresh_nav_labels()
 
-    def _text_page(self, ai_text: str) -> QWidget:
+    def _text_page(self, ai_text: str, empty_text: str = "AI 未提供候选。") -> QWidget:
         page = QWidget()
-        ai = QPlainTextEdit(ai_text)
+        ai = QPlainTextEdit(ai_text or empty_text)
         ai.setReadOnly(True)
         user = QPlainTextEdit()
         self._user_editors.append(user)
@@ -1715,6 +1557,13 @@ class FeedbackOptimizationDialog(QDialog):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.addWidget(QLabel("AI 候选（可编辑）"))
+        self._keyword_hint = QLabel(
+            "" if self.suggestion.trigger_options or self.suggestion.trigger
+            else "本次被判断为单句修正，未生成长期记忆关键词。"
+        )
+        self._keyword_hint.setObjectName("hintLabel")
+        self._keyword_hint.setWordWrap(True)
+        layout.addWidget(self._keyword_hint)
         layout.addWidget(self._ai_keyword_editor, 1)
         layout.addWidget(QLabel("我的意见 / 修改"))
         layout.addWidget(self._user_keyword_editor, 1)
@@ -1742,16 +1591,6 @@ class FeedbackOptimizationDialog(QDialog):
             if not value:
                 self._record_current(self.SKIPPED, None)
                 return
-        elif index == 3:
-            value = self.suggestion.rule
-            if not str(value).strip():
-                self._record_current(self.SKIPPED, None)
-                return
-        else:
-            value = (
-                "AI 建议保存长期记忆。" if self.suggestion.memory_recommended
-                else "AI 不建议保存长期记忆。"
-            )
         self._record_current(self.USED_AI, value)
 
     def _use_user(self) -> None:
@@ -1804,7 +1643,7 @@ class FeedbackOptimizationDialog(QDialog):
             button.update()
 
     def _user_text(self, section_index: int) -> str:
-        editor_index = {0: 0, 1: 1, 3: 2, 4: 3}.get(section_index)
+        editor_index = {0: 0, 1: 1}.get(section_index)
         return self._user_editors[editor_index].toPlainText().strip() if editor_index is not None else ""
 
     def review_choice(self, section_index: int) -> dict[str, object] | None:
@@ -1829,19 +1668,13 @@ class FeedbackOptimizationDialog(QDialog):
     def user_keywords(self) -> list[str]:
         return self._user_keyword_editor.keywords()
 
-    def user_rule(self) -> str:
-        return self._user_text(3)
-
-    def user_overall_note(self) -> str:
-        return self._user_text(4)
-
-
 class FeedbackPage(QWidget):
     """Review bad translations and turn accepted fixes into local memory."""
 
     ai_work_started = Signal()
     ai_work_finished = Signal()
     _ai_work_done = Signal(dict)
+    _consolidation_done = Signal(dict)
 
     def sizeHint(self) -> QSize:
         """Keep the page compatible with the main window's 680px minimum width."""
@@ -1854,7 +1687,7 @@ class FeedbackPage(QWidget):
         feedback_store: FeedbackStore,
         settings: AppSettings,
         optimizer: FeedbackOptimizer | None = None,
-        translation_applier: Callable[[int, str, str], bool] | None = None,
+        learning_service: FeedbackLearningService | None = None,
         dialog_factory: Callable[[FeedbackOptimization, QWidget | None], FeedbackOptimizationDialog] | None = None,
         parent: QWidget | None = None,
     ) -> None:
@@ -1863,17 +1696,28 @@ class FeedbackPage(QWidget):
         self._feedback_store = feedback_store
         self._settings = settings
         self._optimizer = optimizer or FeedbackOptimizer(feedback_store=feedback_store)
-        self._translation_applier = translation_applier
+        self._learning_service = learning_service or FeedbackLearningService(
+            feedback_store,
+            settings,
+            self._optimizer,
+        )
         self._dialog_factory = dialog_factory or FeedbackOptimizationDialog
         self._records: list[FeedbackRecord] = []
         self._ai_optimizing = False
         self._ai_job_id = 0
+        self._ai_state_lock = threading.Lock()
+        self._ai_worker_thread: threading.Thread | None = None
+        self._closing = False
+        self._ai_problem_summary = ""
+        self._active_memory_rule_id = ""
+        self._visible_memory_rules: list[MemoryRule] = []
         self._ai_work_done.connect(self._on_ai_work_done)
+        self._consolidation_done.connect(self._on_consolidation_done)
 
         title = QLabel("优化翻译")
         title.setObjectName("pageTitle")
         desc = QLabel(
-            "先核对原文和当前译文；可以只采用本次结果，长期记忆需要单独展开并确认。"
+            "提交正确译文后，纠错会立即参与相似句翻译；长期规则由后台根据纠错库自动归纳。"
         )
         desc.setObjectName("pageDesc")
         desc.setWordWrap(True)
@@ -1885,41 +1729,42 @@ class FeedbackPage(QWidget):
         self._refresh_button = QPushButton("刷新")
         self._refresh_button.setObjectName("secondaryButton")
         self._refresh_button.setMinimumSize(92, 36)
-        self._refresh_button.clicked.connect(self.refresh)
+        self._refresh_button.clicked.connect(
+            lambda _checked=False: self.refresh(
+                preserve_current=True,
+                preserve_drafts=True,
+            )
+        )
 
         picker_row = QHBoxLayout()
-        picker_row.addWidget(QLabel("待处理"))
+        picker_row.addWidget(QLabel("反馈记录"))
         picker_row.addWidget(self._feedback_combo, 1)
         picker_row.addWidget(self._refresh_button)
 
+        compare_height = 90
         self._source_text = QPlainTextEdit()
         self._source_text.setReadOnly(True)
-        self._source_text.setMinimumHeight(68)
-        self._source_text.setMaximumHeight(104)
+        self._source_text.setFixedHeight(compare_height)
 
         self._current_translation_text = QPlainTextEdit()
         self._current_translation_text.setReadOnly(True)
-        self._current_translation_text.setMinimumHeight(68)
-        self._current_translation_text.setMaximumHeight(104)
+        self._current_translation_text.setFixedHeight(compare_height)
 
         self._note_text = QPlainTextEdit()
         self._note_text.setPlaceholderText("可选：写下哪里不满意，例如术语错、语气错、漏译、把意思翻反了。")
-        self._note_text.setMinimumHeight(56)
-        self._note_text.setMaximumHeight(82)
+        self._note_text.setFixedHeight(compare_height)
 
         self._corrected_translation_text = QPlainTextEdit()
         self._corrected_translation_text.setPlaceholderText(
             "可以直接输入你自己的译文；也可以让 AI 生成建议后再修改。"
         )
-        self._corrected_translation_text.setMinimumHeight(72)
-        self._corrected_translation_text.setMaximumHeight(112)
+        self._corrected_translation_text.setFixedHeight(compare_height)
 
         self._keyword_editor = KeywordTagEditor()
 
         self._rule_text = QPlainTextEdit()
         self._rule_text.setPlaceholderText("确认后写入本地记忆的规则，例如：出现“高考”时应译为日本语境下的大学入学考试，不要误作高校考试。")
-        self._rule_text.setMinimumHeight(76)
-        self._rule_text.setMaximumHeight(104)
+        self._rule_text.setFixedHeight(compare_height)
 
         for text_area in (
             self._source_text,
@@ -1931,24 +1776,33 @@ class FeedbackPage(QWidget):
             _configure_wrapping_text_edit(text_area)
             text_area.setSizePolicy(
                 QSizePolicy.Policy.Expanding,
-                QSizePolicy.Policy.MinimumExpanding,
+                QSizePolicy.Policy.Fixed,
             )
 
+        # Stack OCR / current translation / note / accepted translation vertically.
+        # Side-by-side OCR|TX is forbidden by implementer.html §6.
         comparison_widget = QWidget()
-        comparison_layout = QGridLayout(comparison_widget)
+        comparison_layout = QVBoxLayout(comparison_widget)
         comparison_layout.setContentsMargins(0, 0, 0, 0)
-        comparison_layout.setHorizontalSpacing(12)
-        comparison_layout.setVerticalSpacing(6)
-        source_label = QLabel("OCR 原文")
-        current_label = QLabel("当前译文")
-        source_label.setObjectName("feedbackSectionLabel")
-        current_label.setObjectName("feedbackSectionLabel")
-        comparison_layout.addWidget(source_label, 0, 0)
-        comparison_layout.addWidget(current_label, 0, 1)
-        comparison_layout.addWidget(self._source_text, 1, 0)
-        comparison_layout.addWidget(self._current_translation_text, 1, 1)
-        comparison_layout.setColumnStretch(0, 1)
-        comparison_layout.setColumnStretch(1, 1)
+        comparison_layout.setSpacing(8)
+        for label_text, editor in (
+            ("OCR 原文", self._source_text),
+            ("当前译文", self._current_translation_text),
+            ("你的备注（问题说明）", self._note_text),
+            ("你认可的译文（可直接填写）", self._corrected_translation_text),
+        ):
+            section_label = QLabel(label_text)
+            section_label.setObjectName("feedbackSectionLabel")
+            comparison_layout.addWidget(section_label)
+            comparison_layout.addWidget(editor)
+        self._provenance_label = QLabel("")
+        self._provenance_label.setObjectName("hintLabel")
+        self._provenance_label.setWordWrap(True)
+        comparison_layout.addWidget(self._provenance_label)
+        keyword_label = QLabel("关键词（用于查找相似纠错）")
+        keyword_label.setObjectName("feedbackSectionLabel")
+        comparison_layout.addWidget(keyword_label)
+        comparison_layout.addWidget(self._keyword_editor)
 
         self._memory_panel = QWidget()
         self._memory_panel.setObjectName("feedbackMemoryPanel")
@@ -1958,32 +1812,60 @@ class FeedbackPage(QWidget):
         memory_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         memory_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         memory_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        memory_form.addRow("关键词", self._keyword_editor)
-        memory_form.addRow("记忆规则", self._rule_text)
-        form = QFormLayout()
+        self._memory_status_label = QLabel("")
+        self._memory_status_label.setObjectName("feedbackMemoryStatus")
+        self._memory_status_label.setWordWrap(True)
+        self._memory_status_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+        )
+        self._memory_status_label.setMinimumHeight(42)
+        self._memory_status_label.setMinimumWidth(0)
+        memory_status_policy = self._memory_status_label.sizePolicy()
+        memory_status_policy.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
+        memory_status_policy.setVerticalPolicy(QSizePolicy.Policy.Preferred)
+        memory_status_policy.setHeightForWidth(True)
+        self._memory_status_label.setSizePolicy(memory_status_policy)
+        self._memory_rule_combo = QComboBox()
+        self._memory_rule_combo.setObjectName("feedbackMemoryRuleCombo")
+        self._memory_rule_combo.setMinimumWidth(0)
+        self._memory_rule_combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self._memory_rule_combo.currentIndexChanged.connect(
+            self._on_memory_rule_selected
+        )
+        memory_form.addRow(_make_field_label("相关规则"), self._memory_rule_combo)
+        memory_form.addRow(_make_field_label("当前状态"), self._memory_status_label)
+        memory_form.addRow(_make_field_label("记忆规则"), self._rule_text)
+        form = QVBoxLayout()
         form.setContentsMargins(16, 16, 16, 12)
-        form.setSpacing(9)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        form.addRow(comparison_widget)
-        form.addRow("你的备注（问题说明）", self._note_text)
-        form.addRow("你认可的译文（可直接填写）", self._corrected_translation_text)
+        form.setSpacing(10)
+        form.addWidget(comparison_widget)
 
-        self._save_note_button = QPushButton("保存备注")
         self._ai_optimize_button = QPushButton("让 AI 优化")
-        self._accept_translation_button = QPushButton("仅采用译文")
-        self._accept_memory_button = QPushButton("保存为长期记忆")
+        self._accept_translation_button = QPushButton("提交修改")
+        self._save_keywords_button = QPushButton("保存关键词")
+        self._save_rule_button = QPushButton("保存规则")
+        self._toggle_rule_button = QPushButton("停用规则")
+        self._toggle_correction_button = QPushButton("停用纠错")
         self._dismiss_button = QPushButton("忽略")
-        self._save_note_button.setObjectName("secondaryButton")
+        # Match mock btn-row: only「仅采用译文」is primary on the action bar;
+        # 「让 AI 优化」is secondary and opens the review dialog.
+        self._ai_optimize_button.setObjectName("secondaryButton")
         self._accept_translation_button.setObjectName("primaryButton")
-        self._accept_memory_button.setObjectName("primaryButton")
-        self._ai_optimize_button.setObjectName("primaryButton")
+        self._save_keywords_button.setObjectName("secondaryButton")
+        self._save_rule_button.setObjectName("primaryButton")
+        self._toggle_rule_button.setObjectName("secondaryButton")
+        self._toggle_correction_button.setObjectName("secondaryButton")
         self._dismiss_button.setObjectName("secondaryButton")
         compact_widths = {
-            self._save_note_button: 108,
             self._ai_optimize_button: 100,
             self._accept_translation_button: 100,
-            self._accept_memory_button: 132,
+            self._save_keywords_button: 100,
+            self._save_rule_button: 100,
+            self._toggle_rule_button: 90,
+            self._toggle_correction_button: 90,
             self._dismiss_button: 64,
         }
         for button, width in compact_widths.items():
@@ -1992,19 +1874,28 @@ class FeedbackPage(QWidget):
             button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
 
-        self._save_note_button.clicked.connect(self._on_save_note)
         self._ai_optimize_button.clicked.connect(self._on_ai_optimize)
         self._accept_translation_button.clicked.connect(self._on_accept_translation)
-        self._accept_memory_button.clicked.connect(self._on_accept_with_memory)
+        self._save_keywords_button.clicked.connect(self._on_save_keywords)
+        self._save_rule_button.clicked.connect(self._on_save_rule)
+        self._toggle_rule_button.clicked.connect(self._on_toggle_rule)
+        self._toggle_correction_button.clicked.connect(self._on_toggle_correction)
         self._dismiss_button.clicked.connect(self._on_dismiss)
-        memory_form.addRow("", self._accept_memory_button)
+        memory_actions = QHBoxLayout()
+        memory_actions.setContentsMargins(0, 0, 0, 0)
+        memory_actions.setSpacing(8)
+        memory_actions.addWidget(self._save_rule_button)
+        memory_actions.addWidget(self._toggle_rule_button)
+        memory_actions.addStretch(1)
+        memory_form.addRow("", memory_actions)
 
         self._action_layout = QHBoxLayout()
         self._action_layout.setContentsMargins(0, 0, 0, 0)
         self._action_layout.setSpacing(8)
-        self._action_layout.addWidget(self._save_note_button)
         self._action_layout.addWidget(self._ai_optimize_button)
+        self._action_layout.addWidget(self._save_keywords_button)
         self._action_layout.addWidget(self._accept_translation_button)
+        self._action_layout.addWidget(self._toggle_correction_button)
         self._action_layout.addStretch(1)
         self._action_layout.addWidget(self._dismiss_button)
 
@@ -2035,10 +1926,10 @@ class FeedbackPage(QWidget):
         self._feedback_tabs = QTabWidget()
         self._feedback_tabs.setObjectName("feedbackTabs")
         self._feedback_tabs.addTab(self._detail_scroll, "译文修正")
-        self._feedback_tabs.addTab(self._memory_scroll, "长期记忆（可选）")
+        self._feedback_tabs.addTab(self._memory_scroll, "长期记忆")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 28, 24, 24)
+        layout.setContentsMargins(32, 28, 32, 24)
         layout.setSpacing(14)
         layout.addWidget(title)
         layout.addWidget(desc)
@@ -2049,15 +1940,42 @@ class FeedbackPage(QWidget):
 
         self.refresh()
 
-    def refresh(self, preserve_current: bool = False) -> None:
+    def refresh(
+        self,
+        preserve_current: bool = False,
+        preserve_drafts: bool = False,
+    ) -> None:
         """Reload pending feedback from local storage."""
 
+        draft = self._capture_draft_state() if preserve_drafts else None
         current_id = (
             self._feedback_combo.currentData()
             if preserve_current or self._ai_optimizing
             else None
         )
-        self._records = self._feedback_store.list_feedback(status="pending")
+        try:
+            loaded_records = self._feedback_store.list_feedback()
+        except FeedbackStorageUnavailable as exc:
+            if draft is None or not draft["record_id"]:
+                self._records = []
+                self._feedback_combo.blockSignals(True)
+                self._feedback_combo.clear()
+                self._feedback_combo.blockSignals(False)
+                self._on_feedback_selected(-1)
+            else:
+                self._set_actions_enabled(False)
+            self._feedback_combo.setEnabled(False)
+            self._status_label.setText(
+                "反馈存储正在等待安全恢复；实时翻译仍可使用，"
+                "但暂时不能读取或提交纠错。修复存储后请重启应用。"
+            )
+            get_logger().warning("Feedback page storage unavailable: %s", exc)
+            return
+        self._feedback_combo.setEnabled(True)
+        self._records = [
+            record for record in loaded_records if record.status != "dismissed"
+        ]
+        self._records.sort(key=lambda item: item.updated_at, reverse=True)
         self._feedback_combo.blockSignals(True)
         self._feedback_combo.clear()
         for record in self._records:
@@ -2068,6 +1986,37 @@ class FeedbackPage(QWidget):
                 self._feedback_combo.setCurrentIndex(index)
         self._feedback_combo.blockSignals(False)
         self._on_feedback_selected(self._feedback_combo.currentIndex())
+        if draft is not None and draft["record_id"] == self._feedback_combo.currentData():
+            self._restore_draft_state(draft)
+
+    def _capture_draft_state(self) -> dict[str, object]:
+        """Capture unsaved editor state before an explicit data refresh."""
+
+        return {
+            "record_id": self._feedback_combo.currentData(),
+            "note": self._note_text.toPlainText(),
+            "translation": self._corrected_translation_text.toPlainText(),
+            "keywords": self._keyword_editor.keywords(),
+            "rule_id": self._active_memory_rule_id,
+            "rule": self._rule_text.toPlainText(),
+            "rule_modified": self._rule_text.document().isModified(),
+            "tab": self._feedback_tabs.currentIndex(),
+        }
+
+    def _restore_draft_state(self, draft: dict[str, object]) -> None:
+        """Restore drafts only when the refreshed record/rule identity is unchanged."""
+
+        self._note_text.setPlainText(str(draft["note"]))
+        self._corrected_translation_text.setPlainText(str(draft["translation"]))
+        self._keyword_editor.set_keywords(list(draft["keywords"]))
+        if (
+            draft["rule_modified"]
+            and draft["rule_id"]
+            and draft["rule_id"] == self._active_memory_rule_id
+        ):
+            self._rule_text.setPlainText(str(draft["rule"]))
+            self._rule_text.document().setModified(True)
+        self._feedback_tabs.setCurrentIndex(int(draft["tab"]))
 
     def _current_record(self) -> FeedbackRecord | None:
         index = self._feedback_combo.currentIndex()
@@ -2084,50 +2033,79 @@ class FeedbackPage(QWidget):
             self._corrected_translation_text.setPlainText("")
             self._set_keyword_options([], "")
             self._rule_text.setPlainText("")
+            self._provenance_label.setText("")
+            self._memory_status_label.setText("暂无相关长期规则。")
+            self._active_memory_rule_id = ""
+            self._visible_memory_rules = []
+            self._memory_rule_combo.clear()
             self._feedback_tabs.setCurrentIndex(0)
-            self._feedback_tabs.setTabText(1, "长期记忆（可选）")
+            self._feedback_tabs.setTabText(1, "长期记忆")
             self._set_actions_enabled(False)
             self._status_label.setText("暂无待优化的翻译。")
             return
 
-        self._set_actions_enabled(True)
         self._source_text.setPlainText(record.ocr_text)
         self._current_translation_text.setPlainText(record.translation_text)
         self._note_text.setPlainText(record.note)
         self._corrected_translation_text.setPlainText(record.corrected_translation)
-        self._set_keyword_options([], "")
-        self._rule_text.setPlainText("")
+        self._provenance_label.setText(
+            "本次错误译文实际使用："
+            f"纠错案例 {len(record.matched_correction_ids or [])} 条，"
+            f"长期规则 {len(record.matched_memory_rule_ids or [])} 条。"
+        )
+        self._set_keyword_options(list(record.keywords or []), "")
+        self._ai_problem_summary = record.ai_problem_summary
+        storage_available = True
+        try:
+            self._load_memory_for_record(record)
+        except FeedbackStorageUnavailable as exc:
+            storage_available = False
+            self._active_memory_rule_id = ""
+            self._visible_memory_rules = []
+            self._memory_rule_combo.clear()
+            self._rule_text.clear()
+            self._memory_status_label.setText(
+                "反馈存储暂不可用，当前无法读取或修改长期规则。"
+            )
+            get_logger().warning("Feedback memory storage unavailable: %s", exc)
+        self._set_actions_enabled(storage_available)
         self._feedback_tabs.setCurrentIndex(0)
-        self._feedback_tabs.setTabText(1, "长期记忆（可选）")
+        self._feedback_tabs.setTabText(1, "长期记忆")
         self._status_label.setText(f"已载入 {record.summary()}")
 
     def _set_actions_enabled(self, enabled: bool) -> None:
         enabled = enabled and not self._ai_optimizing
         for widget in (
-            self._save_note_button,
             self._ai_optimize_button,
             self._accept_translation_button,
-            self._accept_memory_button,
+            self._save_keywords_button,
             self._dismiss_button,
             self._note_text,
             self._corrected_translation_text,
             self._keyword_editor,
             self._rule_text,
+            self._memory_rule_combo,
         ):
             widget.setEnabled(enabled)
+        self._save_rule_button.setEnabled(enabled and bool(self._active_memory_rule_id))
+        self._toggle_rule_button.setEnabled(enabled and bool(self._active_memory_rule_id))
+        record = self._current_record()
+        submitted = record is not None and record.status in {"accepted", "confirmed"}
+        self._toggle_correction_button.setEnabled(enabled and submitted)
+        self._toggle_correction_button.setText(
+            "停用纠错" if record is None or record.enabled else "启用纠错"
+        )
+        self._dismiss_button.setEnabled(
+            enabled and record is not None and record.status == "pending"
+        )
+        self._dismiss_button.setText(
+            "忽略" if record is None or record.status == "pending" else "已提交"
+        )
 
     def _default_rule(self, record: FeedbackRecord) -> str:
         if record.corrected_translation:
             return "遇到相同或相似表达时，优先参考用户确认译文，保持原意和上下文。"
         return ""
-
-    def set_translation_applier(
-        self,
-        callback: Callable[[int, str, str], bool] | None,
-    ) -> None:
-        """Connect the page to the existing selection workflow controller."""
-
-        self._translation_applier = callback
 
     def _set_keyword_options(self, options: list[str], preferred: str = "") -> None:
         """Populate AI-proposed keyword tags while keeping manual edits possible."""
@@ -2141,32 +2119,241 @@ class FeedbackPage(QWidget):
 
         return FeedbackStore.join_triggers(self._keyword_editor.keywords())
 
-    def _sync_record_edits(self) -> FeedbackRecord | None:
+    def _load_memory_for_record(self, record: FeedbackRecord) -> None:
+        selected_rule_id = self._active_memory_rule_id
+        ids = [
+            record.memory_rule_id,
+            *(record.matched_memory_rule_ids or []),
+        ]
+        rules: list[MemoryRule] = []
+        seen: set[str] = set()
+        for rule_id in ids:
+            if not rule_id or rule_id in seen:
+                continue
+            seen.add(rule_id)
+            memory = self._feedback_store.get_memory_rule(rule_id)
+            if memory is not None:
+                rules.append(memory)
+        # Secondary evidence records do not own memory_rule_id.  Include rules
+        # that cite this record so users can inspect or correct the rule that
+        # was actually derived from their feedback.
+        for memory in self._feedback_store.list_memory_rules(enabled_only=False):
+            if memory.id in seen or record.id not in (memory.source_feedback_ids or []):
+                continue
+            seen.add(memory.id)
+            rules.append(memory)
+        if not rules:
+            rules = self._feedback_store.match_memory_rules(
+                record.ocr_text,
+                source_language=record.source_language,
+                target_language=record.target_language,
+                limit=3,
+            )
+        self._visible_memory_rules = rules
+        self._memory_rule_combo.blockSignals(True)
+        self._memory_rule_combo.clear()
+        for memory in rules:
+            versioned = bool(
+                memory.source_feedback_ids
+                and set(memory.source_feedback_digests or {})
+                == set(memory.source_feedback_ids or [])
+            )
+            origin = (
+                "用户"
+                if memory.user_locked
+                else ("自动" if versioned else "旧自动规则·待确认")
+            )
+            state = "启用" if memory.enabled else "停用"
+            trigger = memory.trigger.strip() or "无触发词"
+            self._memory_rule_combo.addItem(
+                f"{origin} · {state} · {trigger}",
+                memory.id,
+            )
+        self._memory_rule_combo.blockSignals(False)
+        if not rules:
+            self._active_memory_rule_id = ""
+            self._toggle_rule_button.setText("停用规则")
+            self._rule_text.setPlainText("")
+            if record.consolidation_status in {"queued", "running"}:
+                self._memory_status_label.setText("后台正在根据纠错库归纳长期规则。")
+            elif record.consolidation_status == "failed":
+                self._memory_status_label.setText(
+                    f"纠错案例已生效，但长期规则归纳失败：{record.consolidation_error}"
+                )
+            else:
+                self._memory_status_label.setText("本次翻译未使用长期规则。")
+            return
+        selected_index = self._memory_rule_combo.findData(selected_rule_id)
+        if selected_index < 0:
+            selected_index = 0
+        self._memory_rule_combo.setCurrentIndex(selected_index)
+        self._show_memory_rule(rules[selected_index], record)
+
+    def _reload_memory_after_durable_action(
+        self,
+        record: FeedbackRecord,
+        *,
+        draft: dict[str, object] | None = None,
+    ) -> bool:
+        """Refresh memory UI without misreporting an already-durable action."""
+
+        try:
+            self._load_memory_for_record(record)
+        except FeedbackStorageUnavailable as exc:
+            self._set_actions_enabled(False)
+            self._status_label.setText(
+                "操作已经保存，但反馈存储暂时无法刷新；请稍后点击刷新。"
+            )
+            get_logger().warning(
+                "Feedback memory refresh unavailable after durable action: %s",
+                exc,
+            )
+            return False
+        except Exception as exc:
+            self._status_label.setText(
+                f"操作已经保存，但长期规则界面刷新失败：{exc}"
+            )
+            get_logger().exception(
+                "Feedback memory refresh failed after durable action"
+            )
+            return False
+        if draft is not None and draft["record_id"] == record.id:
+            self._restore_draft_state(draft)
+        return True
+
+    def _on_memory_rule_selected(self, index: int) -> None:
+        if index < 0 or index >= len(self._visible_memory_rules):
+            return
+        record = self._current_record()
+        if record is None:
+            return
+        self._show_memory_rule(self._visible_memory_rules[index], record)
+        self._set_actions_enabled(True)
+
+    def _show_memory_rule(self, memory: MemoryRule, record: FeedbackRecord) -> None:
+        self._active_memory_rule_id = memory.id
+        self._rule_text.setPlainText(memory.rule)
+        self._toggle_rule_button.setText("停用规则" if memory.enabled else "启用规则")
+        versioned = bool(
+            memory.source_feedback_ids
+            and set(memory.source_feedback_digests or {})
+            == set(memory.source_feedback_ids or [])
+        )
+        if memory.user_locked:
+            origin = "用户已修改"
+        elif versioned:
+            origin = "后台自动归纳"
+        else:
+            origin = "旧自动规则未注入运行时；请修改并保存后再启用"
+        used = "；本次错误翻译实际注入过" if memory.id in (record.matched_memory_rule_ids or []) else ""
+        self._memory_status_label.setText(
+            f"{origin}；来源纠错 {len(memory.source_feedback_ids or []) or 1} 条{used}。"
+        )
+
+    def _report_feedback_action_failure(self, action: str, exc: Exception) -> None:
+        get_logger().exception("Feedback UI action failed | action=%s", action)
+        self._status_label.setText(f"{action}失败：{exc}")
+
+    def _on_save_keywords(self) -> None:
+        record = self._current_record()
+        if record is None:
+            return
+        try:
+            keywords = self._keyword_editor.keywords()
+            if record.status in {"accepted", "confirmed"} and record.corrected_translation.strip():
+                updated = self._learning_service.submit_correction(
+                    record.id,
+                    corrected_translation=record.corrected_translation,
+                    note=self._note_text.toPlainText().strip(),
+                    keywords=keywords,
+                    ai_problem_summary=self._ai_problem_summary,
+                    on_complete=self._consolidation_done.emit,
+                )
+            else:
+                updated = self._feedback_store.save_keywords(record.id, keywords)
+        except Exception as exc:
+            self._report_feedback_action_failure("保存关键词", exc)
+            return
+        self._records[self._feedback_combo.currentIndex()] = updated
+        if updated.consolidation_status == "failed":
+            self._status_label.setText(
+                "关键词已保存并会参与相似纠错检索；"
+                f"长期规则归纳失败：{updated.consolidation_error}"
+            )
+        else:
+            self._status_label.setText("关键词已保存；后续相似纠错检索会使用这些关键词。")
+
+    def _on_save_rule(self) -> None:
+        if not self._active_memory_rule_id:
+            self._status_label.setText("当前没有可修改的长期规则。")
+            return
+        try:
+            memory = self._feedback_store.update_memory_rule(
+                self._active_memory_rule_id,
+                rule_text=self._rule_text.toPlainText(),
+                user_locked=True,
+            )
+        except Exception as exc:
+            self._report_feedback_action_failure("保存规则", exc)
+            return
+        self._memory_status_label.setText(
+            f"用户已修改并锁定；来源纠错 {len(memory.source_feedback_ids or []) or 1} 条。"
+        )
+        record = self._current_record()
+        if record is not None and not self._reload_memory_after_durable_action(record):
+            return
+        self._status_label.setText("长期规则已保存；后台 Pro 不会自动覆盖用户修改。")
+
+    def _on_toggle_rule(self) -> None:
+        if not self._active_memory_rule_id:
+            self._status_label.setText("当前没有可停用的长期规则。")
+            return
+        draft = self._capture_draft_state()
+        try:
+            memory = self._feedback_store.get_memory_rule(self._active_memory_rule_id)
+            if memory is None:
+                self._status_label.setText("长期规则已不存在，请刷新。")
+                return
+            memory = self._feedback_store.update_memory_rule(
+                memory.id,
+                enabled=not memory.enabled,
+            )
+        except Exception as exc:
+            self._report_feedback_action_failure("修改规则状态", exc)
+            return
+        self._toggle_rule_button.setText("停用规则" if memory.enabled else "启用规则")
+        state = "启用" if memory.enabled else "停用"
+        self._memory_status_label.setText(f"规则已由用户{state}并锁定。")
+        record = self._current_record()
+        if record is not None and not self._reload_memory_after_durable_action(
+            record,
+            draft=draft,
+        ):
+            return
+        self._memory_status_label.setText(
+            f"规则已由用户{state}；自动规则仍会按证据有效性和触发范围校验。"
+        )
+        self._status_label.setText(f"长期规则已{state}。")
+
+    def _record_with_current_drafts(self) -> FeedbackRecord | None:
         record = self._current_record()
         if record is None:
             return None
-        updated = self._feedback_store.update_feedback(
-            record.id,
+        return replace(
+            record,
             note=self._note_text.toPlainText().strip(),
             corrected_translation=self._corrected_translation_text.toPlainText().strip(),
+            keywords=self._keyword_editor.keywords(),
         )
-        if updated is not None:
-            self._records[self._feedback_combo.currentIndex()] = updated
-        return updated or record
-
-    def _on_save_note(self) -> None:
-        record = self._sync_record_edits()
-        if record is None:
-            return
-        self._status_label.setText("已保存备注。")
 
     def _on_ai_optimize(self) -> None:
-        record = self._sync_record_edits()
-        if record is None or self._ai_optimizing:
-            return
-        self._ai_optimizing = True
-        self._ai_job_id += 1
-        job_id = self._ai_job_id
+        record = self._record_with_current_drafts()
+        with self._ai_state_lock:
+            if record is None or self._ai_optimizing or self._closing:
+                return
+            self._ai_optimizing = True
+            self._ai_job_id += 1
+            job_id = self._ai_job_id
         record_id = record.id
         self._status_label.setText("正在让思考模型优化...")
         self._feedback_combo.setEnabled(False)
@@ -2182,15 +2369,52 @@ class FeedbackPage(QWidget):
                 payload["error"] = str(exc)
             except Exception as exc:
                 payload["error"] = str(exc)
-            self._ai_work_done.emit(payload)
+            # The page may have been closed while the daemon was waiting on a
+            # remote request.  Never enqueue UI work for a closed/stale page.
+            with self._ai_state_lock:
+                should_emit = not self._closing and job_id == self._ai_job_id
+            if should_emit:
+                # Do not invoke Qt/external code while holding the state lock.
+                # A concurrent shutdown may win after this check; the slot
+                # repeats the closing/token check before touching widgets.
+                try:
+                    self._ai_work_done.emit(payload)
+                except RuntimeError:
+                    # PySide raises when the QObject was deleted in the tiny
+                    # interval after the closing/token check.
+                    return
 
-        threading.Thread(target=_run, daemon=True).start()
+        worker = threading.Thread(
+            target=_run,
+            name=f"feedback-ai-review-{job_id}",
+            daemon=True,
+        )
+        with self._ai_state_lock:
+            if self._closing or job_id != self._ai_job_id:
+                self._ai_optimizing = False
+                return
+            self._ai_worker_thread = worker
+        try:
+            worker.start()
+        except Exception as exc:
+            with self._ai_state_lock:
+                if job_id == self._ai_job_id:
+                    self._ai_worker_thread = None
+                    self._ai_optimizing = False
+                closed = self._closing
+            if not closed:
+                self._feedback_combo.setEnabled(True)
+                self._refresh_button.setEnabled(True)
+                self._set_actions_enabled(self._current_record() is not None)
+                self._status_label.setText(f"AI 优化启动失败：{exc}")
+                self.ai_work_finished.emit()
 
     def _on_ai_work_done(self, payload: dict) -> None:
-        if payload.get("job_id") != self._ai_job_id:
-            return
-
-        self._ai_optimizing = False
+        with self._ai_state_lock:
+            if self._closing or payload.get("job_id") != self._ai_job_id:
+                return
+            self._ai_worker_thread = None
+            self._ai_optimizing = False
         self._feedback_combo.setEnabled(True)
         self._refresh_button.setEnabled(True)
         self._set_actions_enabled(self._current_record() is not None)
@@ -2212,6 +2436,9 @@ class FeedbackPage(QWidget):
             return
         dialog = self._dialog_factory(suggestion, self)
         dialog.exec()
+        with self._ai_state_lock:
+            if self._closing or payload.get("job_id") != self._ai_job_id:
+                return
         if dialog.decision != FeedbackOptimizationDialog.COMPLETED:
             self._status_label.setText("未采用 AI 建议，主页面内容保持不变。")
             return
@@ -2219,8 +2446,6 @@ class FeedbackPage(QWidget):
         translation_choice = dialog.review_choice(0)
         problem_choice = dialog.review_choice(1)
         keyword_choice = dialog.review_choice(2)
-        rule_choice = dialog.review_choice(3)
-        overall_choice = dialog.review_choice(4)
         if translation_choice and translation_choice["state"] != FeedbackOptimizationDialog.SKIPPED:
             translation_value = str(translation_choice["value"] or "").strip()
             if translation_value:
@@ -2229,34 +2454,12 @@ class FeedbackPage(QWidget):
             keyword_value = list(keyword_choice["value"] or [])
             if keyword_value:
                 self._keyword_editor.set_keywords(keyword_value)
-        if rule_choice and rule_choice["state"] != FeedbackOptimizationDialog.SKIPPED:
-            rule_value = str(rule_choice["value"] or "").strip()
-            if rule_value:
-                self._rule_text.setPlainText(rule_value)
-
-        additions: list[str] = []
-        for choice in (problem_choice, overall_choice):
-            if choice and choice["state"] != FeedbackOptimizationDialog.SKIPPED:
-                text = str(choice["value"] or "").strip()
-                if text:
-                    additions.append(text)
-        old_note = self._note_text.toPlainText().strip()
-        merged = [old_note] if old_note else []
-        merged.extend(text for text in additions if text not in merged)
-        self._note_text.setPlainText("\n".join(merged))
-        self._status_label.setText("审查结果已复制为草稿；请在主页面再次确认保存。")
-
-    def _apply_translation_to_overlay(
-        self,
-        record: FeedbackRecord,
-        translation: str,
-    ) -> bool | None:
-        if self._translation_applier is None:
-            return None
-        return self._translation_applier(record.group_id, record.ocr_text, translation)
+        if problem_choice and problem_choice["state"] != FeedbackOptimizationDialog.SKIPPED:
+            self._ai_problem_summary = str(problem_choice["value"] or "").strip()
+        self._on_accept_translation()
 
     def _on_accept_translation(self) -> None:
-        record = self._sync_record_edits()
+        record = self._current_record()
         if record is None:
             return
         translation = self._corrected_translation_text.toPlainText().strip()
@@ -2264,62 +2467,147 @@ class FeedbackPage(QWidget):
             self._status_label.setText("请先填写非空的优化后/认可译文。")
             return
         try:
-            accepted = self._feedback_store.accept_translation(record.id, translation)
-        except (KeyError, ValueError) as exc:
-            self._status_label.setText(f"采用失败：{exc}")
-            return
-        overlay_updated = self._apply_translation_to_overlay(accepted, translation)
-        self.refresh()
-        if overlay_updated is False:
-            self._status_label.setText("译文已保存；原选区内容已变化，未覆盖当前翻译框。")
-        else:
-            self._status_label.setText("已仅采用本次译文，未创建长期记忆。")
-
-    def _on_accept_with_memory(self) -> None:
-        record = self._sync_record_edits()
-        if record is None:
-            return
-        trigger = self._keyword_text()
-        preferred_translation = self._corrected_translation_text.toPlainText().strip()
-        rule = self._rule_text.toPlainText().strip()
-        if not trigger or not rule:
-            self._feedback_tabs.setCurrentIndex(1)
-            self._status_label.setText("保存长期记忆需要确认关键词和规则。")
-            return
-        try:
-            memory = self._feedback_store.approve_feedback(
+            accepted = self._learning_service.submit_correction(
                 record.id,
-                trigger=trigger,
-                rule=rule,
-                preferred_translation=preferred_translation,
+                corrected_translation=translation,
+                note=self._note_text.toPlainText().strip(),
+                keywords=self._keyword_editor.keywords(),
+                ai_problem_summary=self._ai_problem_summary,
+                on_complete=self._consolidation_done.emit,
             )
-        except (KeyError, ValueError) as exc:
-            self._status_label.setText(f"确认失败：{exc}")
+        except Exception as exc:
+            self._report_feedback_action_failure("提交修改", exc)
             return
-        overlay_updated = (
-            self._apply_translation_to_overlay(record, preferred_translation)
-            if preferred_translation else None
-        )
-        self.refresh()
-        if overlay_updated is False:
+        self.refresh(preserve_current=True)
+        if accepted.consolidation_status == "failed":
             self._status_label.setText(
-                f"已写入本地记忆：{memory.trigger}；原选区内容已变化，未覆盖当前翻译框。"
+                f"修改已提交并开始生效；长期规则尚未归纳：{accepted.consolidation_error}"
             )
+        elif accepted.consolidation_status == "completed":
+            self._status_label.setText("修改已提交并开始生效；长期规则无需重复归纳。")
         else:
-            self._status_label.setText(f"已采用并写入本地记忆：{memory.trigger}")
+            self._status_label.setText("修改已提交并开始生效；后台正在自动归纳长期规则。")
 
     def _on_confirm(self) -> None:
-        """Backward-compatible internal alias for the explicit memory path."""
+        """Backward-compatible internal alias for submitting a correction."""
 
-        self._on_accept_with_memory()
+        self._on_accept_translation()
+
+    def _on_consolidation_done(self, payload: dict) -> None:
+        if self._closing:
+            return
+        current = self._current_record()
+        if current is None or current.id != payload.get("feedback_id"):
+            feedback_id = payload.get("feedback_id")
+            if isinstance(feedback_id, str):
+                try:
+                    updated = self._feedback_store.get_feedback(feedback_id)
+                except FeedbackStorageUnavailable:
+                    updated = None
+                if updated is not None:
+                    for index, cached in enumerate(self._records):
+                        if cached.id != feedback_id:
+                            continue
+                        self._records[index] = updated
+                        self._feedback_combo.blockSignals(True)
+                        self._feedback_combo.setItemText(index, updated.summary())
+                        self._feedback_combo.blockSignals(False)
+                        break
+            # A background completion belongs to another feedback item.  Its
+            # durable state will be visible on refresh/selection; it must not
+            # overwrite the status or drafts of the item currently reviewed.
+            return
+        index = self._feedback_combo.currentIndex()
+        active_rule_id = self._active_memory_rule_id
+        rule_draft = self._rule_text.toPlainText()
+        rule_draft_modified = self._rule_text.document().isModified()
+        current_tab = self._feedback_tabs.currentIndex()
+        try:
+            updated = self._feedback_store.get_feedback(current.id)
+            if updated is None:
+                self.refresh(preserve_current=True)
+                self._status_label.setText("当前纠错记录已被删除，请重新选择。")
+                return
+            self._records[index] = updated
+            self._feedback_combo.blockSignals(True)
+            self._feedback_combo.setItemText(index, updated.summary())
+            self._feedback_combo.blockSignals(False)
+            # Refresh only durable status/provenance.  A full page refresh
+            # would erase note/translation/keyword drafts typed while Pro ran.
+            self._load_memory_for_record(updated)
+            if (
+                rule_draft_modified
+                and active_rule_id
+                and self._active_memory_rule_id == active_rule_id
+            ):
+                self._rule_text.setPlainText(rule_draft)
+                self._rule_text.document().setModified(True)
+            self._feedback_tabs.setCurrentIndex(current_tab)
+            self._set_actions_enabled(True)
+        except FeedbackStorageUnavailable as exc:
+            self._status_label.setText(f"纠错已处理，但反馈存储暂时无法刷新：{exc}")
+            return
+        except Exception as exc:
+            self._report_feedback_action_failure("刷新长期规则", exc)
+            return
+        error = payload.get("error")
+        if error:
+            self._status_label.setText(
+                f"纠错案例已经生效；后台长期规则归纳失败：{error}"
+            )
+        elif payload.get("skipped") == "stale":
+            self._status_label.setText(
+                payload.get("message")
+                or "纠错案例已生效；证据发生变化，本次长期规则未保存。"
+            )
+        elif payload.get("skipped") == "unchanged":
+            self._status_label.setText("纠错内容未变化，无需重复归纳长期规则。")
+        else:
+            self._status_label.setText("纠错案例和后台长期规则均已更新。")
+
+    def _on_toggle_correction(self) -> None:
+        record = self._current_record()
+        if record is None or record.status not in {"accepted", "confirmed"}:
+            self._status_label.setText("当前没有可启用或停用的已提交纠错。")
+            return
+        try:
+            updated = self._learning_service.set_correction_enabled(
+                record.id,
+                not record.enabled,
+            )
+        except Exception as exc:
+            self._report_feedback_action_failure("修改纠错状态", exc)
+            return
+        self.refresh(preserve_current=True, preserve_drafts=True)
+        state = "启用" if updated.enabled else "停用"
+        suffix = (
+            "；由它生成且未被用户锁定的自动规则也已停用。"
+            if not updated.enabled
+            else "；该纠错会重新参与后续检索。"
+        )
+        self._status_label.setText(f"纠错案例已{state}{suffix}")
 
     def _on_dismiss(self) -> None:
         record = self._current_record()
         if record is None:
             return
-        self._feedback_store.update_feedback(record.id, status="dismissed")
+        if record.status != "pending":
+            self._status_label.setText("已生效的纠错不能用“忽略”撤销；请单独停用长期规则。")
+            return
+        try:
+            self._feedback_store.update_feedback(record.id, status="dismissed")
+        except Exception as exc:
+            self._report_feedback_action_failure("忽略反馈", exc)
+            return
         self._status_label.setText("已忽略该反馈。")
         self.refresh()
+
+    def shutdown(self) -> None:
+        with self._ai_state_lock:
+            self._closing = True
+            self._ai_job_id += 1
+            self._ai_optimizing = False
+        self._learning_service.shutdown(wait=False)
 
 
 class SettingsPage(QWidget):
@@ -2340,9 +2628,13 @@ class SettingsPage(QWidget):
         self._edit_input = QLineEdit(edit_shortcut)
 
         form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(14)
-        form.addRow("新建选择框", self._create_input)
-        form.addRow("切换编辑模式", self._edit_input)
+        form.addRow(_make_field_label("新建选择框"), self._create_input)
+        form.addRow(_make_field_label("切换编辑模式"), self._edit_input)
+
+        shortcuts_card, shortcuts_layout = _make_content_card()
+        shortcuts_layout.addLayout(form)
 
         hint = QLabel("格式示例：Ctrl+Shift+Z、Alt+F1。保存时自动检测是否被占用。")
         hint.setObjectName("hintLabel")
@@ -2359,13 +2651,13 @@ class SettingsPage(QWidget):
         btn_row.addStretch(1)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(16)
+        layout.setContentsMargins(32, 28, 32, 24)
+        layout.setSpacing(14)
         layout.addWidget(title)
         layout.addWidget(desc)
-        layout.addLayout(form)
-        layout.addWidget(hint)
+        layout.addWidget(shortcuts_card)
         layout.addLayout(btn_row)
+        layout.addWidget(hint)
         layout.addStretch(1)
 
     def _on_save(self) -> None:
@@ -2424,8 +2716,11 @@ class MainWindow(QMainWindow):
         self._feedback_store = feedback_store or FeedbackStore()
 
         self.setWindowTitle("Instant Translate")
-        self.resize(820, 580)
-        self.setMinimumSize(680, 440)
+        # The reference shell is 1060x620.  Starting at the same density keeps
+        # cards from looking oversized while the minimum still supports small
+        # laptop screens.
+        self.resize(1060, 620)
+        self.setMinimumSize(760, 480)
 
         self._apply_stylesheet()
 
@@ -2439,10 +2734,10 @@ class MainWindow(QMainWindow):
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(200)
 
-        self._nav_template = NavButton("翻译模板")
-        self._nav_model = NavButton("模型配置")
-        self._nav_feedback = NavButton("优化翻译")
-        self._nav_settings = NavButton("设置")
+        self._nav_template = NavButton("☰", "翻译模板")
+        self._nav_model = NavButton("◈", "模型配置")
+        self._nav_feedback = NavButton("✎", "优化翻译")
+        self._nav_settings = NavButton("⚙", "设置")
         self._nav_buttons = [
             self._nav_template,
             self._nav_model,
@@ -2453,7 +2748,7 @@ class MainWindow(QMainWindow):
             btn.clicked.connect(self._on_nav_clicked)
 
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setContentsMargins(10, 0, 10, 12)
         sidebar_layout.setSpacing(4)
         sidebar_layout.addSpacing(20)
         sidebar_layout.addWidget(self._nav_template)
@@ -2464,6 +2759,7 @@ class MainWindow(QMainWindow):
 
         # pages
         self._stack = QStackedWidget()
+        self._stack.setObjectName("pageStack")
 
         self._template_page = TemplatePage(
             source=context.settings.default_source_language,
@@ -2538,12 +2834,14 @@ class MainWindow(QMainWindow):
         root.addWidget(self._status)
 
         central = QWidget(self)
+        central.setObjectName("appRoot")
         central.setLayout(root)
         self.setCentralWidget(central)
 
         # initial nav
         self._nav_template.setChecked(True)
         self._stack.setCurrentIndex(0)
+        self._title_bar.set_page_name("翻译模板")
 
     # ------------------------------------------------------------------
     # nav
@@ -2555,14 +2853,18 @@ class MainWindow(QMainWindow):
             btn.setChecked(btn is sender)
         if sender is self._nav_template:
             self._stack.setCurrentIndex(0)
+            self._title_bar.set_page_name("翻译模板")
         elif sender is self._nav_model:
             self._model_page.ensure_models_loaded()
             self._stack.setCurrentIndex(1)
+            self._title_bar.set_page_name("模型配置")
         elif sender is self._nav_feedback:
-            self._feedback_page.refresh()
+            self._feedback_page.refresh(preserve_current=True, preserve_drafts=True)
             self._stack.setCurrentIndex(2)
+            self._title_bar.set_page_name("优化翻译")
         elif sender is self._nav_settings:
             self._stack.setCurrentIndex(3)
+            self._title_bar.set_page_name("设置")
 
     # ------------------------------------------------------------------
     # handlers — real persistence
@@ -2570,12 +2872,16 @@ class MainWindow(QMainWindow):
 
     def _on_language_changed(self, source: str, target: str) -> None:
         s = self._context.settings
+        previous = (s.default_source_language, s.default_target_language)
         s.default_source_language = source
         s.default_target_language = target
         try:
             s.save()
-        except Exception:
-            pass
+        except OSError as exc:
+            s.default_source_language, s.default_target_language = previous
+            get_logger().error("Default language settings save failed: %s", exc)
+            self._status.showMessage(f"默认翻译方向保存失败：{exc}", 5000)
+            return
         self._context.default_source_language = source
         self._context.default_target_language = target
         self.default_language_changed.emit(source, target)
@@ -2586,8 +2892,9 @@ class MainWindow(QMainWindow):
         previous = (
             s.ai.base_url,
             s.ai.api_key,
-            s.ai.fast_model_name,
-            s.ai.thinking_model_name,
+            s.ai.fast_model,
+            s.ai.thinking_model,
+            s.ai.model,
         )
         s.ai.base_url = base_url
         s.ai.api_key = api_key
@@ -2596,10 +2903,20 @@ class MainWindow(QMainWindow):
         s.ai.model = fast_model or thinking_model
         try:
             s.save()
-        except Exception:
-            pass  # save silently; test button handles feedback
+        except OSError as exc:
+            (
+                s.ai.base_url,
+                s.ai.api_key,
+                s.ai.fast_model,
+                s.ai.thinking_model,
+                s.ai.model,
+            ) = previous
+            get_logger().error("Model settings save failed: %s", exc)
+            self._model_page.show_save_result(False, "配置保存失败；未写入磁盘。")
+            return
+        self._model_page.show_save_result(True, "模型配置已保存")
         current = (base_url, api_key, fast_model, thinking_model)
-        if current != previous:
+        if current != previous[:4]:
             self.model_config_changed.emit()
 
     def show_hotkey_result(self, success: bool, message: str) -> None:
@@ -2637,15 +2954,11 @@ class MainWindow(QMainWindow):
         active = self._context.active_group_count
         edit = "编辑中" if self._context.edit_mode_enabled else "普通"
         self._status.showMessage(f"选择框: {active}/3  |  模式: {edit}")
-        self._feedback_page.refresh(preserve_current=True)
 
-    def set_feedback_translation_applier(
-        self,
-        callback: Callable[[int, str, str], bool] | None,
-    ) -> None:
-        """Connect accepted feedback to the existing overlay workflow."""
+    def refresh_feedback_records(self) -> None:
+        """Reload feedback data without discarding unsaved editor drafts."""
 
-        self._feedback_page.set_translation_applier(callback)
+        self._feedback_page.refresh(preserve_current=True, preserve_drafts=True)
 
     def default_language_pair(self) -> tuple[str, str]:
         return self._template_page.current_pair()
@@ -2654,6 +2967,12 @@ class MainWindow(QMainWindow):
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def shutdown_background_tasks(self) -> None:
+        self._template_page.shutdown()
+        self._model_page.shutdown()
+        self._feedback_page.shutdown()
+        self._ai_progress_timer.stop()
 
     # ------------------------------------------------------------------
     # stylesheet
@@ -2676,15 +2995,53 @@ class MainWindow(QMainWindow):
                 border-radius: 10px;
             }
             QWidget {
-                background: #0f172a;
+                background: transparent;
                 color: #e2e8f0;
                 font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
                 font-size: 13px;
+            }
+            QDialog,
+            QWidget#appRoot,
+            QStackedWidget#pageStack,
+            QWidget#contentPage {
+                background: #0f172a;
+            }
+            QScrollArea#contentScroll,
+            QScrollArea#contentScroll > QWidget > QWidget,
+            QWidget#contentScrollBody {
+                background: #0f172a;
+                border: none;
+            }
+            QLabel {
+                background: transparent;
+                border: none;
             }
 
             QWidget#titleBar {
                 background: #0a0f1a;
                 border-bottom: 1px solid #1e293b;
+            }
+            QLabel#titleBarBrand {
+                background: transparent;
+                color: #f1f5f9;
+                font-size: 13px;
+                font-weight: 700;
+                letter-spacing: 0.2px;
+            }
+            QLabel#titleBarDot {
+                background: #60a5fa;
+                border: none;
+                border-radius: 4px;
+            }
+            QLabel#titleBarSeparator {
+                background: transparent;
+                color: #64748b;
+                font-size: 13px;
+            }
+            QLabel#titleBarPage {
+                background: transparent;
+                color: #94a3b8;
+                font-size: 12px;
             }
             QPushButton#titleBarButton {
                 background: transparent;
@@ -2719,9 +3076,10 @@ class MainWindow(QMainWindow):
                 background: transparent;
                 color: #94a3b8;
                 border: none;
+                border-left: 3px solid transparent;
                 border-radius: 6px;
-                margin: 1px 10px;
-                padding: 10px 16px;
+                margin: 0;
+                padding: 11px 14px 11px 12px;
                 text-align: left;
                 font-size: 13px;
                 font-weight: 500;
@@ -2734,6 +3092,7 @@ class MainWindow(QMainWindow):
                 background: #1e293b;
                 color: #60a5fa;
                 font-weight: 600;
+                border-left: 3px solid #60a5fa;
             }
 
             QWidget#reviewSidebar {
@@ -2779,6 +3138,17 @@ class MainWindow(QMainWindow):
 
             QWidget#contentPage {
                 background: #0f172a;
+            }
+            QFrame#contentCard {
+                background: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 12px;
+            }
+            QLabel#cardTitle {
+                background: transparent;
+                color: #94a3b8;
+                font-size: 13px;
+                font-weight: 600;
             }
             QScrollArea#feedbackDetailScroll,
             QScrollArea#feedbackMemoryScroll,
@@ -2831,7 +3201,12 @@ class MainWindow(QMainWindow):
             QLabel#feedbackSectionLabel {
                 color: #94a3b8;
                 font-weight: 600;
-                font-size: 13px;
+                font-size: 12px;
+            }
+            QLabel#fieldLabel {
+                color: #94a3b8;
+                font-weight: 600;
+                font-size: 12px;
             }
             QLabel#feedbackMemoryRecommendation {
                 color: #94a3b8;
@@ -2839,6 +3214,13 @@ class MainWindow(QMainWindow):
                 background: transparent;
                 border: none;
                 padding: 0;
+            }
+            QLabel#feedbackMemoryStatus {
+                color: #94a3b8;
+                font-size: 12px;
+                background: transparent;
+                border: none;
+                padding: 4px 0;
             }
             QScrollBar:vertical {
                 background: transparent;
@@ -2899,6 +3281,19 @@ class MainWindow(QMainWindow):
                 font-size: 11px;
                 color: #475569;
             }
+            QLabel#connectionStatusPill {
+                background: rgba(251, 191, 36, 0.12);
+                color: #fbbf24;
+                border: none;
+                border-radius: 11px;
+                padding: 4px 10px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QLabel#connectionStatusPill[configured="true"] {
+                background: rgba(74, 222, 128, 0.12);
+                color: #4ade80;
+            }
 
             QPushButton#swapButton {
                 background: #1e293b;
@@ -2913,7 +3308,7 @@ class MainWindow(QMainWindow):
             }
 
             QComboBox {
-                background: #1e293b;
+                background: #0f172a;
                 color: #e2e8f0;
                 border: 1px solid #334155;
                 border-radius: 8px;
@@ -2963,7 +3358,7 @@ class MainWindow(QMainWindow):
                 min-height: 22px;
             }
             QLineEdit, QPlainTextEdit {
-                background: #1e293b;
+                background: #0f172a;
                 color: #e2e8f0;
                 border: 1px solid #334155;
                 border-radius: 8px;
@@ -2979,7 +3374,8 @@ class MainWindow(QMainWindow):
                 color: #94a3b8;
                 border: 1px solid #334155;
                 border-radius: 8px;
-                padding: 8px 18px;
+                min-height: 34px;
+                padding: 0 14px;
                 font-size: 13px;
                 font-weight: 600;
             }
@@ -2992,7 +3388,8 @@ class MainWindow(QMainWindow):
                 color: white;
                 border: none;
                 border-radius: 8px;
-                padding: 8px 18px;
+                min-height: 34px;
+                padding: 0 14px;
                 font-size: 13px;
                 font-weight: 700;
             }
