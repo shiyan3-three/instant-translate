@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 from app.prompt.policy import ConstraintPolicy
@@ -18,6 +20,33 @@ from app.settings import AppSettings
 
 DEFAULT_COMPILED_PROMPT_PATH = "prompts/compiled-prompt.md"
 DEFAULT_REFERENCE_DIR = "prompts/references"
+
+
+def _atomic_write_bytes(path: Path, payload: bytes) -> None:
+    """Durably replace one file using a unique temporary sibling."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+        tmp_path = None
+    finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def _project_root() -> Path:
@@ -117,24 +146,23 @@ class PromptStorage:
         runtime_profile: RuntimeProfile | dict | None = None,
         clear_runtime_profile: bool = False,
     ) -> Path:
-        """Write the prompt and its optional declarative-policy sidecar."""
+        """Write the prompt bundle with atomic files and exception rollback."""
 
         if runtime_profile is not None and clear_runtime_profile:
             raise ValueError("runtime_profile and clear_runtime_profile cannot be used together")
 
         prompt_path = self.resolve_compiled_prompt_path(path)
         prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        updates: list[tuple[Path, bytes | None]] = []
         if policy is not None:
             parsed_policy = (
                 policy if isinstance(policy, ConstraintPolicy) else ConstraintPolicy.from_dict(policy, strict=True)
             )
             policy_path = self.resolve_compiled_policy_path(path)
-            policy_tmp = policy_path.with_suffix(policy_path.suffix + ".tmp")
-            policy_tmp.write_text(
-                json.dumps(parsed_policy.to_dict(), ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            policy_tmp.replace(policy_path)
+            updates.append((
+                policy_path,
+                json.dumps(parsed_policy.to_dict(), ensure_ascii=False, indent=2).encode("utf-8"),
+            ))
         if reference_package is not None:
             parsed_references = (
                 reference_package
@@ -142,12 +170,10 @@ class PromptStorage:
                 else ReferencePackage.from_dict(reference_package, strict=True)
             )
             references_path = self.resolve_compiled_references_path(path)
-            references_tmp = references_path.with_suffix(references_path.suffix + ".tmp")
-            references_tmp.write_text(
-                json.dumps(parsed_references.to_dict(), ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            references_tmp.replace(references_path)
+            updates.append((
+                references_path,
+                json.dumps(parsed_references.to_dict(), ensure_ascii=False, indent=2).encode("utf-8"),
+            ))
         if runtime_profile is not None:
             runtime_profile_data = (
                 runtime_profile.to_dict()
@@ -159,22 +185,65 @@ class PromptStorage:
                 strict=True,
             )
             runtime_profile_path = self.resolve_compiled_runtime_profile_path(path)
-            runtime_profile_tmp = runtime_profile_path.with_suffix(runtime_profile_path.suffix + ".tmp")
-            runtime_profile_tmp.write_text(
-                json.dumps(parsed_runtime_profile.to_dict(), ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            runtime_profile_tmp.replace(runtime_profile_path)
+            updates.append((
+                runtime_profile_path,
+                json.dumps(parsed_runtime_profile.to_dict(), ensure_ascii=False, indent=2).encode("utf-8"),
+            ))
         elif clear_runtime_profile:
             runtime_profile_path = self.resolve_compiled_runtime_profile_path(path)
-            try:
-                runtime_profile_path.unlink()
-            except FileNotFoundError:
-                pass
-        tmp = prompt_path.with_suffix(prompt_path.suffix + ".tmp")
-        tmp.write_text(content, encoding="utf-8")
-        tmp.replace(prompt_path)
+            updates.append((runtime_profile_path, None))
+        # Publish the prompt last.  Runtime readers therefore never observe a
+        # new prompt before its matching declarative sidecars are available.
+        updates.append((prompt_path, content.encode("utf-8")))
+
+        previous: dict[Path, bytes | None] = {
+            target: target.read_bytes() if target.exists() else None
+            for target, _payload in updates
+        }
+        try:
+            for target, payload in updates:
+                if payload is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    _atomic_write_bytes(target, payload)
+        except Exception:
+            # Normal I/O failures are rolled back as one logical bundle.  A
+            # later save can recover even if rollback itself encounters a
+            # second OS-level failure; never hide the original exception.
+            for target, old_payload in previous.items():
+                try:
+                    if old_payload is None:
+                        target.unlink(missing_ok=True)
+                    else:
+                        _atomic_write_bytes(target, old_payload)
+                except OSError:
+                    pass
+            raise
         return prompt_path
+
+    def snapshot_compiled_prompt_bundle(self, path: str | Path) -> dict[Path, bytes | None]:
+        """Capture the prompt and every sidecar for UI-level transaction rollback."""
+
+        targets = (
+            self.resolve_compiled_prompt_path(path),
+            self.resolve_compiled_policy_path(path),
+            self.resolve_compiled_references_path(path),
+            self.resolve_compiled_runtime_profile_path(path),
+        )
+        return {
+            target: target.read_bytes() if target.exists() else None
+            for target in targets
+        }
+
+    @staticmethod
+    def restore_compiled_prompt_bundle(snapshot: dict[Path, bytes | None]) -> None:
+        """Restore a bundle snapshot using the same atomic file primitive."""
+
+        for target, payload in snapshot.items():
+            if payload is None:
+                target.unlink(missing_ok=True)
+            else:
+                _atomic_write_bytes(target, payload)
 
     def resolve_compiled_policy_path(self, path: str | Path) -> Path:
         prompt_path = self.resolve_compiled_prompt_path(path)

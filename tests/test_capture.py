@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from PySide6.QtGui import QImage
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QColor, QImage
 
 from app.capture.change_detector import RegionChangeDetector
 from app.capture.screen_capture import CapturedRegionFrame, ScreenCaptureService
@@ -119,3 +120,42 @@ class ScreenCaptureServiceTests(unittest.TestCase):
         service.capture(screen, ScreenRegion(-1900, 130, 30, 30))
 
         self.assertEqual(screen.args, (0, 20, 30, 30, 30))
+
+    def test_cross_screen_region_is_composited_in_virtual_desktop_order(self) -> None:
+        class Pixmap:
+            def __init__(self, image):
+                self._image = image
+
+            def toImage(self):
+                return self._image
+
+        class Screen:
+            def __init__(self, geometry, color):
+                self._geometry = geometry
+                self._color = color
+                self.calls = []
+
+            def geometry(self):
+                return self._geometry
+
+            def grabWindow(self, *args):
+                self.calls.append(args)
+                image = QImage(args[3], args[4], QImage.Format.Format_RGBA8888)
+                image.fill(self._color)
+                return Pixmap(image)
+
+        left = Screen(QRect(-2, 0, 2, 2), QColor("red"))
+        right = Screen(QRect(0, 0, 2, 2), QColor("blue"))
+        frame = ScreenCaptureService().capture_region(
+            [left, right], ScreenRegion(-2, 0, 4, 2)
+        )
+        image = QImage(
+            frame.pixel_bytes, frame.width, frame.height,
+            QImage.Format.Format_RGBA8888,
+        )
+
+        self.assertEqual((frame.width, frame.height), (4, 2))
+        self.assertEqual(left.calls[0], (0, 0, 0, 2, 2))
+        self.assertEqual(right.calls[0], (0, 0, 0, 2, 2))
+        self.assertEqual(image.pixelColor(0, 0), QColor("red"))
+        self.assertEqual(image.pixelColor(3, 0), QColor("blue"))

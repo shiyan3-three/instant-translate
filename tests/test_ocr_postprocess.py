@@ -73,6 +73,27 @@ class OcrPostprocessTests(unittest.TestCase):
 
         self.assertEqual(clean, "古力娜扎丁字牛仔裤, 这穿搭太酷了!")
 
+    def test_normalize_removes_only_standalone_structural_ui_noise(self) -> None:
+        raw = (
+            "(cache)\n"
+            "UV-7 (resource)\n"
+            "(timing)\n"
+            "Please check cache timing settings.\n"
+            "Fix Bug 123."
+        )
+
+        clean = normalize_ocr_text(raw)
+
+        self.assertEqual(clean, "Please check cache timing settings.\nFix Bug 123.")
+
+    def test_structural_noise_filter_does_not_remove_semantic_negation_or_numbers(self) -> None:
+        raw = (
+            "Do not enable cache.\nRetry count is 2.\nThe timing changed.\n"
+            "初始化()\n翻译()\nテスト()\nreset()"
+        )
+
+        self.assertEqual(normalize_ocr_text(raw), raw)
+
     def test_suspicious_detection_rejects_dimension_only_noise(self) -> None:
         self.assertTrue(is_suspicious_ocr_text("595 x 3", "中文"))
 

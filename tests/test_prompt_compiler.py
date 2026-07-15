@@ -6,6 +6,7 @@ import tempfile
 import unittest
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from app.prompt.base_template import DEFAULT_BASE_PROMPT
 from app.prompt.compiler import PromptCompiler
@@ -17,6 +18,7 @@ from app.prompt.runtime_profile import (
     digest_text,
 )
 from app.prompt.storage import PromptStorage
+from app.prompt import storage as storage_module
 from app.prompt.policy import ConstraintPolicyCompiler, OptimizedPrompt
 from app.reference_layer import ReferencePackage
 
@@ -571,6 +573,39 @@ class PromptStorageTests(unittest.TestCase):
                 "third", "prompts/compiled-prompt.md", clear_runtime_profile=True
             )
             self.assertFalse(sidecar.exists())
+
+    def test_prompt_bundle_rolls_back_when_a_later_replace_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = PromptStorage(config_dir=Path(tmp))
+            path = "prompts/compiled-prompt.md"
+            storage.save_compiled_prompt(
+                "old prompt",
+                path,
+                policy=ConstraintPolicyCompiler.compile("保留 API。"),
+            )
+            prompt_path = storage.resolve_compiled_prompt_path(path)
+            policy_path = storage.resolve_compiled_policy_path(path)
+            old_policy = policy_path.read_bytes()
+            real_atomic_write = storage_module._atomic_write_bytes
+
+            def fail_new_prompt(target: Path, payload: bytes) -> None:
+                if target == prompt_path and payload == b"new prompt":
+                    raise OSError("disk full")
+                real_atomic_write(target, payload)
+
+            with patch(
+                "app.prompt.storage._atomic_write_bytes",
+                side_effect=fail_new_prompt,
+            ):
+                with self.assertRaisesRegex(OSError, "disk full"):
+                    storage.save_compiled_prompt(
+                        "new prompt",
+                        path,
+                        policy=ConstraintPolicyCompiler.compile("仅输出日语。"),
+                    )
+
+            self.assertEqual(prompt_path.read_text(encoding="utf-8"), "old prompt")
+            self.assertEqual(policy_path.read_bytes(), old_policy)
 
     def test_runtime_profile_replace_and_clear_are_mutually_exclusive(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

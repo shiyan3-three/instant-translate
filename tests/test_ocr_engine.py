@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from PIL import Image
 
@@ -10,6 +10,19 @@ from app.ocr.preprocess import ImagePreprocessor
 
 
 class OcrWarmupTests(unittest.TestCase):
+    def test_paddle_273_constructor_uses_only_2x_arguments(self) -> None:
+        engine = OcrEngine()
+        paddle = type("Paddle", (), {"PaddleOCR": Mock(return_value=object())})
+
+        with patch.dict("sys.modules", {"paddleocr": paddle}):
+            engine._ensure_engine("English")
+
+        kwargs = paddle.PaddleOCR.call_args.kwargs
+        self.assertEqual(kwargs["lang"], "en")
+        self.assertTrue(kwargs["use_angle_cls"])
+        self.assertFalse(kwargs["use_gpu"])
+        self.assertFalse(kwargs["show_log"])
+        self.assertNotIn("use_doc_orientation_classify", kwargs)
     def test_paddle_warmup_skips_already_warmed_language_without_ensure(self) -> None:
         engine = OcrEngine()
         engine._backend = "paddle"

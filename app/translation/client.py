@@ -90,7 +90,7 @@ class OpenAICompatibleClient:
             raise TranslationError(f"Translation request timed out after {self._config.timeout_seconds:.0f}s.")
         except httpx.HTTPStatusError as exc:
             get_debug_logger().warning("API HTTP %d", exc.response.status_code)
-            raise TranslationError(f"API error {exc.response.status_code}: {self._truncate(str(exc.response.text))}")
+            raise TranslationError(f"API error {exc.response.status_code}.") from exc
         except httpx.RequestError as exc:
             get_debug_logger().warning("API network error: %s", exc)
             raise TranslationError(f"Network error reaching {self._config.base_url}: {exc}")
@@ -98,23 +98,7 @@ class OpenAICompatibleClient:
         http_ms = (_time.perf_counter() - t0) * 1000
         get_debug_logger().debug("API HTTP round-trip: %.0fms", http_ms)
 
-        response_json = response.json()
-        
-        choice = response_json.get("choices", [{}])[0]
-        msg = choice.get("message", {})
-        get_debug_logger().debug(
-            "API response structure: message_keys=%s content_len=%d reasoning_len=%d finish_reason=%r",
-            list(msg.keys()),
-            len(msg.get("content") or ""),
-            len(msg.get("reasoning_content") or ""),
-            choice.get("finish_reason"),
-        )
-        
-        result = self._extract_content(response_json)
-        
-        if not result.strip():
-            raise TranslationError("API returned an empty translation.")
-        return result.strip()
+        return self._parse_completion_response(response)
 
     def complete(self, system_prompt: str, user_prompt: str, thinking: ThinkingMode = None) -> str:
         """Send one chat completion request and return the response text.
@@ -151,10 +135,7 @@ class OpenAICompatibleClient:
         except httpx.HTTPStatusError as exc:
             get_logger().warning("API HTTP 错误 %d", exc.response.status_code)
             get_debug_logger().warning("API HTTP %d", exc.response.status_code)
-            raise TranslationError(
-                f"API error {exc.response.status_code}: "
-                f"{self._truncate(str(exc.response.text))}"
-            )
+            raise TranslationError(f"API error {exc.response.status_code}.") from exc
         except httpx.RequestError as exc:
             get_logger().warning("API 网络错误: %s", exc)
             get_debug_logger().warning("API network error: %s", exc)
@@ -165,21 +146,7 @@ class OpenAICompatibleClient:
         http_ms = (_time.perf_counter() - t0) * 1000
         get_debug_logger().debug("API HTTP round-trip: %.0fms", http_ms)
 
-        response_json = response.json()
-        choice = response_json.get("choices", [{}])[0]
-        msg = choice.get("message", {})
-        get_debug_logger().debug(
-            "API response structure: message_keys=%s content_len=%d reasoning_len=%d finish_reason=%r",
-            list(msg.keys()),
-            len(msg.get("content") or ""),
-            len(msg.get("reasoning_content") or ""),
-            choice.get("finish_reason"),
-        )
-        result = self._extract_content(response_json)
-        if not result.strip():
-            raise TranslationError("API returned an empty translation.")
-
-        return result.strip()
+        return self._parse_completion_response(response)
 
     def translate(self, system_prompt: str, source_text: str) -> str:
         """Send one translation request and return the response text."""
@@ -212,10 +179,7 @@ class OpenAICompatibleClient:
             )
         except httpx.HTTPStatusError as exc:
             get_debug_logger().warning("List models HTTP %d", exc.response.status_code)
-            raise TranslationError(
-                f"API error {exc.response.status_code}: "
-                f"{self._truncate(str(exc.response.text))}"
-            )
+            raise TranslationError(f"API error {exc.response.status_code}.") from exc
         except httpx.RequestError as exc:
             get_debug_logger().warning("List models network error: %s", exc)
             raise TranslationError(
@@ -297,16 +261,71 @@ class OpenAICompatibleClient:
             raise ValueError("thinking must be 'enabled', 'disabled', True, False, or None")
         payload["thinking"] = {"type": mode}
 
+    def _parse_completion_response(self, response: httpx.Response) -> str:
+        """Validate an OpenAI completion response before recording diagnostics.
+
+        Completion providers vary in how they report malformed replies.  This
+        boundary keeps every structural failure in the public
+        :class:`TranslationError` vocabulary and avoids echoing a provider's
+        response body into a user-facing message or log.
+        """
+
+        try:
+            response_json = response.json()
+        except (ValueError, TypeError) as exc:
+            raise TranslationError("API response is not valid JSON.") from exc
+
+        if not isinstance(response_json, dict):
+            raise TranslationError("Unexpected API response format: expected a JSON object.")
+        choices = response_json.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise TranslationError("Unexpected API response format: missing non-empty choices.")
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            raise TranslationError("Unexpected API response format: invalid choices entry.")
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            raise TranslationError("Unexpected API response format: missing message.")
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise TranslationError("API returned an empty translation.")
+
+        # The payload is fully validated before diagnostics are emitted.  Log
+        # only schema metadata and lengths, never text content.
+        from app.logger import get_debug_logger
+
+        finish_reason = choice.get("finish_reason")
+        get_debug_logger().debug(
+            "API response structure: message_keys=%s content_len=%d reasoning_len=%d finish_reason=%r",
+            sorted(str(key) for key in message.keys()),
+            len(content),
+            len(message.get("reasoning_content") or "")
+            if isinstance(message.get("reasoning_content"), str)
+            else 0,
+            finish_reason,
+        )
+        if finish_reason == "length":
+            raise TranslationError(
+                "API response was truncated before the translation completed; please retry with a larger token limit."
+            )
+        return content.strip()
+
     @staticmethod
     def _extract_content(response_json: dict) -> str:
-        try:
-            msg = response_json["choices"][0]["message"]
-            # Return content directly, no fallback to reasoning_content
-            return msg.get("content") or ""
-        except (KeyError, IndexError, TypeError):
+        """Compatibility helper for callers that already own a JSON object."""
+
+        choices = response_json.get("choices") if isinstance(response_json, dict) else None
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+            raise TranslationError("Unexpected API response format: missing non-empty choices.")
+        message = choices[0].get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str) or not content.strip():
+            raise TranslationError("API returned an empty translation.")
+        if choices[0].get("finish_reason") == "length":
             raise TranslationError(
-                "Unexpected API response format — missing choices[0].message.content."
+                "API response was truncated before the translation completed; please retry with a larger token limit."
             )
+        return content.strip()
 
     @staticmethod
     def _truncate(text: str, max_len: int = 200) -> str:

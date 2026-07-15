@@ -36,6 +36,12 @@ _LATIN_RE = re.compile(r"[A-Za-z]")
 _CJK_RE = re.compile(r"[\u3400-\u9fff]")
 _KANA_RE = re.compile(r"[\u3040-\u30ff]")
 _PUNCT_OR_SYMBOL_RE = re.compile(r"[\W_]+", re.UNICODE)
+_STRUCTURAL_LABEL_RE = re.compile(
+    r"^\([A-Za-z][A-Za-z0-9 _:/.-]{1,24}\)$"
+)
+_STRUCTURAL_RESOURCE_RE = re.compile(
+    r"^[A-Z]{1,8}-\d{1,5}\s+\([A-Za-z][A-Za-z0-9 _:/.-]{1,24}\)$"
+)
 _SOCIAL_METRIC_RE = re.compile(
     r"^(?:关注|粉丝|获赞|点赞|赞|评论|收藏|分享|转发|播放|浏览)"
     r"\s*[:：]?\s*[\d.,]+(?:[wW万kK千]+)?$"
@@ -64,6 +70,8 @@ def normalize_ocr_text(raw_text: str) -> str:
         if _is_language_pair_noise(line):
             continue
         if _is_social_metric_noise(line):
+            continue
+        if _is_structural_ui_noise(line):
             continue
         clean_lines.append(line)
 
@@ -161,6 +169,21 @@ def _is_language_pair_noise(line: str) -> bool:
 
     compact = re.sub(r"\s+", "", line)
     return bool(compact) and bool(_LANGUAGE_PAIR_RE.match(compact))
+
+
+def _is_structural_ui_noise(line: str) -> bool:
+    """Reject only standalone UI/resource shapes, not ordinary technical prose.
+
+    These patterns intentionally require the whole OCR line to be a short
+    structural token. A sentence such as ``check cache timing`` or ``fix Bug
+    123`` therefore remains translatable.
+    """
+
+    compact = re.sub(r"\s+", " ", line).strip()
+    return bool(
+        _STRUCTURAL_LABEL_RE.fullmatch(compact)
+        or _STRUCTURAL_RESOURCE_RE.fullmatch(compact)
+    )
 
 
 def _split_toolbar_words(compact: str) -> list[str]:

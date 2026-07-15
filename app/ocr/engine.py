@@ -6,6 +6,9 @@ Tries PaddleOCR first (best accuracy for CJK), falls back to Tesseract.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
+from pathlib import Path
+import sys
 import threading
 from typing import TYPE_CHECKING
 
@@ -13,6 +16,25 @@ if TYPE_CHECKING:
     from app.capture.screen_capture import CapturedRegionFrame
 
 from app.ocr.preprocess import ImagePreprocessor, PreprocessConfig
+
+
+def _prepare_frozen_paddleocr_imports() -> None:
+    """Expose PaddleOCR 2.x's bundled ``ppocr``/``tools`` packages.
+
+    PaddleOCR 2.7 imports those directories as top-level packages.  A normal
+    installation makes that work by adding its package directory to
+    ``sys.path``; a PyInstaller bundle does not, even when the source tree is
+    present as collected data.
+    """
+
+    if not getattr(sys, "frozen", False):
+        return
+    bundle_root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    paddleocr_root = bundle_root / "paddleocr"
+    if paddleocr_root.is_dir():
+        paddleocr_path = str(paddleocr_root)
+        if paddleocr_path not in sys.path:
+            sys.path.insert(0, paddleocr_path)
 
 
 @dataclass
@@ -152,8 +174,12 @@ class OcrEngine:
         # --- OCR-OUT marker ---
         out_len = len(result.raw_text)
         get_debug_logger().debug(
-            "[OCR-OUT] lang=%s prep=%.0fms total=%.0fms len=%d text=%r",
-            source_language, pp_ms, total_ms, out_len, result.raw_text[:80],
+            "[OCR-OUT] lang=%s prep=%.0fms total=%.0fms len=%d sha256=%s",
+            source_language,
+            pp_ms,
+            total_ms,
+            out_len,
+            hashlib.sha256(result.raw_text.encode("utf-8")).hexdigest()[:12],
         )
 
         return result
@@ -257,17 +283,20 @@ class OcrEngine:
             return
 
         # 1) try PaddleOCR -------------------------------------------------
+        _prepare_frozen_paddleocr_imports()
         try:
             from paddleocr import PaddleOCR
-        except ImportError:
-            pass
+        except ImportError as exc:
+            get_debug_logger().warning("PaddleOCR import failed: %s", exc)
         else:
             try:
                 engine = PaddleOCR(
                     lang=lang_code,
-                    use_doc_orientation_classify=False,
-                    use_doc_unwarping=False,
-                    use_textline_orientation=False,
+                    # PaddleOCR 2.7.x API.  Do not use 3.x document-pipeline
+                    # flags here: our declared dependency is paddleocr==2.7.3.
+                    use_angle_cls=True,
+                    use_gpu=False,
+                    show_log=False,
                 )
                 self._engines[lang_code] = engine
                 self._backend = "paddle"
