@@ -1,6 +1,6 @@
 # 项目当前状态
 
-> 最后更新：2026-06-12
+> 最后更新：2026-07-16
 
 ---
 
@@ -13,11 +13,33 @@
 | OCR 引擎 | ✅ 完成 | PaddleOCR + Tesseract fallback |
 | 截图和变化检测 | ✅ 完成 | BLAKE2b 哈希，500ms 轮询 |
 | 翻译服务 | ✅ 完成 | Agent 化，按组独立 |
-| GUI 界面 | ✅ 完成 | 3 页配置界面（翻译模板、模型、设置） |
+| GUI 界面 | ✅ 完成 | 4 个生产页面（TemplatePage、模型、反馈、设置）；旧 LanguagePage/PromptPage 已清理 |
 | 选择框和悬浮窗 | ✅ 完成 | 支持编辑模式 |
 | Prompt 编译系统 | ✅ 完成 | 三层架构 + 优化器 |
-| 打包 | ✅ 完成 | PyInstaller，~720MB |
-| 性能优化 | 🔧 持续改进 | OCR 缓存、去重逻辑 |
+| 打包 | ✅ 完成 | Python 3.12 + PyInstaller onedir，发布前执行冻结版 OCR 烟测 |
+| 性能优化 | 🔧 持续改进 | 精确 OCR 变体缓存、去重逻辑 |
+
+> 当前状态以本文档和 `docs/goat/09-dev-environment.md` 为准；下方较早的性能、测试数量和启动命令记录是历史快照。
+
+## ✅ 本轮正确性与发布阻断修复（2026-07-16）
+
+- `settings.json` 使用 `utf-8-sig` 读取，同时兼容普通 UTF-8 与 UTF-8 BOM；DPAPI、旧明文迁移和原子保存路径保持不变。
+- Agent Thinking 重试日志已区分“返回 Fast best-effort”和“拒绝并重新抛出”，Fast 的 `validation_reason` 仍用于 best-effort 判断。
+- 翻译服务增加按组、精确文本、TTL 与容量受限的 OCR 变体缓存；语言、模型、Prompt、选择组重置时失效，并保留 pending/generation/stale 保护。
+- 仅过滤整体结构明确的 UI-only 噪声；被过滤日志只保留长度和摘要，不记录 OCR 原文。
+- 已确认无运行时、导入或测试引用后删除旧 `LanguagePage` 与 `PromptPage`，生产路径继续使用异步 `TemplatePage`。
+- 新增 Python 3.12 锁文件 `requirements-py312.lock`，发布 CI 先安装锁定依赖，再以 `--no-deps --no-build-isolation` 安装项目。
+- FeedbackStore 增加线程安全的知识 revision；反馈规则、纠错和后台归纳的持久化成功后会使 OCR 变体缓存失效，保存失败不会推进 revision。
+- `TranslationResult` 区分 `api` 与 `cache` 来源，缓存恢复日志不再伪装成 API success；CJK/Kana 空调用不再被泛化过滤。
+- 当前用户 Win+R 入口已绑定到工作区 `.venv312\Scripts\instant-translate.exe`，启动日志记录 Python、解释器和源码根路径。
+- 当前 spec 保持完整 PaddleOCR 收集逻辑；未为消除可选 PSE 警告进行高风险裁剪。
+
+## 📦 当前发布基线
+
+- Python：发布环境为 3.12.10；源码公开版本范围为 `>=3.10,<3.13`，不支持 Python 3.9。
+- 配置密钥：API Key 使用 Windows DPAPI 加密保存；旧明文配置只在迁移时读取并原子写回，不削弱用户隔离。
+- 冻结版 OCR：本轮使用 `.venv312` 完成 clean PyInstaller 构建，`--smoke-ocr` 约 6.4 秒退出码 `0`，普通启动也保持运行。
+- GUI：生产配置路径为异步 `TemplatePage`、模型、反馈和设置页面；`LanguagePage`、`PromptPage` 已确认无引用并删除。
 
 ---
 
@@ -128,7 +150,7 @@
 ### 资源
 - **内存占用**：~300MB（运行时）
 - **打包大小**：~720MB（包含 PaddleOCR 模型）
-- **测试覆盖**：75+ 个单元测试（全部通过）
+- **测试覆盖**：Python 3.12 全量 pytest：705 passed、1 skipped、179 subtests；验收同时包含 `pip check`、`compileall`、干净导入和 `git diff --check`
 
 ### API 配置
 - **max_tokens**：4096（已优化，避免 content 为空）
@@ -173,7 +195,7 @@
 ### 应用无法启动
 ```bash
 # 检查 Python 版本
-python --version  # 应该是 3.9.x
+python --version  # 发布环境应为 3.12.x；源码边界为 >=3.10,<3.13
 
 # 检查依赖
 pip list | grep -E "PySide6|paddleocr"

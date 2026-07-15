@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>instant-translate GUI Mock</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="mock-app">
+      <header class="mock-header">
+        <div>
+          <h1>GUI Mock · instant-translate</h1>
+          <p>
+            视觉沙盒（非运行时）。对齐
+            <code>docs/goat/14-GUI设计规范.md</code>。分阶段切换下方面板，精进后再装载到
+            PySide6。
+            落地 AI（无视觉）主读
+            <a href="implementer.html" style="color: #60a5fa; font-weight: 600">implementer.html</a>
+            （代码规格），细节
+            <a href="README.md" style="color: #60a5fa; font-weight: 600">README.md</a>。
+          </p>
+        </div>
+        <nav class="phase-nav" id="phaseNav" aria-label="阶段"></nav>
+      </header>
+
+      <!-- ========== Phase 1: Shell ========== -->
+      <section class="phase-panel is-active" data-phase="1" id="phase-1">
+        <p class="phase-note">
+          <strong>阶段 1 · 主窗骨架</strong>
+          标题栏品牌 + 当前页；侧栏选中指示；内容区卡片分层；每页一个主按钮。
+        </p>
+        <div class="desktop-shell" id="shell">
+          <div class="titlebar">
+            <div class="titlebar-brand">
+              <span class="titlebar-dot" aria-hidden="true"></span>
+              <span class="titlebar-name">Instant Translate</span>
+              <span class="titlebar-sep">·</span>
+              <span class="titlebar-page" id="titlePage">翻译模板</span>
+            </div>
+            <div class="titlebar-actions">
+              <button type="button" aria-label="最小化">—</button>
+              <button type="button" class="close" aria-label="关闭">✕</button>
+            </div>
+          </div>
+          <div class="shell-body">
+            <aside class="sidebar" id="sidebar">
+              <button type="button" class="nav-btn is-active" data-page="template">
+                <span class="nav-ico" aria-hidden="true">☰</span>
+                <span class="label">翻译模板</span>
+              </button>
+              <button type="button" class="nav-btn" data-page="model">
+                <span class="nav-ico" aria-hidden="true">◈</span>
+                <span class="label">模型配置</span>
+              </button>
+              <button type="button" class="nav-btn" data-page="feedback">
+                <span class="nav-ico" aria-hidden="true">✎</span>
+                <span class="label">优化翻译</span>
+              </button>
+              <button type="button" class="nav-btn" data-page="settings">
+                <span class="nav-ico" aria-hidden="true">⚙</span>
+                <span class="label">设置</span>
+              </button>
+            </aside>
+            <main class="content">
+              <!-- Template -->
+              <div class="page is-active" data-page="template">
+                <div class="page-head">
+                  <h2>翻译模板</h2>
+                  <p>配置语言与约束，确认后启用 compiled prompt。</p>
+                </div>
+                <div class="card">
+                  <div class="card-title">语言方向</div>
+                  <div class="row">
+                    <div class="field">
+                      <label>源语言</label>
+                      <select class="select">
+                        <option>English</option>
+                        <option selected>中文</option>
+                        <option>日本語</option>
+                      </select>
+                    </div>
+                    <button type="button" class="swap" title="交换">⇄</button>
+                    <div class="field">
+                      <label>目标语言</label>
+                      <select class="select">
+                        <option>English</option>
+                        <option>中文</option>
+                        <option selected>日本語</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="card-title">约束与知识引用</div>
+                  <div class="field" style="margin-bottom: 12px">
+                    <label>约束层</label>
+                    <div class="preview-chip">偏直译；保留专有名词；学术语气…</div>
+                  </div>
+                  <div class="field">
+                    <label>知识引用</label>
+                    <div class="preview-chip">glossary.md · style-notes.md</div>
+                  </div>
+                  <div class="btn-row" style="margin-top: 12px">
+                    <button type="button" class="btn btn-secondary">+ 添加文档</button>
+                    <button type="button" class="btn btn-secondary">预览解析</button>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button type="button" class="btn btn-secondary" id="openPreviewDialog">
+                    生成预览
+                  </button>
+                  <button type="button" class="btn btn-primary">保存并启用</button>
+                  <span class="hint">主操作唯一：保存并启用</span>
+                </div>
+              </div>
+
+              <!-- Model -->
+              <div class="page" data-page="model">
+                <div class="page-head">
+                  <h2>模型配置</h2>
+                  <p>连接 OpenAI 兼容接口，选择 Fast / Thinking 模型。</p>
+                </div>
+                <div class="card">
+                  <div class="row" style="justify-content: space-between; margin-bottom: 12px">
+                    <div class="card-title" style="margin: 0">连接摘要</div>
+                    <span class="status-pill">已配置凭据</span>
+                  </div>
+                  <div class="hint">https://api.example.com/v1 · key ••••abcd</div>
+                </div>
+                <div class="card">
+                  <div class="card-title">接口</div>
+                  <div class="field" style="margin-bottom: 12px">
+                    <label>Base URL</label>
+                    <input class="input" value="https://api.example.com/v1" readonly />
+                  </div>
+                  <div class="field">
+                    <label>API Key</label>
+                    <input class="input" type="password" value="sk-mock-key" readonly />
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="card-title">模型（来自 /models，非硬编码）</div>
+                  <div class="grid-2">
+                    <div class="field">
+                      <label>Fast Model</label>
+                      <select class="select">
+                        <option>deepseek-v4-flash</option>
+                        <option>other-fast</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>Thinking Model</label>
+                      <select class="select">
+                        <option>deepseek-v4-pro</option>
+                        <option>other-pro</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button type="button" class="btn btn-secondary">拉取模型</button>
+                  <button type="button" class="btn btn-primary">测试连接</button>
+                  <span class="hint">已拉取 12 个模型</span>
+                </div>
+              </div>
+
+              <!-- Feedback -->
+              <div class="page" data-page="feedback">
+                <div class="page-head">
+                  <h2>优化翻译</h2>
+                  <p>核对原文与译文；可采用本次结果，长期记忆需单独确认。</p>
+                </div>
+                <div class="row">
+                  <div class="field" style="flex: 1">
+                    <label>待处理</label>
+                    <select class="select">
+                      <option>G1 · 高考马上开始 · 2 分钟前</option>
+                      <option>G2 · 单元测试用例 · 昨天</option>
+                    </select>
+                  </div>
+                  <button type="button" class="btn btn-secondary" style="margin-top: 18px">
+                    刷新
+                  </button>
+                </div>
+                <div class="tabs" id="feedbackTabs">
+                  <button type="button" class="tab is-active" data-tab="fix">译文修正</button>
+                  <button type="button" class="tab" data-tab="memory">长期记忆（可选）</button>
+                </div>
+                <div class="tab-panel is-active" data-tab="fix">
+                  <div class="compare-stack">
+                    <div class="compare-block">
+                      <div class="compare-label">OCR 原文</div>
+                      <textarea class="textarea compare-ta" readonly>高考马上开始</textarea>
+                    </div>
+                    <div class="compare-block">
+                      <div class="compare-label">当前译文</div>
+                      <textarea class="textarea compare-ta" readonly>
+高校の試験がまもなく始まる</textarea>
+                    </div>
+                  </div>
+                  <div class="field" style="margin-top: 10px">
+                    <label>你的备注</label>
+                    <textarea class="textarea compare-ta-sm" placeholder="术语 / 语气 / 漏译…"></textarea>
+                  </div>
+                  <div class="field" style="margin-top: 10px">
+                    <label>你认可的译文</label>
+                    <textarea class="textarea compare-ta-sm">
+大学入学共通テストがまもなく始まる</textarea>
+                  </div>
+                </div>
+                <div class="tab-panel" data-tab="memory">
+                  <div class="field" style="margin-bottom: 12px">
+                    <label>关键词</label>
+                    <div class="row">
+                      <span class="tag">高考 ×</span>
+                      <span class="tag">入学考试 ×</span>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label>记忆规则</label>
+                    <textarea class="textarea">
+出现「高考」时按中国大学入学考试语境翻译。</textarea>
+                  </div>
+                  <div class="btn-row">
+                    <button type="button" class="btn btn-primary">保存为长期记忆</button>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button type="button" class="btn btn-secondary">保存备注</button>
+                  <button type="button" class="btn btn-secondary" id="openReviewDialog">
+                    让 AI 优化
+                  </button>
+                  <button type="button" class="btn btn-primary">仅采用译文</button>
+                  <span style="flex: 1"></span>
+                  <button type="button" class="btn btn-secondary">忽略</button>
+                </div>
+              </div>
+
+              <!-- Settings -->
+              <div class="page" data-page="settings">
+                <div class="page-head">
+                  <h2>快捷键设置</h2>
+                  <p>修改全局快捷键，保存后即时生效。</p>
+                </div>
+                <div class="card">
+                  <div class="field" style="margin-bottom: 12px">
+                    <label>新建选择框</label>
+                    <input class="input" value="Ctrl+Shift+Z" />
+                  </div>
+                  <div class="field">
+                    <label>切换编辑模式</label>
+                    <input class="input" value="Ctrl+Shift+X" />
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button type="button" class="btn btn-primary">保存快捷键</button>
+                  <span class="hint">格式示例：Ctrl+Shift+Z</span>
+                </div>
+              </div>
+            </main>
+          </div>
+          <div class="statusbar">
+            <span id="statusText">就绪 — Ctrl+Shift+Z 新建框选</span>
+            <div class="progress" id="progress" aria-hidden="true"><i></i></div>
+          </div>
+        </div>
+        <ul class="checklist">
+          <li>标题栏有产品名 + 当前页</li>
+          <li>侧栏选中有左侧指示条</li>
+          <li>内容以卡片分区，非纯表单瀑布</li>
+          <li>每页主按钮清晰（蓝）</li>
+        </ul>
+      </section>
+
+      <!-- ========== Phase 2 note (same shell, focus copy) ========== -->
+      <section class="phase-panel" data-phase="2" id="phase-2">
+        <p class="phase-note">
+          <strong>阶段 2 · 任务流页</strong>
+          与阶段 1 共用上方主窗壳。重点看：
+          <strong>模型配置</strong>（连接摘要卡）与
+          <strong>优化翻译</strong>（对照 + 底栏主次）。点侧栏切换即可。
+        </p>
+        <p class="hint">
+          实现装载时：模型页文案与「不可手输下拉」保持一致；优化页「仅采用译文」为主按钮。
+        </p>
+        <ul class="checklist">
+          <li>模型页顶卡展示连接状态</li>
+          <li>Fast / Thinking 为选择器，非自由输入叙事</li>
+          <li>优化页 OCR | 译文对照清晰</li>
+          <li>AI 优化为次按钮，采用译文为主按钮</li>
+        </ul>
+      </section>
+
+      <!-- ========== Phase 3: dialogs ========== -->
+      <section class="phase-panel" data-phase="3" id="phase-3">
+        <p class="phase-note">
+          <strong>阶段 3 · 弹窗统一</strong>
+          编译预览 Tab 深色；AI 审查侧栏圆点（灰/红/绿）+ 短文案按钮。点击下方按钮打开示意。
+        </p>
+        <div class="btn-row">
+          <button type="button" class="btn btn-secondary" id="demoPreview">
+            打开：确认翻译模板
+          </button>
+          <button type="button" class="btn btn-primary" id="demoReview">
+            打开：AI 审查
+          </button>
+        </div>
+        <ul class="checklist">
+          <li>预览弹窗无系统白 Tab / 白 pane</li>
+          <li>审查按钮：跳过 / 采用优化 / 确认修改 / 完成审查</li>
+          <li>侧栏状态用圆点色，不用长文案「未处理」</li>
+        </ul>
+      </section>
+
+      <!-- ========== Phase 4: overlay (full surface map) ========== -->
+      <section class="phase-panel" data-phase="4" id="phase-4">
+        <p class="phase-note">
+          <strong>阶段 4 · Overlay 全貌</strong>
+          视觉重做 + 可拖动。切换「编辑模式」后：拖
+          <strong>选择框</strong>移动整组；拖
+          <strong>译文 / OCR 卡</strong>单独挪位。
+        </p>
+        <p class="overlay-drag-tip">
+          提示：先点「编辑模式」→ 按住选择框或卡片拖动；工具栏按钮/下拉不会启动拖拽。
+        </p>
+
+        <div class="overlay-controls">
+          <div class="overlay-mode" role="group" aria-label="模式">
+            <button type="button" class="btn btn-secondary is-active" data-overlay-mode="normal">
+              普通模式
+            </button>
+            <button type="button" class="btn btn-secondary" data-overlay-mode="edit">
+              编辑模式
+            </button>
+          </div>
+          <label class="overlay-check">
+            <input type="checkbox" id="showOcrWindow" checked />
+            显示 OCR 窗
+          </label>
+          <label class="overlay-check">
+            <input type="checkbox" id="showMultiGroup" />
+            多组示意（G2/G3）
+          </label>
+          <span class="hint" id="overlayModeHint">普通：细边框 · 无工具栏 · 示意点击穿透</span>
+        </div>
+
+        <div class="overlay-stage is-normal" id="overlayStage">
+          <div class="overlay-fake-content">
+            （假桌面 / 播放器 / 字幕区）<br />
+            The exam is about to start.<br />
+            高考马上开始 · 单元测试需要跑完 · 系统环境配置
+          </div>
+
+          <!-- G1 primary group -->
+          <div class="ov-group" data-group="1">
+            <!-- Main strip: language + reselect + OCR + delete + group invisible -->
+            <div class="ov-toolbar" data-edit-only hidden>
+              <div class="tb-seg tb-lang" title="语言对">
+                <select class="tb-select" aria-label="源语言">
+                  <option>English</option>
+                  <option selected>中文</option>
+                  <option>日本語</option>
+                </select>
+                <span class="tb-arrow" aria-hidden="true" title="翻译方向">→</span>
+                <select class="tb-select" aria-label="目标语言">
+                  <option>English</option>
+                  <option>中文</option>
+                  <option selected>日本語</option>
+                </select>
+              </div>
+              <div class="tb-div" aria-hidden="true"></div>
+              <div class="tb-seg tb-actions">
+                <button type="button" class="tb-ico" title="重选区域">⟲</button>
+                <button type="button" class="tb-ico" data-toggle-ocr title="显示/隐藏 OCR 窗">OCR</button>
+                <button type="button" class="tb-ico tb-danger" title="删除此组">✕</button>
+                <button
+                  type="button"
+                  class="tb-ico"
+                  data-group-invisible
+                  title="沉浸：隐藏框体与角工具栏，保留文字"
+                >
+                  ◎
+                </button>
+              </div>
+            </div>
+
+            <div class="selection-box g1" title="选择框 G1 · 编辑模式可拖">
+              <span class="sel-hint" data-edit-only hidden>拖动整组</span>
+            </div>
+
+            <!-- Translation: dock + copy + report + collapse + chrome invisible -->
+            <div class="float-card translation-card g1" data-tx-card>
+              <div class="corner-bar" data-bar="tx">
+                <div class="corner-tools">
+                  <button type="button" class="c-ico" data-dock="top" title="停靠上">↑</button>
+                  <button type="button" class="c-ico is-on" data-dock="bottom" title="停靠下">↓</button>
+                  <button type="button" class="c-ico" data-dock="left" title="停靠左">←</button>
+                  <button type="button" class="c-ico" data-dock="right" title="停靠右">→</button>
+                  <span class="c-div" aria-hidden="true"></span>
+                  <button type="button" class="c-ico" data-copy-tx title="复制译文">⧉</button>
+                  <button type="button" class="c-ico c-warn" title="翻译有误">⚑</button>
+                  <button type="button" class="c-ico" data-body-invisible="tx" title="沉浸：隐藏译文框体，保留文字">◎</button>
+                </div>
+                <button type="button" class="c-collapse" data-collapse="tx" title="收缩/展开工具">›</button>
+              </div>
+              <div class="card-body" data-body="tx">
+                <div class="tx-head">
+                  <span class="badge">1</span>
+                  <span class="meta" data-edit-only hidden>中文 → 日本語</span>
+                </div>
+                <div class="body">大学入学共通テストがまもなく始まる</div>
+              </div>
+            </div>
+
+            <!-- OCR: pause + refresh + copy + collapse + chrome invisible -->
+            <div class="float-card ocr-card g1" data-ocr-card>
+              <div class="corner-bar" data-bar="ocr">
+                <div class="corner-tools">
+                  <button type="button" class="c-ico" data-pause title="暂停/继续">❚❚</button>
+                  <button type="button" class="c-ico" title="刷新 OCR">↻</button>
+                  <button type="button" class="c-ico" data-copy-ocr title="复制 OCR">⧉</button>
+                  <button type="button" class="c-ico" data-body-invisible="ocr" title="沉浸：隐藏 OCR 框体，保留文字">◎</button>
+                </div>
+                <button type="button" class="c-collapse" data-collapse="ocr" title="收缩/展开工具">›</button>
+              </div>
+              <div class="card-body" data-body="ocr">
+                <div class="ocr-head">
+                  <span class="badge">1</span>
+                  <span class="ocr-title">OCR</span>
+                </div>
+                <div class="ocr-body">高考马上开始</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- G2 / G3 multi-group sketch -->
+          <div class="ov-group multi" data-group="2" hidden>
+            <div class="selection-box g2 compact" title="选择框 G2"></div>
+            <div class="float-card translation-card g2 compact">
+              <div class="card-body">
+                <div class="tx-head"><span class="badge">2</span></div>
+                <div class="body">テストケースをすべて実行する</div>
+              </div>
+            </div>
+          </div>
+          <div class="ov-group multi" data-group="3" hidden>
+            <div class="selection-box g3 compact" title="选择框 G3"></div>
+            <div class="float-card translation-card g3 compact">
+              <div class="card-body">
+                <div class="tx-head"><span class="badge">3</span></div>
+                <div class="body">システム環境を設定する</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="overlay-map">
+          <div class="map-card">
+            <h3>主工具栏</h3>
+            <ul>
+              <li>中文 → 日本語（仅三种语言，无源/目标标签）</li>
+              <li>重选 · OCR · 删除 · 统一 28×28</li>
+              <li>◎ 沉浸：藏框体 + 两角工具栏，字仍在</li>
+            </ul>
+          </div>
+          <div class="map-card">
+            <h3>译文角工具</h3>
+            <ul>
+              <li>↑↓←→ · 复制 · 有误</li>
+              <li>◎ 藏译文框体，字仍在</li>
+              <li>› 收缩（展开后为 ‹）</li>
+            </ul>
+          </div>
+          <div class="map-card">
+            <h3>OCR 角工具</h3>
+            <ul>
+              <li>暂停 · 刷新 · 复制</li>
+              <li>◎ 藏 OCR 框体，字仍在</li>
+              <li>› 收缩（展开后为 ‹）</li>
+            </ul>
+          </div>
+        </div>
+
+        <p class="legend">
+          沉浸模式：invisible 只去掉背景/描边/阴影，正文保留，方便对照屏幕原文。
+        </p>
+        <ul class="checklist">
+          <li>语言对箭头清晰</li>
+          <li>invisible = 框隐字显</li>
+          <li>收缩箭头方向正确</li>
+          <li>整体更简约</li>
+        </ul>
+      </section>
+
+    </div>
+
+    <!-- Dialogs -->
+    <div class="dialog-layer" id="previewDialog" role="dialog" aria-modal="true">
+      <div class="dialog">
+        <div class="dialog-titlebar">
+          <span>确认翻译模板</span>
+          <button type="button" class="btn btn-secondary" data-close="previewDialog" style="height: 28px; padding: 0 10px">
+            ✕
+          </button>
+        </div>
+        <div class="dialog-body">
+          <div class="tabs" id="previewTabs">
+            <button type="button" class="tab is-active" data-preview-tab="easy">易懂说明</button>
+            <button type="button" class="tab" data-preview-tab="adv">高级内容</button>
+          </div>
+          <div class="dialog-viewer" data-preview-panel="easy">
+一、你要的效果
+偏直译，保留专有名词原文。
+
+二、程序会强制检查
+• 输出不得包含解释性前后缀
+
+三、模型需要遵守
+• 服从用户约束中的格式要求
+          </div>
+          <div class="dialog-viewer" data-preview-panel="adv" hidden>
+# Instant Translate Compiled Prompt
+## Fixed Template
+…
+## User Constraints
+…
+          </div>
+          <p class="hint" style="margin-top: 10px">
+            请确认易懂说明；需要核对机器实际内容时可打开「高级内容」。
+          </p>
+        </div>
+        <div class="dialog-footer">
+          <button type="button" class="btn btn-secondary" data-close="previewDialog">
+            返回修改
+          </button>
+          <button type="button" class="btn btn-primary" data-close="previewDialog">
+            确认并启用
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="dialog-layer" id="reviewDialog" role="dialog" aria-modal="true">
+      <div class="dialog review">
+        <div class="dialog-titlebar">
+          <span>AI 审查</span>
+          <button type="button" class="btn btn-secondary" data-close="reviewDialog" style="height: 28px; padding: 0 10px">
+            ✕
+          </button>
+        </div>
+        <div class="review-layout">
+          <aside class="review-side" id="reviewSide">
+            <button type="button" class="review-nav is-active" data-state="done" data-r="0">
+              <span class="dot">●</span>优化译文
+            </button>
+            <button type="button" class="review-nav" data-state="pending" data-r="1">
+              <span class="dot">●</span>问题判断
+            </button>
+            <button type="button" class="review-nav" data-state="pending" data-r="2">
+              <span class="dot">●</span>关键词
+            </button>
+            <button type="button" class="review-nav" data-state="skipped" data-r="3">
+              <span class="dot">●</span>记忆规则
+            </button>
+            <button type="button" class="review-nav" data-state="pending" data-r="4">
+              <span class="dot">●</span>总体建议
+            </button>
+          </aside>
+          <div class="review-main">
+            <div class="review-progress">进度示意 · 1/5 已处理（绿）· 跳过（红）· 未处理（灰）</div>
+            <div class="card">
+              <div class="card-title">AI 候选</div>
+              <div class="dialog-viewer" style="min-height: 80px">
+大学入学共通テストがまもなく始まる
+              </div>
+              <div class="card-title" style="margin-top: 12px">我的修改</div>
+              <textarea class="textarea" placeholder="可改写后再「确认修改」"></textarea>
+            </div>
+            <div class="review-actions">
+              <button type="button" class="btn btn-secondary" data-review-act="skip">跳过</button>
+              <span class="spacer"></span>
+              <button type="button" class="btn btn-primary" data-review-act="ai">采用优化</button>
+              <button type="button" class="btn btn-primary" data-review-act="user">确认修改</button>
+              <button type="button" class="btn btn-primary" data-review-act="done">完成审查</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

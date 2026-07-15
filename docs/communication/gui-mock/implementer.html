@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GUI 落地规格（代码）· instant-translate</title>
+    <style>
+      :root {
+        --bg: #0b1220;
+        --border: #334155;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #93c5fd;
+        --code-bg: #0a0f1a;
+        --font: "Segoe UI", "Microsoft YaHei", sans-serif;
+        --mono: Consolas, "Cascadia Code", "Courier New", monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 14px/1.55 var(--font);
+        color: var(--text);
+        background: #020617;
+      }
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 24px 18px 72px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 20px;
+      }
+      h2 {
+        margin: 28px 0 10px;
+        font-size: 15px;
+        color: var(--accent);
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 6px;
+      }
+      h3 {
+        margin: 16px 0 8px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #cbd5e1;
+      }
+      p,
+      li {
+        color: var(--text);
+      }
+      .lead {
+        color: var(--muted);
+        margin: 0 0 14px;
+      }
+      .banner {
+        border: 1px solid #1d4ed8;
+        background: #0f172a;
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin: 0 0 16px;
+        font-size: 13px;
+        color: #bfdbfe;
+      }
+      a {
+        color: var(--accent);
+      }
+      code,
+      pre {
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      code {
+        color: #93c5fd;
+        background: var(--code-bg);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+      pre {
+        margin: 8px 0 12px;
+        padding: 12px 14px;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: auto;
+        color: #e2e8f0;
+        line-height: 1.45;
+        white-space: pre;
+      }
+      pre .c {
+        color: #64748b;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+        margin: 8px 0 12px;
+      }
+      th,
+      td {
+        border: 1px solid var(--border);
+        padding: 7px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: #0a0f1a;
+        color: var(--muted);
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      ul {
+        margin: 6px 0 10px;
+        padding-left: 1.25em;
+      }
+      footer {
+        margin-top: 28px;
+        color: #64748b;
+        font-size: 12px;
+      }
+      .tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #1e293b;
+        color: var(--accent);
+        border: 1px solid var(--border);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <p class="tag">CODE SPEC · no vision required</p>
+      <h1>GUI 落地规格（代码形式）</h1>
+      <p class="lead">
+        给<strong>无视觉能力</strong>的实现模型：只读本页的树结构、尺寸、QSS 片段与约束即可改
+        <code>app/gui/</code> + <code>app/overlay/</code>。人类可另开
+        <a href="index.html">index.html</a> 看图；模型<strong>不要依赖截图</strong>。
+        细节叙述见 <a href="README.md">README.md</a>。
+      </p>
+
+      <div class="banner">
+        输入：本规格 + 现有 PySide6 代码。<br />
+        输出：改 Python 布局 + QSS（objectName 选择器）。<br />
+        禁止：把 HTML 嵌进 WebEngine；硬编码模型列表；未授权 commit。
+      </div>
+
+      <h2>0. 文件与入口</h2>
+      <pre>docs/communication/gui-mock/
+  implementer.html   <span class="c"># 本文件：代码规格（实现 AI 主读）</span>
+  README.md          <span class="c"># 叙述 + 坑</span>
+  index.html         <span class="c"># 人类视觉沙盒（可选）</span>
+  styles.css         <span class="c"># token 与参考样式</span>
+  app.js             <span class="c"># mock 交互，勿移植业务逻辑</span>
+
+app/gui/main_window.py          <span class="c"># 主窗 + 各 Page + 弹窗 QSS</span>
+app/gui/settings_window.py
+app/overlay/selection_box.py    <span class="c"># 选区 + 主工具栏</span>
+app/overlay/translation_window.py
+app/overlay/ocr_text_window.py
+app/overlay/edit_mode_controller.py
+tests/test_gui_shell.py</pre>
+
+      <h2>1. Token 常量（复制到 QSS / 常量）</h2>
+      <pre><span class="c"># 与 styles.css :root / docs/goat/14-GUI设计规范.md 一致</span>
+BG_DEEPEST = "#0a0f1a"   <span class="c"># 侧栏、标题栏、状态栏</span>
+BG_MAIN    = "#0f172a"   <span class="c"># 内容区</span>
+BG_CARD    = "#1e293b"   <span class="c"># 卡片、输入底</span>
+BORDER     = "#334155"
+TEXT       = "#e2e8f0"
+TEXT_MUTED = "#94a3b8"
+TEXT_WEAK  = "#64748b"
+ACCENT     = "#60a5fa"   <span class="c"># 焦点、侧栏选中</span>
+PRIMARY    = "#2563eb"   <span class="c"># 主按钮</span>
+SUCCESS    = "#4ade80"
+WARNING    = "#fbbf24"
+DANGER     = "#f87171"
+GROUP = {1: "#60a5fa", 2: "#4ade80", 3: "#fbbf24"}
+
+FONT = '"Segoe UI", "Microsoft YaHei", sans-serif'
+PAGE_TITLE_PX = 22   <span class="c"># weight 700</span>
+BODY_PX = 13
+HINT_PX = 12
+RADIUS_INPUT = 8
+RADIUS_CARD = 12
+RADIUS_BTN = 8
+PAGE_PAD = "28px 32px 24px"</pre>
+
+      <h2>2. objectName 契约（沿用，勿另起）</h2>
+      <pre>titleBar
+titleBarButton
+titleBarCloseButton
+navButton
+contentPage
+pageTitle
+pageDesc
+swapButton
+primaryButton
+secondaryButton
+constraintsPreview
+compiledPromptDialog
+compiledPromptTabs
+compiledPromptViewer
+modelSelectCombo
+hintLabel
+feedbackOptimizationDialog
+reviewSidebar
+reviewNavButton
+keywordTagEditor
+keywordTagButton
+<span class="c"># 进度条若已有：aiProgressBar / 等价 id</span></pre>
+
+      <h2>3. 主窗结构树（目标布局）</h2>
+      <pre>MainWindow (frameless 或自定义标题栏)
+└── VBox
+    ├── TitleBar#titleBar  height≈38
+    │   ├── brand: "Instant Translate" + "·" + currentPageName
+    │   └── [min#titleBarButton] [close#titleBarCloseButton]
+    ├── HBox shell-body  stretch=1
+    │   ├── Sidebar width≈200  bg=BG_DEEPEST
+    │   │   └── NavButton#navButton ×4
+    │   │         翻译模板 | 模型配置 | 优化翻译 | 设置
+    │   │         active: text=ACCENT + left bar 3px ACCENT + bg BG_CARD
+    │   └── StackedWidget / content
+    │         └── *Page#contentPage
+    └── StatusBar height≈28  bg=BG_DEEPEST
+        ├── status text TEXT_WEAK 12px
+        └── optional Progress#aiProgressBar  140×8</pre>
+
+      <h3>3.1 侧栏 NavButton 规格</h3>
+      <pre>height ≈ 44
+padding ≈ 11 14 11 12
+font 13 / weight 500 (active 600)
+default color: TEXT_MUTED
+hover: bg #1e293b, color TEXT
+active: bg #1e293b, color ACCENT
+active indicator: left edge 3px ACCENT, vertical inset ~10px</pre>
+
+      <h3>3.2 按钮 QSS 目标</h3>
+      <pre>QPushButton#primaryButton {
+  background: #2563eb; color: white; border: none;
+  border-radius: 8px; font-size: 13px; font-weight: 700;
+  min-height: 34px; padding: 0 14px;
+}
+QPushButton#secondaryButton {
+  background: #1e293b; color: #94a3b8;
+  border: 1px solid #334155; border-radius: 8px;
+  font-size: 13px; font-weight: 600; min-height: 34px;
+}
+<span class="c">/* 每页仅一个 primary 主操作 */</span></pre>
+
+      <h2>4. 翻译模板页 · 语言行（⇄ 对齐）</h2>
+      <pre>LanguageRow = HBox(align = bottom / AlignBottom)
+  Field(VBox): label "源语言" + QComboBox
+  QPushButton#swapButton  ⇄   size 36×36
+  Field(VBox): label "目标语言" + QComboBox
+
+约束:
+  - swap 与 ComboBox 底边对齐（不是与 label+combo 整列垂直居中）
+  - PySide: QHBoxLayout.setAlignment(swap_btn, Qt.AlignBottom)
+    或给 Field 固定 label 高度后 align center on combo row
+  - Mock 等价: .swap { align-self: flex-end; }</pre>
+
+      <h2>5. 模型配置页</h2>
+      <pre>FastModel  = QComboBox#modelSelectCombo  editable=False
+ThinkingModel = QComboBox#modelSelectCombo  editable=False
+
+规则:
+  - items 仅来自 GET /models（app.translation.client.list_models）
+  - 禁止硬编码模型名列表作为唯一来源
+  - 已保存模型若不在列表中：仍可显示当前值（已有逻辑则保留）
+  - 按钮: secondary「拉取模型」+ 「测试连接」</pre>
+
+      <h2>6. 优化翻译页（Feedback）· 强制布局</h2>
+      <pre>FeedbackPage#contentPage
+├── pageTitle "优化翻译"
+├── pageDesc
+├── HBox: pending QComboBox + refresh secondary
+├── QTabWidget 或自定义 tabs
+│   ├── Tab "译文修正"
+│   │   └── VBox  <span class="c"># 禁止 OCR|译文 左右两列</span>
+│   │       ├── label "OCR 原文"
+│   │       ├── QPlainTextEdit/QTextEdit  height=90  readOnly
+│   │       ├── label "当前译文"
+│   │       ├── QPlainTextEdit           height=90  readOnly
+│   │       ├── label "你的备注"
+│   │       ├── QPlainTextEdit           height=90
+│   │       ├── label "你认可的译文"
+│   │       └── QPlainTextEdit           height=90
+│   └── Tab "长期记忆（可选）"
+│       ├── keywords tags
+│       ├── memory rule text
+│       └── primary "保存为长期记忆"  <span class="c"># 与「仅采用译文」解耦</span>
+└── HBox actions
+    secondary "保存备注"
+    secondary "让 AI 优化"  → FeedbackOptimizationDialog
+    primary   "仅采用译文"
+    stretch
+    secondary "忽略"
+
+FIXED_HEIGHT_COMPARE_PX = 90
+FIXED_HEIGHT_NOTE_PX = 90
+<span class="c"># 不要做「flex 撑满父窗」除非你验证过不塌陷；固定 90 已冻结</span></pre>
+
+      <h3>6.1 错误示例（禁止）</h3>
+      <pre><span class="c"># BAD: 左右并排</span>
+HBox( OCR_edit stretch=1, TX_edit stretch=1 )
+
+<span class="c"># GOOD: 上下整行</span>
+VBox(
+  label_ocr, ocr_edit,   <span class="c"># full width</span>
+  label_tx,  tx_edit,
+  label_note, note_edit,
+  label_ok,  ok_edit,
+)</pre>
+
+      <h2>7. 弹窗</h2>
+      <h3>7.1 编译预览</h3>
+      <pre>QDialog#compiledPromptDialog
+├── title "确认翻译模板"
+├── QTabWidget#compiledPromptTabs
+│   ├── "易懂说明" → QPlainTextEdit#compiledPromptViewer
+│   └── "高级内容" → QPlainTextEdit#compiledPromptViewer
+├── hintLabel
+└── [secondary 返回修改] [primary 确认并启用]
+
+QSS: tabs 深色 pane/tab（已有 #compiledPromptTabs 则对齐加深）</pre>
+
+      <h3>7.2 AI 审查 FeedbackOptimizationDialog</h3>
+      <pre>QDialog#feedbackOptimizationDialog
+├── HBox
+│   ├── reviewSidebar#reviewSidebar
+│   │   └── reviewNavButton ×N
+│   │         property reviewState ∈ {pending, accepted, rejected, ...}
+│   │         状态点: green SUCCESS / red DANGER / gray TEXT_WEAK
+│   └── content: 原文/建议/用户稿 等（保持现有数据绑定）
+└── buttons 短文案（优先）:
+    secondary "跳过"
+    primary   "采用优化" | "确认修改" 等
+    primary   "完成审查"
+
+不要用冗长按钮句；侧栏点表示状态，不是靠按钮颜色唯一表达。</pre>
+
+      <h2>8. Overlay 结构树</h2>
+      <pre>Group i ∈ {1,2,3}  color = GROUP[i]
+├── MainToolbar  (edit mode only)
+│   ├── QComboBox src   <span class="c"># 无「源语言」可见 label</span>
+│   ├── QLabel "→"      <span class="c"># 纯文本，无圆形背景</span>
+│   ├── QComboBox dst   <span class="c"># 无「目标语言」可见 label</span>
+│   ├── separator
+│   └── icon buttons  each 28×28
+│         reselect | OCR toggle | delete(DANGER color) | group ◎
+├── SelectionBox  border GROUP[i]
+├── TranslationCard
+│   ├── CornerBar (top-right outside card)
+│   │   ├── tools: ↑ ↓ ← → | copy | report | body ◎
+│   │   └── collapse › / ‹
+│   └── body: badge(i) + translation text
+│         normal bg ≈ rgba(255,255,255,0.92)  text #0f172a
+└── OcrCard (optional visible)
+    ├── CornerBar: pause | refresh | copy | body ◎ | collapse
+    └── body: badge + OCR text
+          bg ≈ rgba(15,23,42,0.8)  text light</pre>
+
+      <h3>8.1 主工具栏尺寸</h3>
+      <pre>ICON_BTN = 28×28
+ARROW_LABEL: width≈16, height=28, color ACCENT, text "→", no border, no bg
+lang combo height ≈ 28
+toolbar bg ≈ rgba(15,23,42,0.9)  radius ≈ 10</pre>
+
+      <h3>8.2 沉浸 ◎ — 布局不变量（代码约束）</h3>
+      <pre>语义: chrome off, text on（框隐字显）
+
+chrome 含: 背景、边框、阴影、badge/标题文字的「可见绘制」
+text 含: 译文/OCR 正文
+
+不变量:
+  body_text.screen_pos_after == body_text.screen_pos_before
+  （开启 ◎ 后正文几何位置不得上移）
+
+实现约束:
+  - 隐藏 head/badge: 用 visibility=Hidden 或固定高度占位
+  - 禁止: hide() + 去掉 head 布局 + padding 清零 导致 body 上移
+  - 卡片: 背景透明、无 border、无 shadow；padding 保持与可见态相同
+  - 按钮开启态: 高亮（ACCENT 底/描边），不要只用 opacity 变淡
+  - 组 ◎: 隐藏 selection 轮廓 + 两卡 chrome + corner bars；字仍在
+
+伪代码:
+  def set_body_immersive(card, on: bool):
+      card.setProperty("immersive", on)
+      card.style().unpolish(card); card.style().polish(card)
+      head.setVisible(True)           <span class="c"># 仍占位</span>
+      head.setAttribute(Qt.WA_TransparentForMouseEvents, on)
+      <span class="c"># 或 head 保持 sizeHint，用 palette/opacity 画成全透明</span>
+      if on:
+          assert card.body_geometry_global() == before</pre>
+
+      <h2>9. 参考 QSS 片段（可并入 main_window）</h2>
+      <pre>QWidget#contentPage {
+  background: #0f172a;
+}
+QLabel#pageTitle {
+  color: #f1f5f9; font-size: 22px; font-weight: 700;
+}
+QLabel#pageDesc {
+  color: #94a3b8; font-size: 13px;
+}
+QComboBox, QLineEdit, QPlainTextEdit, QTextEdit {
+  background: #0f172a; color: #e2e8f0;
+  border: 1px solid #334155; border-radius: 8px;
+  padding: 8px 12px; font-size: 13px;
+}
+QComboBox:focus, QPlainTextEdit:focus {
+  border: 1px solid #60a5fa;
+}
+QPushButton#swapButton {
+  min-width: 36px; max-width: 36px;
+  min-height: 36px; max-height: 36px;
+  background: #0f172a; color: #60a5fa;
+  border: 1px solid #334155; border-radius: 8px;
+  font-weight: 700; font-size: 16px;
+}
+QProgressBar#aiProgressBar {
+  max-height: 8px; min-height: 8px; max-width: 140px;
+  border: none; border-radius: 4px; background: #1e293b;
+}
+QProgressBar#aiProgressBar::chunk {
+  border-radius: 4px; background: #2563eb;
+}</pre>
+
+      <h2>10. 落地顺序（任务拆分）</h2>
+      <pre>T1  main_window QSS: shell + nav + primary/secondary + page title
+T2  TemplatePage: language row AlignBottom for swapButton
+T3  FeedbackPage: VBox 4×90px editors; kill side-by-side compare
+T4  Dialogs: compiledPromptTabs dark; review state dots + short labels
+T5  Overlay: toolbar 28px + plain arrow; immersive geometry lock
+T6  tests/test_gui_shell.py + manual smoke</pre>
+
+      <h2>11. 验收（可机器检查的断言思路）</h2>
+      <pre>assert swap_btn.geometry().bottom() == src_combo.geometry().bottom()  <span class="c"># ±2px</span>
+assert feedback_ocr_edit height == 90 or fixed min/max 90
+assert feedback layout is VBox not HBox for ocr vs translation
+assert model_combo.isEditable() is False
+assert model items sourced from list_models / API
+assert immersive_toggle does not change body.mapToGlobal(QPoint(0,0))
+run: python -m pytest tests/test_gui_shell.py -q</pre>
+
+      <h2>12. Don't</h2>
+      <pre>- 不打包 gui-mock 进 exe
+- 不引入 WebEngine 嵌 HTML（除非产品方书面批准）
+- 不把 OCR/译文改回左右并排
+- 不让 ◎ 用 layout collapse 藏 head
+- 不硬编码 /models 目录
+- 不顺手重构 translation agent 管线
+- 不 commit secrets / logs/ / poc/results/</pre>
+
+      <h2>13. 人类可选</h2>
+      <p class="muted">
+        需要看图时打开 <a href="index.html">index.html</a> Phase 1–4。模型实现以本页代码树与数字为准；图与代码冲突时，以本页 +
+        <code>app/</code> 行为为准，并更新本文件。
+      </p>
+
+      <footer>
+        维护：决策变更时改本文件数字与树结构。 ·
+        docs/communication/gui-mock/implementer.html
+      </footer>
+    </div>
+  </body>
+</html>
