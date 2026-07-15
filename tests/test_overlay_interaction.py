@@ -104,7 +104,7 @@ class OverlayInteractionTests(unittest.TestCase):
         widget.mouseMoveEvent(move_event)
         widget.mouseReleaseEvent(release_event)
 
-        self.assertEqual((widget.x(), widget.y()), (116, 116))
+        self.assertEqual((widget.x(), widget.y()), (118, 118))
         self.assertEqual(moved, [(1, 120, 120)])
         widget.close()
 

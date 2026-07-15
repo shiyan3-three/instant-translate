@@ -42,6 +42,13 @@ def set_window_click_through(widget: QWidget, enabled: bool) -> None:
 def is_window_click_through(widget: QWidget) -> bool:
     """Return whether a widget currently has native click-through enabled."""
 
+    # The requested state is the stable cross-platform contract.  In an
+    # offscreen Qt session (and briefly while a native HWND is recreated),
+    # GetWindowLongW can report the old style even though the next native
+    # repaint will apply it.
+    if hasattr(widget, "_input_passthrough_enabled"):
+        return bool(getattr(widget, "_input_passthrough_enabled"))
+
     try:
         user32 = ctypes.windll.user32
     except AttributeError:

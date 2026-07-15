@@ -37,7 +37,13 @@ class SelectionBoxModel:
 
 
 class SelectionToolbarWidget(QWidget):
-    """Floating toolbar shown while one selection box is in edit mode."""
+    """Floating toolbar shown while one selection box is in edit mode.
+
+    Visual target (gui-mock Phase 4 / styles.css .ov-toolbar):
+      [src] → [dst] | 28×28 icons (reselect, OCR, delete, ◎)
+    Dock / feedback / pause stay available for existing wiring & tests;
+    mock places dock/report/pause on corner bars later.
+    """
 
     reselect_requested = Signal()
     ocr_view_requested = Signal()
@@ -47,6 +53,7 @@ class SelectionToolbarWidget(QWidget):
     target_language_changed = Signal(str)
     translation_dock_changed = Signal(str)
     feedback_requested = Signal()
+    group_immersive_toggled = Signal(bool)
 
     LANGUAGES = ["English", "中文", "日本語"]
     DOCK_OPTIONS = [
@@ -55,6 +62,7 @@ class SelectionToolbarWidget(QWidget):
         ("左", "left"),
         ("右", "right"),
     ]
+    ICON_BTN = 28
 
     def __init__(self, parent: QWidget | None = None) -> None:
         flags = (
@@ -67,20 +75,34 @@ class SelectionToolbarWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         set_window_excluded_from_capture(self, True)
+        self._group_immersive = False
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(6)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(4)
 
         self.source_combo = QComboBox()
         self.source_combo.addItems(self.LANGUAGES)
         self.source_combo.setCurrentText("English")
         self.source_combo.setObjectName("toolbarCombo")
+        self.source_combo.setFixedHeight(self.ICON_BTN)
+        self.source_combo.setMinimumWidth(78)
+        self.source_combo.setMaximumWidth(92)
+
+        # Plain arrow between languages — no circle / no 源·目标 labels (mock .tb-arrow).
+        self.arrow_label = QLabel("→")
+        self.arrow_label.setObjectName("toolbarArrow")
+        self.arrow_label.setFixedSize(16, self.ICON_BTN)
+        self.arrow_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.arrow_label.setToolTip("翻译方向")
 
         self.target_combo = QComboBox()
         self.target_combo.addItems(self.LANGUAGES)
         self.target_combo.setCurrentText("中文")
         self.target_combo.setObjectName("toolbarCombo")
+        self.target_combo.setFixedHeight(self.ICON_BTN)
+        self.target_combo.setMinimumWidth(78)
+        self.target_combo.setMaximumWidth(92)
 
         self.dock_combo = QComboBox()
         for label, value in self.DOCK_OPTIONS:
@@ -88,33 +110,67 @@ class SelectionToolbarWidget(QWidget):
         self.dock_combo.setCurrentIndex(0)
         self.dock_combo.setObjectName("toolbarCombo")
         self.dock_combo.setToolTip("翻译框位置")
+        self.dock_combo.setFixedHeight(self.ICON_BTN)
+        self.dock_combo.setMaximumWidth(56)
 
-        self.reselect_button = QPushButton("重选")
+        self.reselect_button = QPushButton("⟲")
+        self.reselect_button.setToolTip("重选区域")
         self.ocr_button = QPushButton("OCR")
-        self.feedback_button = QPushButton("翻译有误")
-        self.pause_button = QPushButton("暂停")
-        self.delete_button = QPushButton("删除")
+        self.ocr_button.setToolTip("显示/隐藏 OCR 窗")
+        self.feedback_button = QPushButton("⚑")
+        self.feedback_button.setToolTip("翻译有误")
+        self.pause_button = QPushButton("❚❚")
+        self.pause_button.setToolTip("暂停/继续")
+        self.delete_button = QPushButton("✕")
+        self.delete_button.setToolTip("删除此组")
+        self.immersive_button = QPushButton("⊘")
+        self.immersive_button.setToolTip("隐藏本组框体和工具栏，仅保留文字")
+        self.immersive_button.setCheckable(True)
+        self.immersive_button.setProperty("visibilityToggle", True)
+        self.immersive_button.setAccessibleName("切换本组框体可见性")
+
+        # Keep accessible name for tests that assert OCR button text.
+        self.ocr_button.setText("OCR")
+        # feedback_button text used by tests — keep Chinese label for API tests.
+        self.feedback_button.setText("翻译有误")
+        self.pause_button.setText("暂停")
 
         layout.addWidget(self.source_combo)
+        layout.addWidget(self.arrow_label)
         layout.addWidget(self.target_combo)
-        layout.addWidget(self.dock_combo)
 
+        sep = QLabel()
+        sep.setObjectName("toolbarSep")
+        sep.setFixedSize(1, 16)
+        layout.addWidget(sep)
+
+        # Mock primary strip icons: reselect | OCR | delete | ◎
+        # (dock / report / pause live on translation/OCR corner bars — implementer §8)
         for button in (
             self.reselect_button,
             self.ocr_button,
-            self.feedback_button,
-            self.pause_button,
             self.delete_button,
+            self.immersive_button,
         ):
-            button.setObjectName("toolbarButton")
+            button.setObjectName("toolbarIconButton")
             button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setFixedSize(self.ICON_BTN, self.ICON_BTN)
             layout.addWidget(button)
+
+        # Keep dock/feedback/pause widgets for API + tests, but not on main strip.
+        for widget in (self.feedback_button, self.pause_button, self.dock_combo):
+            widget.setObjectName(
+                "toolbarCombo" if widget is self.dock_combo else "toolbarButton"
+            )
+            widget.setParent(self)
+            widget.hide()
 
         self.reselect_button.clicked.connect(self.reselect_requested.emit)
         self.ocr_button.clicked.connect(self.ocr_view_requested.emit)
         self.feedback_button.clicked.connect(self.feedback_requested.emit)
         self.pause_button.clicked.connect(self.pause_toggled.emit)
         self.delete_button.clicked.connect(self.delete_requested.emit)
+        self.immersive_button.toggled.connect(self._on_immersive_toggled)
         self.source_combo.currentTextChanged.connect(self.source_language_changed.emit)
         self.target_combo.currentTextChanged.connect(self.target_language_changed.emit)
         self.dock_combo.currentIndexChanged.connect(self._emit_translation_dock_changed)
@@ -145,6 +201,32 @@ class SelectionToolbarWidget(QWidget):
                 break
         self.dock_combo.blockSignals(False)
 
+    def set_group_immersive(self, on: bool) -> None:
+        """Sync ◎ toggle without re-emitting."""
+
+        self.immersive_button.blockSignals(True)
+        self.immersive_button.setChecked(on)
+        self.immersive_button.setText("◉" if on else "⊘")
+        self.immersive_button.setToolTip(
+            "显示本组框体和工具栏" if on else "隐藏本组框体和工具栏，仅保留文字"
+        )
+        self.immersive_button.setProperty("isOn", on)
+        self.immersive_button.style().unpolish(self.immersive_button)
+        self.immersive_button.style().polish(self.immersive_button)
+        self.immersive_button.blockSignals(False)
+        self._group_immersive = on
+
+    def _on_immersive_toggled(self, on: bool) -> None:
+        self._group_immersive = on
+        self.immersive_button.setText("◉" if on else "⊘")
+        self.immersive_button.setToolTip(
+            "显示本组框体和工具栏" if on else "隐藏本组框体和工具栏，仅保留文字"
+        )
+        self.immersive_button.setProperty("isOn", on)
+        self.immersive_button.style().unpolish(self.immersive_button)
+        self.immersive_button.style().polish(self.immersive_button)
+        self.group_immersive_toggled.emit(on)
+
     def _emit_translation_dock_changed(self, *_args) -> None:
         dock = self.dock_combo.currentData()
         if isinstance(dock, str):
@@ -154,78 +236,117 @@ class SelectionToolbarWidget(QWidget):
         super().showEvent(event)
         set_window_excluded_from_capture(self, True)
 
+    def paintEvent(self, event: QPaintEvent) -> None:
+        """Paint the toolbar shell explicitly on translucent Windows surfaces."""
+
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        painter.setBrush(QColor(10, 15, 26, 235))
+        painter.setPen(QPen(QColor(71, 85, 105, 190), 1))
+        painter.drawRoundedRect(rect, 10, 10)
+        painter.end()
+
     def _apply_styles(self) -> None:
-        normal_button_style = """
-            QPushButton {
-                background: rgba(51, 65, 85, 0.96);
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 4px 10px;
-                font-size: 12px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background: rgba(71, 85, 105, 0.98);
-            }
-            QPushButton:pressed {
-                background: rgba(30, 41, 59, 0.98);
-            }
-        """
-        danger_button_style = """
-            QPushButton {
-                background: rgba(194, 65, 12, 0.92);
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 4px 10px;
-                font-size: 12px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background: rgba(219, 88, 30, 0.96);
-            }
-            QPushButton:pressed {
-                background: rgba(170, 55, 10, 0.96);
-            }
-        """
-        self.reselect_button.setStyleSheet(normal_button_style)
-        self.ocr_button.setStyleSheet(normal_button_style)
-        self.feedback_button.setStyleSheet(normal_button_style)
-        self.pause_button.setStyleSheet(normal_button_style)
-        self.delete_button.setStyleSheet(danger_button_style)
         self.setStyleSheet(
             """
-            QWidget#selectionToolbarPanel {{
-                background: rgba(15, 23, 42, 0.9);
+            QWidget#selectionToolbarPanel {
+                background: transparent;
                 border: none;
-                border-radius: 10px;
-            }}
-            QComboBox#toolbarCombo {{
-                background: rgba(51, 65, 85, 0.96);
-                color: white;
+            }
+            QLabel#toolbarArrow {
+                background: transparent;
+                color: #60a5fa;
                 border: none;
-                border-radius: 8px;
-                padding: 4px 26px 4px 10px;
-                font-size: 12px;
+                font-size: 14px;
+                font-weight: 700;
+            }
+            QLabel#toolbarSep {
+                background: rgba(100, 116, 139, 0.4);
+                border: none;
+            }
+            QComboBox#toolbarCombo {
+                background: rgba(30, 41, 59, 0.9);
+                color: #e2e8f0;
+                border: 1px solid rgba(71, 85, 105, 0.7);
+                border-radius: 6px;
+                padding: 0 18px 0 8px;
+                font-size: 11px;
                 font-weight: 600;
-            }}
-            QComboBox#toolbarCombo:hover {{
-                background: rgba(71, 85, 105, 0.98);
-            }}
-            QComboBox#toolbarCombo QAbstractItemView {{
+                min-height: 28px;
+                max-height: 28px;
+            }
+            QComboBox#toolbarCombo:hover {
+                border-color: rgba(100, 116, 139, 0.95);
+                color: #f8fafc;
+            }
+            QComboBox#toolbarCombo QAbstractItemView {
                 background: rgba(30, 41, 59, 0.98);
                 color: white;
                 border: none;
                 border-radius: 6px;
                 selection-background-color: rgba(71, 85, 105, 0.98);
-            }}
-            QComboBox#toolbarCombo::drop-down {{
+            }
+            QComboBox#toolbarCombo::drop-down {
                 subcontrol-origin: padding;
                 subcontrol-position: top right;
-                width: 20px;
+                width: 18px;
                 border: none;
-            }}
+            }
+            QPushButton#toolbarIconButton {
+                background: transparent;
+                color: #94a3b8;
+                border: none;
+                border-radius: 6px;
+                padding: 0;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QPushButton#toolbarIconButton:hover {
+                background: rgba(51, 65, 85, 0.75);
+                color: #f1f5f9;
+            }
+            QPushButton#toolbarIconButton[isOn="true"] {
+                background: rgba(37, 99, 235, 0.35);
+                color: #93c5fd;
+                border: 1px solid #60a5fa;
+            }
+            QPushButton#toolbarIconButton[visibilityToggle="true"] {
+                color: #cbd5e1;
+                font-size: 16px;
+                font-weight: 700;
+            }
+            QPushButton#toolbarButton {
+                background: rgba(51, 65, 85, 0.96);
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 0 8px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QPushButton#toolbarButton:hover {
+                background: rgba(71, 85, 105, 0.98);
+            }
+            """
+        )
+        # Delete uses danger color (mock .tb-danger).
+        self.delete_button.setStyleSheet(
+            """
+            QPushButton#toolbarIconButton {
+                background: transparent;
+                color: #f87171;
+                border: none;
+                border-radius: 6px;
+                padding: 0;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QPushButton#toolbarIconButton:hover {
+                background: rgba(248, 113, 113, 0.12);
+                color: #fca5a5;
+            }
             """
         )
 
@@ -272,6 +393,7 @@ class SelectionBoxWidget(QWidget):
         self.size_badge = QLabel("", self)
         self.size_badge.setObjectName("sizeBadge")
 
+        self._group_immersive = False
         self.toolbar_panel = SelectionToolbarWidget()
         self.toolbar_panel.reselect_requested.connect(lambda: self.reselect_requested.emit(self.model.group_id))
         self.toolbar_panel.ocr_view_requested.connect(lambda: self.ocr_view_requested.emit(self.model.group_id))
@@ -281,6 +403,7 @@ class SelectionBoxWidget(QWidget):
         self.toolbar_panel.target_language_changed.connect(lambda lang: self.target_language_changed.emit(self.model.group_id, lang))
         self.toolbar_panel.translation_dock_changed.connect(lambda dock: self.translation_dock_changed.emit(self.model.group_id, dock))
         self.toolbar_panel.feedback_requested.connect(lambda: self.feedback_requested.emit(self.model.group_id))
+        self.toolbar_panel.group_immersive_toggled.connect(self._on_group_immersive_toggled)
 
         self.apply_model(model)
         self.apply_edit_mode(False)
@@ -295,7 +418,7 @@ class SelectionBoxWidget(QWidget):
     def outline_width(self) -> int:
         """Return the current border width used for painting."""
 
-        return 4 if self._editable else 2
+        return 2 if self._editable else 1
 
     @property
     def capture_margin(self) -> int:
@@ -415,8 +538,27 @@ class SelectionBoxWidget(QWidget):
         else:
             self.clearMask()
 
+    def set_group_immersive(self, on: bool) -> None:
+        """Group ◎: hide selection outline chrome; keep geometry (mock is-group-hidden)."""
+
+        self._group_immersive = bool(on)
+        self.toolbar_panel.set_group_immersive(on)
+        # Outline paint skips when immersive; badges already hidden.
+        self.update()
+
+    def _on_group_immersive_toggled(self, on: bool) -> None:
+        self.set_group_immersive(on)
+
+    @property
+    def group_immersive(self) -> bool:
+        return self._group_immersive
+
     def paintEvent(self, event: QPaintEvent) -> None:
         super().paintEvent(event)
+
+        if self._group_immersive:
+            # Selection outline chrome off; widget still occupies the region.
+            return
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)

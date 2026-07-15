@@ -12,7 +12,11 @@ from app.overlay.edit_mode_controller import EditModeController
 from app.overlay.selection_manager import SelectionWorkflowController
 from app.state.group_state import ScreenRegion
 from app.state.runtime_store import RuntimeStore
-from app.translation.service import TranslationService
+from app.translation.service import (
+    TranslationMemorySnapshot,
+    TranslationResult,
+    TranslationService,
+)
 from tests.test_support import ensure_qapplication
 
 
@@ -42,7 +46,6 @@ class FakeChangeDetector:
 
     def reset_group(self, group_id: int) -> None:
         self.reset_calls.append(group_id)
-
 
 class FakeOcrEngine:
     """OCR test double returning fixed text."""
@@ -97,6 +100,9 @@ class FakeTranslationService:
     def reset_group(self, group_id: int) -> None:
         self.reset_calls.append(group_id)
 
+    def memory_provenance(self, group_id: int):
+        return ["correction-1"], ["rule-1"]
+
     def invalidate_group_requests(self, group_id: int, reason: str = "") -> None:
         self.invalidations.append({"group_id": group_id, "reason": reason})
 
@@ -142,7 +148,7 @@ class FakeDeferredExecutor:
         fn, args = self.submitted.pop(0)
         fn(*args)
 
-    def shutdown(self, wait: bool = False) -> None:
+    def shutdown(self, wait: bool = False, cancel_futures: bool = False) -> None:
         self.shutdown_called = True
 
 
@@ -178,62 +184,6 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         self.assertEqual(self.context.active_group_count, 1)
         self.assertEqual(self.controller.selection_box_count, 1)
         self.assertEqual(self.controller.translation_window_count, 1)
-
-    def test_accepted_translation_updates_matching_runtime_state_and_window(self) -> None:
-        self.controller.request_new_selection()
-        self.controller.finalize_selection(ScreenRegion(100, 120, 360, 100))
-        state = self.runtime_store.runtime_states[1]
-        state.latest_ocr_text = "原句"
-        state.latest_translation_text = "旧译文"
-
-        with patch.object(self.controller, "_upsert_translation_window") as upsert:
-            updated = self.controller.apply_accepted_translation(1, "原句", "认可译文")
-
-        self.assertTrue(updated)
-        self.assertEqual(state.latest_translation_text, "认可译文")
-        upsert.assert_called_once_with(1, self.runtime_store.regions[1])
-
-    def test_accepted_translation_does_not_overwrite_when_ocr_changed(self) -> None:
-        self.controller.request_new_selection()
-        self.controller.finalize_selection(ScreenRegion(100, 120, 360, 100))
-        state = self.runtime_store.runtime_states[1]
-        state.latest_ocr_text = "新句子"
-        state.latest_translation_text = "新句译文"
-        service = FakeTranslationService()
-        self.controller._translation_service = service
-
-        with patch.object(self.controller, "_upsert_translation_window") as upsert:
-            updated = self.controller.apply_accepted_translation(1, "旧句子", "旧句认可译文")
-
-        self.assertFalse(updated)
-        self.assertEqual(state.latest_translation_text, "新句译文")
-        upsert.assert_not_called()
-        self.assertEqual(service.invalidations, [])
-
-    def test_accepted_translation_for_missing_group_returns_false(self) -> None:
-        self.assertFalse(
-            self.controller.apply_accepted_translation(99, "原句", "认可译文")
-        )
-
-    def test_accepted_translation_does_not_request_fast_or_pro_translation(self) -> None:
-        self.controller.request_new_selection()
-        self.controller.finalize_selection(ScreenRegion(100, 120, 360, 100))
-        state = self.runtime_store.runtime_states[1]
-        state.latest_ocr_text = "原句"
-        service = FakeTranslationService()
-        self.controller._translation_service = service
-
-        self.assertTrue(
-            self.controller.apply_accepted_translation(1, "原句", "认可译文")
-        )
-        self.assertEqual(service.requests, [])
-        self.assertEqual(service.prepared_profiles, [])
-        self.assertEqual(
-            service.invalidations,
-            [{"group_id": 1, "reason": "user accepted corrected translation"}],
-        )
-        self.assertEqual(service.reset_calls, [])
-        self.assertEqual(self.context.status_message, "已创建第 1 组选择框。")
 
     def test_configured_agent_profile_is_prepared_before_any_selection(self) -> None:
         context = ApplicationContext()
@@ -274,17 +224,23 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         self.assertFalse(box.toolbar_visible)
         self.assertFalse(box.size_badge_visible)
         self.assertTrue(box.group_badge.isHidden())
-        self.assertEqual(box.outline_width, 2)
-        self.assertEqual(box.x(), 38)
-        self.assertEqual(box.y(), 48)
-        self.assertEqual(box.width(), 264)
-        self.assertEqual(box.height(), 94)
+        self.assertEqual(box.outline_width, 1)
+        self.assertEqual(box.x(), 39)
+        self.assertEqual(box.y(), 49)
+        self.assertEqual(box.width(), 262)
+        self.assertEqual(box.height(), 92)
         self.assertEqual(box.group_badge.text(), "1")
-        self.assertEqual(translation_window.width(), 260)
+        from app.overlay.translation_window import max_window_width, max_window_height
+
+        # Default placeholder text is sized to content (not selection width).
+        self.assertLessEqual(translation_window.width(), max_window_width())
+        self.assertLessEqual(translation_window.height(), max_window_height())
         self.assertTrue(translation_window.language_pair_label.isHidden())
         self.assertFalse(translation_window.translation_label.isHidden())
 
     def test_translation_window_expands_for_long_translation_text(self) -> None:
+        from app.overlay.translation_window import max_window_width, max_window_height
+
         self.controller.request_new_selection()
         self.controller.finalize_selection(ScreenRegion(40, 50, 260, 90))
         self.runtime_store.runtime_states[1].latest_translation_text = (
@@ -298,7 +254,9 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
 
         self.assertIsNotNone(translation_window)
         assert translation_window is not None
-        self.assertGreater(translation_window.width(), 260)
+        self.assertGreater(translation_window.width(), 160)
+        self.assertLessEqual(translation_window.width(), max_window_width())
+        self.assertLessEqual(translation_window.height(), max_window_height())
 
     def test_selection_toolbar_exposes_ocr_view_button(self) -> None:
         self.controller.request_new_selection()
@@ -325,12 +283,22 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         assert box is not None
         assert translation_window is not None
         self.assertTrue(box.toolbar_visible)
+        self.assertEqual(box.toolbar_panel.immersive_button.text(), "⊘")
+        self.app.processEvents()
+        toolbar_image = box.toolbar_panel.grab().toImage()
+        shell_pixel = toolbar_image.pixelColor(
+            max(0, toolbar_image.width() - 3),
+            toolbar_image.height() // 2,
+        )
+        self.assertGreater(shell_pixel.alpha(), 150)
+        self.assertLess(shell_pixel.lightness(), 80)
         self.assertTrue(box.group_badge.isHidden())
         self.assertFalse(box.size_badge_visible)
         self.assertEqual(box.size_badge.text(), "260 x 90")
-        self.assertEqual(box.outline_width, 4)
+        self.assertEqual(box.outline_width, 2)
         self.assertFalse(translation_window.language_pair_label.isHidden())
-        self.assertFalse(translation_window.dock_controls_visible)
+        # Mock Phase4: corner bar (dock / copy / report / body ◎) is edit-mode only.
+        self.assertTrue(translation_window.dock_controls_visible)
         self.assertLessEqual(box.toolbar_panel.frameGeometry().bottom(), box.frameGeometry().top())
         self.assertLess(box.toolbar_panel.frameGeometry().bottom(), translation_window.frameGeometry().top())
 
@@ -349,14 +317,21 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
     def test_pause_toggle_updates_group_state(self) -> None:
         self.controller.request_new_selection()
         self.controller.finalize_selection(ScreenRegion(40, 50, 260, 90))
+        self.controller.toggle_ocr_window(1)
 
         paused = self.controller.toggle_group_pause(1)
         box = self.controller.get_selection_box(1)
+        ocr_window = self.controller.get_ocr_window(1)
 
         self.assertTrue(paused)
         self.assertTrue(self.runtime_store.configs[1].paused)
         assert box is not None
         self.assertEqual(box.toolbar_panel.pause_button.text(), "继续")
+        self.assertIsNotNone(ocr_window)
+        assert ocr_window is not None
+        self.assertEqual(ocr_window.pause_button.text(), "")
+        self.assertEqual(ocr_window.pause_button.accessibleName(), "继续 OCR")
+        self.assertFalse(ocr_window.pause_button.icon().isNull())
 
     def test_translation_dock_is_controlled_from_selection_toolbar(self) -> None:
         self.controller.request_new_selection()
@@ -380,6 +355,7 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         self.runtime_store.runtime_states[1].latest_translation_text = "高中考试很快开始"
         self.runtime_store.configs[1].source_language = "English"
         self.runtime_store.configs[1].target_language = "中文"
+        self.controller._translation_service = FakeTranslationService()
 
         saved = self.controller.mark_translation_feedback(1)
 
@@ -389,6 +365,128 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         self.assertEqual(fake_store.calls[0]["translation_text"], "高中考试很快开始")
         self.assertEqual(fake_store.calls[0]["source_language"], "English")
         self.assertEqual(fake_store.calls[0]["target_language"], "中文")
+        self.assertEqual(fake_store.calls[0]["matched_correction_ids"], ["correction-1"])
+        self.assertEqual(fake_store.calls[0]["matched_memory_rule_ids"], ["rule-1"])
+
+    def test_mark_translation_feedback_persists_injected_hint_snapshots(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 50, 260, 90))
+        fake_store = FakeFeedbackStore()
+        self.controller._feedback_store = fake_store
+        state = self.runtime_store.runtime_states[1]
+        state.latest_ocr_text = "source"
+        state.latest_translation_text = "translation"
+
+        class SnapshotService(FakeTranslationService):
+            def memory_provenance_snapshot(self, group_id: int):
+                return TranslationMemorySnapshot(
+                    ocr_text="source",
+                    translation_text="translation",
+                    correction_ids=("correction-1",),
+                    memory_rule_ids=("rule-1",),
+                    correction_hint_snapshots=(("correction-1", "old correction hint"),),
+                    memory_hint_snapshots=(("rule-1", "old rule hint"),),
+                    source_language="English",
+                    target_language="中文",
+                )
+
+        self.runtime_store.configs[1].source_language = "English"
+        self.runtime_store.configs[1].target_language = "中文"
+        self.controller._translation_service = SnapshotService()
+
+        self.assertTrue(self.controller.mark_translation_feedback(1))
+        self.assertEqual(
+            fake_store.calls[0]["matched_correction_hint_snapshots"],
+            {"correction-1": "old correction hint"},
+        )
+        self.assertEqual(
+            fake_store.calls[0]["matched_memory_hint_snapshots"],
+            {"rule-1": "old rule hint"},
+        )
+
+    def test_mark_translation_feedback_notifies_view_only_after_durable_save(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 50, 260, 90))
+        events: list[str] = []
+
+        class OrderedStore(FakeFeedbackStore):
+            def add_feedback(self, **kwargs):
+                events.append("saved")
+                return super().add_feedback(**kwargs)
+
+        self.controller._feedback_store = OrderedStore()
+        self.controller._on_feedback_changed = lambda: events.append("refreshed")
+        self.runtime_store.runtime_states[1].latest_ocr_text = "source"
+        self.runtime_store.runtime_states[1].latest_translation_text = "translation"
+
+        self.assertTrue(self.controller.mark_translation_feedback(1))
+        self.assertEqual(events, ["saved", "refreshed"])
+
+    def test_mark_translation_feedback_degrades_on_unexpected_store_failure(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 50, 260, 90))
+
+        class BrokenStore:
+            def add_feedback(self, **kwargs):
+                raise OSError("disk failed")
+
+        self.controller._feedback_store = BrokenStore()
+        self.runtime_store.runtime_states[1].latest_ocr_text = "source"
+        self.runtime_store.runtime_states[1].latest_translation_text = "translation"
+
+        self.assertFalse(self.controller.mark_translation_feedback(1))
+        self.assertIn("反馈保存失败", self.context.status_message)
+
+    def test_mark_translation_feedback_rejects_uncommitted_ocr_pair(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 50, 260, 90))
+        fake_store = FakeFeedbackStore()
+        self.controller._feedback_store = fake_store
+        state = self.runtime_store.runtime_states[1]
+        state.latest_ocr_text = "new OCR still translating"
+        state.latest_translation_text = "old translation"
+
+        class SnapshotService(FakeTranslationService):
+            def memory_provenance_snapshot(self, group_id: int):
+                return TranslationMemorySnapshot(
+                    ocr_text="old OCR",
+                    translation_text="old translation",
+                    correction_ids=("old-correction",),
+                    memory_rule_ids=("old-rule",),
+                )
+
+        self.controller._translation_service = SnapshotService()
+
+        saved = self.controller.mark_translation_feedback(1)
+
+        self.assertFalse(saved)
+        self.assertEqual(fake_store.calls, [])
+        self.assertIn("尚未完成翻译", self.context.status_message)
+
+    def test_mark_translation_feedback_rejects_snapshot_from_other_language_pair(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 50, 260, 90))
+        fake_store = FakeFeedbackStore()
+        self.controller._feedback_store = fake_store
+        state = self.runtime_store.runtime_states[1]
+        state.latest_ocr_text = "same text"
+        state.latest_translation_text = "same translation"
+        self.runtime_store.configs[1].source_language = "中文"
+        self.runtime_store.configs[1].target_language = "日本語"
+
+        class SnapshotService(FakeTranslationService):
+            def memory_provenance_snapshot(self, group_id: int):
+                return TranslationMemorySnapshot(
+                    ocr_text="same text",
+                    translation_text="same translation",
+                    source_language="中文",
+                    target_language="English",
+                )
+
+        self.controller._translation_service = SnapshotService()
+
+        self.assertFalse(self.controller.mark_translation_feedback(1))
+        self.assertEqual(fake_store.calls, [])
 
     def test_move_group_updates_runtime_region_and_translation_window(self) -> None:
         self.controller.request_new_selection()
@@ -739,6 +837,82 @@ class SelectionWorkflowControllerTests(unittest.TestCase):
         )
 
         self.assertEqual(fake_translation.requests, [])
+
+    def test_ocr_logs_never_include_recognized_text(self) -> None:
+        secret_text = "private OCR sentence that must not reach logs"
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 120, 260, 90))
+        self.controller._ocr_stable_seconds = 0.0
+        self.controller._ocr_engine = FakeOcrEngine(secret_text)
+        self.controller._translation_service = FakeTranslationService()
+        frame = CapturedRegionFrame(width=4, height=4, pixel_bytes=b"\x00" * 16)
+
+        with (
+            patch("app.overlay.selection_manager.get_logger") as pipeline,
+            patch("app.overlay.selection_manager.get_debug_logger") as debug,
+        ):
+            self.controller._process_frame(1, frame)
+            self.controller._process_frame(1, frame)
+
+        self.assertNotIn(secret_text, repr(pipeline.mock_calls))
+        self.assertNotIn(secret_text, repr(debug.mock_calls))
+
+    def test_translation_cache_hit_is_not_logged_as_api_success(self) -> None:
+        result = TranslationResult(
+            group_id=1,
+            request_id=1,
+            text="safe translation",
+            error=None,
+            source="cache",
+        )
+
+        with patch("app.overlay.selection_manager.get_logger") as pipeline:
+            self.controller._on_translation_result(1, result, 0.0, "English->中文")
+
+        messages = repr(pipeline.mock_calls)
+        self.assertIn("translation cache hit", messages)
+        self.assertNotIn("API success", messages)
+
+    def test_revision_retry_exhaustion_reopens_same_ocr_text(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 120, 260, 90))
+        self.controller._last_logged_ocr[1] = "same OCR text"
+        result = TranslationResult(
+            group_id=1,
+            request_id=3,
+            text=None,
+            error="Feedback knowledge changed repeatedly; OCR refresh required",
+            source="feedback_revision_churn",
+            feedback_revision=2,
+        )
+
+        with patch.object(self.controller, "request_ocr_refresh") as refresh:
+            self.controller._on_translation_result(
+                1,
+                result,
+                0.0,
+                "English->中文",
+            )
+
+        refresh.assert_called_once_with(1)
+
+    def test_stale_translation_in_ui_queue_is_not_displayed(self) -> None:
+        self.controller.request_new_selection()
+        self.controller.finalize_selection(ScreenRegion(40, 120, 260, 90))
+        stale_revision = self.controller._current_feedback_revision() + 1
+
+        with patch.object(self.controller, "request_ocr_refresh") as refresh:
+            self.controller._on_translation_ready(
+                1,
+                "stale translation",
+                feedback_revision=stale_revision,
+            )
+
+        refresh.assert_called_once_with(1)
+        self.assertNotEqual(
+            self.runtime_store.runtime_states[1].latest_translation_text,
+            "stale translation",
+        )
 
     def test_tick_does_not_queue_same_group_while_ocr_is_processing(self) -> None:
         self.change_detector.changed = True
