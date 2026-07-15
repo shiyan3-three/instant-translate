@@ -1,0 +1,43 @@
+name: Release baseline
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install locked release dependencies
+        run: |
+          python -m pip install -r requirements-py312.lock
+          python -m pip install --no-deps --no-build-isolation .
+      - name: Compile and direct import smoke
+        run: |
+          python -m compileall -q app tests
+          python -c "from app.translation.service import TranslationService; print(TranslationService.__name__)"
+      - name: Dependency consistency
+        run: python -m pip check
+      - name: Unit tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+      - name: PyInstaller smoke build
+        run: python -m PyInstaller --noconfirm --clean instant-translate.spec
+      - name: Frozen PaddleOCR smoke
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          $exe = (Resolve-Path "dist\instant-translate\instant-translate.exe").Path
+          $process = Start-Process -FilePath $exe -ArgumentList "--smoke-ocr" -PassThru -Wait
+          if ($process.ExitCode -ne 0) {
+            throw "Frozen OCR smoke failed with exit code $($process.ExitCode)"
+          }

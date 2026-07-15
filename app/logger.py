@@ -2,16 +2,23 @@
 
 Logs are organized by date: logs/YYYY/MM/DD.log and logs/YYYY/MM/DD-2.log (if multiple runs per day).
 
-pipeline.log  — INFO+  level: user-facing events (OCR text, translations, errors).
+pipeline.log  — INFO+  level: user-facing events (content hashes, timings, errors).
 debug.log     — DEBUG+ level: everything including per-tick timing for performance analysis.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
+
+
+_LOG_RETENTION_FILES = 28
+_TEST_LOG_DIR_ENV = "INSTANT_TRANSLATE_TEST_LOG_DIR"
+_RUNTIME_LOG_DIR_ENV = "INSTANT_TRANSLATE_LOG_DIR"
 
 
 def _application_root() -> Path:
@@ -22,12 +29,66 @@ def _application_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def _log_root() -> Path:
-    """Keep runtime logs beside the project/application, never in AppData."""
+def _is_test_runtime() -> bool:
+    """Keep automated-test artifacts out of user and application log trees."""
 
-    root = _application_root() / ".tmp" / "runtime" / "logs"
-    root.mkdir(parents=True, exist_ok=True)
+    return bool(os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get(_TEST_LOG_DIR_ENV))
+
+
+def _log_root() -> Path:
+    """Return a writable, privacy-scoped log root with bounded retention."""
+
+    if _is_test_runtime():
+        root = Path(os.environ.get(
+            _TEST_LOG_DIR_ENV,
+            Path(tempfile.gettempdir()) / "instant-translate" / "test-logs",
+        ))
+    elif configured := os.environ.get(_RUNTIME_LOG_DIR_ENV):
+        root = Path(configured)
+    elif getattr(sys, "frozen", False):
+        # A one-file/bundled app may reside under Program Files or another
+        # protected directory.  Logs belong in the user's local app data.
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+        root = Path(base or Path.home()) / "instant-translate" / "logs"
+    else:
+        root = _application_root() / ".tmp" / "runtime" / "logs"
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # Keep the resolved frozen-app location observable even when a test or
+        # a restricted installation supplies a non-creatable placeholder. The
+        # actual file handler will surface a concrete startup error if that
+        # location is genuinely unusable.
+        if not getattr(sys, "frozen", False):
+            raise
+    _prune_old_logs(root)
     return root
+
+
+def _prune_old_logs(root: Path, keep: int = _LOG_RETENTION_FILES) -> None:
+    """Bound files created by this logger without touching unrelated data."""
+
+    files_with_mtime = []
+    for path in root.rglob("*.log"):
+        try:
+            if path.is_file():
+                files_with_mtime.append((path, path.stat().st_mtime))
+        except FileNotFoundError:
+            # Another logger/test process can rotate a file between rglob and
+            # stat.  A missing log is already pruned.
+            continue
+    files = [path for path, _mtime in sorted(
+        files_with_mtime,
+        key=lambda item: item[1],
+        reverse=True,
+    )]
+    for path in files[keep:]:
+        try:
+            path.unlink()
+        except OSError:
+            # Logging must remain available even when an old file is held by
+            # another process; try again on a later startup.
+            continue
 
 
 def _get_log_path(log_type: str) -> Path:

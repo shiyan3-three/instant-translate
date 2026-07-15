@@ -4,6 +4,17 @@
 
 它的目标不是做一个大而全的翻译平台，而是在你正在看直播课、做翻译题、玩文字游戏、跑团或阅读外语屏幕内容时，提供一种**不切窗口、不打断当前操作、低干扰显示结果**的即时辅助翻译体验。
 
+## 开发与发布基线
+
+- 发布环境固定使用 Python 3.12；源码声明支持 Python `>=3.10,<3.13`，Python 3.13 会在加载 GUI/OCR 前被拒绝。
+- 完整开发环境（含 PaddleOCR、测试和打包工具）：`python -m pip install -e ".[dev]"`。
+- API Key 在设置文件中使用 Windows 当前用户 DPAPI 加密；旧版明文配置会在下次保存时迁移。
+- 源码启动：`python -m app.main`；安装入口后也可运行 `instant-translate`。
+- 发布构建：`python -m PyInstaller --noconfirm --clean instant-translate.spec`。
+- 打包后必须执行 `dist\instant-translate\instant-translate.exe --smoke-ocr`，退出码为 `0` 才表示冻结版 PaddleOCR 可用。
+
+详细依赖说明见 [开发环境与依赖](./docs/goat/09-dev-environment.md)。
+
 ## 这个项目解决什么问题
 
 市面上很多翻译软件的问题不是不能翻，而是：
